@@ -73,12 +73,10 @@ def significance_from_ll(ll_val):
 def df_to_excel_bytes(df):
     """
     Converts a pandas DataFrame to an Excel file (xlsx) in memory (BytesIO).
-    Fix: Removed writer.save() which is deprecated in modern pandas versions.
     """
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Sheet1")
-        # writer.save() is no longer needed/supported within the 'with' block
     buf.seek(0)
     return buf.getvalue()
 
@@ -128,7 +126,7 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("Corpus Collocation Explorer")
+st.title("Corpus Collocation Explorer version 12-Dec-25")
 st.caption("Upload vertical corpus (token POS lemma). Search tokens, view KWIC, LL & MI collocates, and download results.")
 
 # ---------------------------
@@ -138,10 +136,18 @@ with st.sidebar:
     st.header("Upload & Options")
     uploaded_file = st.file_uploader("Upload corpus file (vertical: token POS lemma)", type=["txt","csv"])
     st.markdown("---")
-    # collocation window fixed as per your choice, but allow user small control if they want
+    
+    # 1. Collocation window control
     coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=5, step=1, help="Window used for collocation counting (default ±5).")
-    st.write("KWIC context is fixed at 7 left / 7 right (display).")
     st.markdown("---")
+    
+    # 2. Concordance context controls (New Widgets)
+    st.subheader("KWIC Context (Display)")
+    kwic_left = st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=7, step=1, help="Number of tokens shown to the left of the node word.")
+    kwic_right = st.number_input("Right Context (tokens)", min_value=1, max_value=20, value=7, step=1, help="Number of tokens shown to the right of the node word.")
+    st.markdown("---")
+    
+    # 3. MI min frequency control
     st.write("MI minimum observed frequency (for MI tables).")
     mi_min_freq = st.number_input("MI min observed freq", min_value=1, max_value=100, value=1, step=1)
     st.markdown("---")
@@ -160,14 +166,21 @@ st.sidebar.success(f"Loaded: {total_tokens:,} tokens")
 # corpus info and frequency list
 tokens_lower = df["_token_low"].tolist()
 pos_tags = df["pos"].tolist()
-token_counts = Counter(tokens_lower)
-unique_types = len(set(tokens_lower))
+# Define punctuation tokens to filter out (simple approach)
+# These are typically words that are only symbols/punctuation based on low-cased token
+PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
+# Filter tokens for frequency list
+tokens_lower_filtered = [t for t in tokens_lower if t not in PUNCTUATION and not t.isdigit()]
+
+token_counts = Counter(tokens_lower_filtered)
+unique_types = len(set(tokens_lower_filtered))
 unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
 
 # STTR per 1000
 def compute_sttr_tokens(tokens_list, chunk=1000):
     if len(tokens_list) < chunk:
-        return (len(set(tokens_list)) / len(tokens_list)) * 1000
+        # Avoid division by zero if list is empty after filtering
+        return (len(set(tokens_list)) / len(tokens_list)) * 1000 if len(tokens_list) > 0 else 0.0
     ttrs = []
     for i in range(0, len(tokens_list), chunk):
         c = tokens_list[i:i+chunk]
@@ -175,25 +188,31 @@ def compute_sttr_tokens(tokens_list, chunk=1000):
         ttrs.append(len(set(c)) / len(c))
     return (sum(ttrs)/len(ttrs))*1000 if ttrs else 0.0
 
-sttr_score = compute_sttr_tokens(tokens_lower)
+sttr_score = compute_sttr_tokens(tokens_lower_filtered)
 
 col1, col2 = st.columns([2,1])
 with col1:
     st.subheader("Corpus summary")
     info_df = pd.DataFrame({
-        "Metric": ["Corpus size (tokens)", "Unique types", "Lemma count", "STTR (per 1000)"],
+        "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, per 1000)"],
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
-    st.dataframe(info_df, use_container_width=True) # CHANGED: st.table -> st.dataframe
+    st.dataframe(info_df, use_container_width=True)
 
 with col2:
-    st.subheader("Top frequency (token / POS / freq)")
-    freq_df = df.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+    st.subheader("Top frequency (token / POS / freq) (Punctuation skipped)")
+    
+    # Filter the main DataFrame to exclude punctuation tokens for frequency list display
+    freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()]
+    
+    freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+    
     freq_head = freq_df.head(10).copy()
-    freq_head.insert(0,"No", range(1, len(freq_head)+1))
-    st.dataframe(freq_head, use_container_width=True) # CHANGED: st.table -> st.dataframe
-    # download freq
-    st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    freq_head.insert(0,"No", range(1, len(freq_head)+1)) # FIXED: Start index from 1
+    st.dataframe(freq_head, use_container_width=True)
+    
+    # download freq (use the full filtered list)
+    st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 st.markdown("---")
 
@@ -242,19 +261,20 @@ if analyze_btn and target_input:
         rel_freq = (freq / total_tokens) * 1_000_000
         st.write(f"Relative frequency: **{rel_freq:.2f}** per million")
 
-        # ---------- CONCORDANCE: exact 7 left / 7 right (KWIC) ----------
-        st.subheader("Concordance (KWIC) — top 10 (7 left & 7 right)")
+        # ---------- CONCORDANCE: KWIC ----------
+        st.subheader(f"Concordance (KWIC) — top 10 ({kwic_left} left & {kwic_right} right)")
         kwic_rows = []
         for i in positions:
-            left = tokens_lower[max(0, i-7):i]
-            right = tokens_lower[i+1:i+1+7]
+            # Use dynamic kwic_left and kwic_right
+            left = tokens_lower[max(0, i - kwic_left):i]
+            right = tokens_lower[i + 1:i + 1 + kwic_right]
             # display original-case node
             node_orig = df["token"].iloc[i]
             kwic_rows.append({"Left": " ".join(left), "Node": node_orig, "Right": " ".join(right)})
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.head(10).copy().reset_index(drop=True)
-        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
-        st.dataframe(kwic_preview, use_container_width=True) # CHANGED: st.table -> st.dataframe
+        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1)) # FIXED: Start index from 1
+        st.dataframe(kwic_preview, use_container_width=True)
 
         # full concordance download
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -274,11 +294,15 @@ if analyze_btn and target_input:
 
         # compute stats
         stats_list = []
+        # Use the total, unfiltered list for accurate frequency statistics (k21, k22)
+        token_counts_unfiltered = Counter(tokens_lower) 
+        
         for _, row in coll_counts.iterrows():
             w = row["collocate"]
             p = row["pos"]
             observed = int(row["Observed"])
-            total_freq = token_counts.get(w, 0)
+            # Use unfiltered count for accurate total frequency
+            total_freq = token_counts_unfiltered.get(w, 0)
             k11 = observed
             k12 = freq - k11
             k21 = total_freq - k11
@@ -302,11 +326,11 @@ if analyze_btn and target_input:
         else:
             # full LL top10
             full_ll = stats_df.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
-            full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
+            full_ll.insert(0, "Rank", range(1, len(full_ll)+1)) # FIXED: Start index from 1
             # full MI (apply MI min freq)
             full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
             full_mi = full_mi_all.head(10).copy()
-            full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
+            full_mi.insert(0, "Rank", range(1, len(full_mi)+1)) # FIXED: Start index from 1
 
             # category tables (multi-POS allowed)
             def category_df(prefixes):
@@ -315,9 +339,9 @@ if analyze_btn and target_input:
                     mask = mask | stats_df["POS"].str.startswith(pref, na=False)
                 sub = stats_df[mask].copy()
                 ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
-                ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
+                ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1)) # FIXED: Start index from 1
                 mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(10).copy()
-                mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
+                mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1)) # FIXED: Start index from 1
                 return ll_sub, mi_sub
 
             ll_N, mi_N = category_df(("N",))    # N (NN*, NNP*, ...)
@@ -334,19 +358,19 @@ if analyze_btn and target_input:
             cols = st.columns(5, gap="small")
             with cols[0]:
                 st.markdown("**Full (LL)**")
-                st.dataframe(full_ll, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(full_ll, use_container_width=True)
             with cols[1]:
                 st.markdown("**N (N*) — LL**")
-                st.dataframe(ll_N, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(ll_N, use_container_width=True)
             with cols[2]:
                 st.markdown("**V (V*) — LL**")
-                st.dataframe(ll_V, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(ll_V, use_container_width=True)
             with cols[3]:
                 st.markdown("**J (J*) — LL**")
-                st.dataframe(ll_J, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(ll_J, use_container_width=True)
             with cols[4]:
                 st.markdown("**R (R*) — LL**")
-                st.dataframe(ll_R, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(ll_R, use_container_width=True)
 
             # small per-category download buttons (Now placed in columns for better organization)
             st.markdown("---")
@@ -378,18 +402,18 @@ if analyze_btn and target_input:
             cols_mi = st.columns(5, gap="small")
             with cols_mi[0]:
                 st.markdown("**Full (MI)**")
-                st.dataframe(full_mi, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(full_mi, use_container_width=True)
             with cols_mi[1]:
                 st.markdown("**N (N*) — MI**")
-                st.dataframe(mi_N, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(mi_N, use_container_width=True)
             with cols_mi[2]:
                 st.markdown("**V (V*) — MI**")
-                st.dataframe(mi_V, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(mi_V, use_container_width=True)
             with cols_mi[3]:
                 st.markdown("**J (J*) — MI**")
-                st.dataframe(mi_J, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(mi_J, use_container_width=True)
             with cols_mi[4]:
                 st.markdown("**R (R*) — MI**")
-                st.dataframe(mi_R, use_container_width=True) # CHANGED: st.table -> st.dataframe
+                st.dataframe(mi_R, use_container_width=True)
 
 st.caption("Tip: Deploy this file to Streamlit Cloud or HuggingFace Spaces to share with others.")
