@@ -6,6 +6,10 @@ import math
 from collections import Counter
 from io import BytesIO
 
+# Import for Pyvis Network Graph
+from pyvis.network import Network
+import streamlit.components.v1 as components # Import for HTML embedding
+
 st.set_page_config(page_title="Corpus Explorer Version 12 Dec 25", layout="wide")
 
 # ---------------------------
@@ -19,10 +23,6 @@ def safe_log(x):
 def compute_ll(k11, k12, k21, k22):
     """
     Computes the Log-Likelihood (LL) statistic based on a 2x2 contingency table.
-    k11: observed frequency of target and collocate
-    k12: observed frequency of target but not collocate
-    k21: observed frequency of collocate but not target
-    k22: observed frequency of neither target nor collocate
     """
     total = k11 + k12 + k21 + k22
     if total == 0:
@@ -35,27 +35,18 @@ def compute_ll(k11, k12, k21, k22):
     e22 = (k21 + k22) * (k12 + k22) / total
     
     s = 0.0
-    # Sum of k * log(k / e) for each cell
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
-        # Check to avoid log(0)
         if k > 0 and e > 0:
             s += k * math.log(k / e)
-            
-    # LL = 2 * sum
     return 2.0 * s
 
 def compute_mi(k11, target_freq, coll_total, corpus_size):
     """
     Computes the Mutual Information (MI) statistic.
-    k11: observed frequency of target and collocate
-    target_freq: frequency of the target word
-    coll_total: frequency of the collocate word
-    corpus_size: total number of tokens
     """
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0:
         return 0.0
-    # MI = log2(Observed / Expected)
     return math.log2(k11 / expected)
 
 def significance_from_ll(ll_val):
@@ -83,12 +74,80 @@ def df_to_excel_bytes(df):
 def df_to_csv_bytes(df):
     return df.to_csv(index=False).encode('utf-8')
 
+# --- NEW HELPER FOR NETWORK GRAPH ---
+def create_pyvis_graph(target_word, coll_df):
+    """
+    Creates a Pyvis interactive network graph for the top collocates.
+    """
+    # Initialize Pyvis network
+    net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
+    net.set_options("""
+    var options = {
+      "nodes": {
+        "borderWidth": 2,
+        "size": 15
+      },
+      "edges": {
+        "width": 1.5,
+        "smooth": {
+          "type": "dynamic"
+        }
+      },
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -10000,
+          "centralGravity": 0.3,
+          "springLength": 95,
+          "springConstant": 0.04,
+          "damping": 0.9,
+          "avoidOverlap": 0.5
+        },
+        "minVelocity": 0.75
+      }
+    }
+    """)
+    
+    # 1. Add Target Node (large and central)
+    net.add_node(target_word, label=target_word, size=30, color='#FF5733', title=f"Target: {target_word}")
+    
+    # Define colors for POS categories
+    pos_colors = {'N': '#33FFB5', 'V': '#33B5FF', 'J': '#FF33B5', 'R': '#FFCC33', 'Other': '#AAAAAA'}
+    
+    # Normalize LL for edge thickness
+    max_ll = coll_df['LL'].max()
+    
+    # 2. Add Collocate Nodes and Edges
+    for _, row in coll_df.iterrows():
+        collocate = row['Collocate']
+        ll_score = row['LL']
+        observed = row['Observed']
+        pos_prefix = row['POS'][0].upper() if row['POS'] else 'Other'
+        color = pos_colors.get(pos_prefix, pos_colors['Other'])
+        
+        # Node size based on observed frequency
+        node_size = 10 + min(observed, 50) / 2 # Scale node size, cap at 50 obs
+        
+        # Edge thickness scaled by LL score
+        edge_width = 1 + (ll_score / max_ll) * 5
+        
+        net.add_node(collocate, label=collocate, size=node_size, color=color, title=f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}")
+        
+        net.add_edge(target_word, collocate, value=ll_score, width=edge_width, title=f"LL: {ll_score:.2f}")
+
+    # Save the network to an HTML file in memory
+    html_file = BytesIO()
+    # Need to set 'notebook=False' to generate a full HTML file suitable for embedding
+    net.write_html(html_file, notebook=False)
+    html_file.seek(0)
+    return html_file.read().decode('utf-8')
+
+
 # ---------------------------
 # Cached loading
 # ---------------------------
 @st.cache_data
 def load_corpus_file(file_bytes, sep=r"\s+"):
-    # Attempt to read vertical 3-column format token pos lemma
+    # ... (load_corpus_file remains unchanged)
     try:
         # read as whitespace-separated with no header
         df = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
@@ -196,7 +255,6 @@ with col1:
         "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, per 1000)"],
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
-    # HIDING INDEX HERE
     st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
 with col2:
@@ -209,7 +267,6 @@ with col2:
     
     freq_head = freq_df.head(10).copy()
     freq_head.insert(0,"No", range(1, len(freq_head)+1))
-    # HIDING INDEX HERE
     st.dataframe(freq_head, use_container_width=True, hide_index=True) 
     
     # download freq (use the full filtered list)
@@ -275,13 +332,12 @@ if analyze_btn and target_input:
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.head(10).copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
-        # HIDING INDEX HERE
         st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
 
         # full concordance download
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        # ---------- COLLATION: collect collocates within ±coll_window ----------
+        # ---------- COLLATION: compute stats ----------
         coll_pairs = []
         for i in positions:
             start = max(0, i - coll_window)
@@ -294,16 +350,13 @@ if analyze_btn and target_input:
         coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos"])
         coll_counts = coll_df.groupby(["collocate","pos"]).size().reset_index(name="Observed")
 
-        # compute stats
         stats_list = []
-        # Use the total, unfiltered list for accurate frequency statistics (k21, k22)
         token_counts_unfiltered = Counter(tokens_lower) 
         
         for _, row in coll_counts.iterrows():
             w = row["collocate"]
             p = row["pos"]
             observed = int(row["Observed"])
-            # Use unfiltered count for accurate total frequency
             total_freq = token_counts_unfiltered.get(w, 0)
             k11 = observed
             k12 = freq - k11
@@ -326,15 +379,21 @@ if analyze_btn and target_input:
         if stats_df.empty:
             st.warning("No collocates found.")
         else:
+            # Sort for display and network generation
+            stats_df_sorted = stats_df.sort_values("LL", ascending=False)
+            
+            # Use top 20 LL for network graph visualization
+            network_df = stats_df_sorted.head(20).copy()
+
             # full LL top10
-            full_ll = stats_df.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
+            full_ll = stats_df_sorted.head(10).copy()
             full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
             # full MI (apply MI min freq)
             full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
             full_mi = full_mi_all.head(10).copy()
             full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
-            # category tables (multi-POS allowed)
+            # category tables
             def category_df(prefixes):
                 mask = pd.Series(False, index=stats_df.index)
                 for pref in prefixes:
@@ -352,39 +411,62 @@ if analyze_btn and target_input:
             ll_R, mi_R = category_df(("R",))
 
             # ---------- Downloads for full result sets ----------
-            st.download_button("⬇ Download full LL (all collocates) (xlsx)", data=df_to_excel_bytes(stats_df.sort_values("LL", ascending=False)), file_name=f"{target}_LL_full.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("⬇ Download full LL (all collocates) (xlsx)", data=df_to_excel_bytes(stats_df_sorted), file_name=f"{target}_LL_full.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             st.download_button(f"⬇ Download full MI (obs≥{mi_min_freq}) (xlsx)", data=df_to_excel_bytes(full_mi_all), file_name=f"{target}_MI_full_obsge{mi_min_freq}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-            # ---------- Side-by-side display for LL: Full | N | V | J | R ----------
-            st.subheader("Log-Likelihood — Top 10 (side-by-side)")
-            cols = st.columns(5, gap="small")
+            # ---------- Collocation Network Graph (REPLACES Full LL Table) ----------
+            st.markdown("---")
+            st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
+            
+            # Generate the network HTML
+            network_html = create_pyvis_graph(target_input, network_df)
+            
+            # Embed the network using Streamlit Components
+            # Set height to match Pyvis height argument (400px)
+            components.html(network_html, height=450)
+            
+            st.markdown(
+                """
+                **Graph Key:**
+                * Central Node (Target): **Orange**
+                * Collocate Node Color: Noun (**Green**), Verb (**Blue**), Adjective (**Pink**), Adverb (**Yellow**), Other (**Gray**)
+                * Edge Thickness: Scales with Log-Likelihood (LL) score (Thicker = Stronger Collocation)
+                * Hover over nodes for details (POS, Observed Freq, LL score).
+                """
+            )
+            st.markdown("---")
+
+
+            # ---------- Side-by-side display for LL: N | V | J | R ----------
+            st.subheader("Log-Likelihood — Top 10 by POS")
+            cols = st.columns(4, gap="small")
+            
+            # Note: The "Full (LL)" table has been replaced by the Network Graph above.
+            # We now only display the POS-filtered tables side-by-side.
+
             with cols[0]:
-                st.markdown("**Full (LL)**")
-                # HIDING INDEX HERE
-                st.dataframe(full_ll, use_container_width=True, hide_index=True)
-            with cols[1]:
                 st.markdown("**N (N*) — LL**")
-                # HIDING INDEX HERE
                 st.dataframe(ll_N, use_container_width=True, hide_index=True)
-            with cols[2]:
+            with cols[1]:
                 st.markdown("**V (V*) — LL**")
-                # HIDING INDEX HERE
                 st.dataframe(ll_V, use_container_width=True, hide_index=True)
-            with cols[3]:
+            with cols[2]:
                 st.markdown("**J (J*) — LL**")
-                # HIDING INDEX HERE
                 st.dataframe(ll_J, use_container_width=True, hide_index=True)
-            with cols[4]:
+            with cols[3]:
                 st.markdown("**R (R*) — LL**")
-                # HIDING INDEX HERE
                 st.dataframe(ll_R, use_container_width=True, hide_index=True)
 
-            # small per-category download buttons (Now placed in columns for better organization)
+
+            # small per-category download buttons (Kept as is)
             st.markdown("---")
             st.subheader("Download Top 10 Tables")
             
+            # ... (Download buttons section remains unchanged)
+
             st.markdown("**LL Top 10 Downloads**")
             ll_dl_cols = st.columns(5)
+            # Added Full LL back to the download list since it's no longer displayed as a table
             ll_mapping = {
                 "Full": full_ll, "N": ll_N, "V": ll_V, "J": ll_J, "R": ll_R
             }
@@ -409,23 +491,18 @@ if analyze_btn and target_input:
             cols_mi = st.columns(5, gap="small")
             with cols_mi[0]:
                 st.markdown("**Full (MI)**")
-                # HIDING INDEX HERE
                 st.dataframe(full_mi, use_container_width=True, hide_index=True)
             with cols_mi[1]:
                 st.markdown("**N (N*) — MI**")
-                # HIDING INDEX HERE
                 st.dataframe(mi_N, use_container_width=True, hide_index=True)
             with cols_mi[2]:
                 st.markdown("**V (V*) — MI**")
-                # HIDING INDEX HERE
                 st.dataframe(mi_V, use_container_width=True, hide_index=True)
             with cols_mi[3]:
                 st.markdown("**J (J*) — MI**")
-                # HIDING INDEX HERE
                 st.dataframe(mi_J, use_container_width=True, hide_index=True)
             with cols_mi[4]:
                 st.markdown("**R (R*) — MI**")
-                # HIDING INDEX HERE
                 st.dataframe(mi_R, use_container_width=True, hide_index=True)
 
 st.caption("Tip: Deploy this file to Streamlit Cloud or HuggingFace Spaces to share with others.")
