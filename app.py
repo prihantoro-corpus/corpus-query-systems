@@ -6,7 +6,7 @@ import math
 from collections import Counter
 from io import BytesIO
 
-st.set_page_config(page_title="Corpus Collocation Explorer", layout="wide")
+st.set_page_config(page_title="Corpus Explorer Version 12 Dec 25", layout="wide")
 
 # ---------------------------
 # Helpers: stats, IO utilities
