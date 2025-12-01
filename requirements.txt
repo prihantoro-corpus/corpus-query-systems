@@ -3,3 +3,4 @@ numpy
 ipywidgets
 openpyxl
 xlsxwriter
+pyvis
