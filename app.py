@@ -94,43 +94,65 @@ def create_pyvis_graph(target_word, coll_df):
     """
     Creates a Pyvis interactive network graph for the top collocates.
     Uses a temporary file path to satisfy Pyvis requirements.
+    
+    MODIFICATIONS:
+    1. Central Node Color: Orange -> Yellow.
+    2. Collocate Node Colors: Updated to better match requested colors (Green, Blue, Pink, Yellow, Gray).
+    3. Edge Thickness: Fixed (all thick), no scaling.
+    4. Collocate Node Size: Scales with LL score (Thicker = Stronger Collocation).
+    5. Collocate Font Size: Increased overall font size.
     """
     # Initialize Pyvis network
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
-    net.set_options("""
-    var options = {
-      "nodes": {
+    
+    # Normalize LL for node size
+    max_ll = coll_df['LL'].max()
+    min_ll = coll_df['LL'].min()
+    ll_range = max_ll - min_ll
+    
+    # New Pyvis options, including physics and font size increase
+    net.set_options(f"""
+    var options = {{
+      "nodes": {{
         "borderWidth": 2,
-        "size": 15
-      },
-      "edges": {
-        "width": 1.5,
-        "smooth": {
+        "size": 15,
+        "font": {{
+            "size": 30 // Increased font size for all nodes (approx 4x larger than default 14)
+        }}
+      }},
+      "edges": {{
+        "width": 5, // Fixed thick width
+        "smooth": {{
           "type": "dynamic"
-        }
-      },
-      "physics": {
-        "barnesHut": {
+        }}
+      }},
+      "physics": {{
+        "barnesHut": {{
           "gravitationalConstant": -10000,
           "centralGravity": 0.3,
           "springLength": 95,
           "springConstant": 0.04,
           "damping": 0.9,
           "avoidOverlap": 0.5
-        },
+        }},
         "minVelocity": 0.75
-      }
-    }
+      }}
+    }}
     """)
     
     # 1. Add Target Node (large and central)
-    net.add_node(target_word, label=target_word, size=30, color='#FF5733', title=f"Target: {target_word}")
+    # Changed from '#FF5733' (Orange) to '#FFFF00' (Yellow)
+    net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
-    # Define colors for POS categories
-    pos_colors = {'N': '#33FFB5', 'V': '#33B5FF', 'J': '#FF33B5', 'R': '#FFCC33', 'Other': '#AAAAAA'}
-    
-    # Normalize LL for edge thickness
-    max_ll = coll_df['LL'].max()
+    # Define colors for POS categories (Updated)
+    # Noun (Green), Verb (Blue), Adjective (Pink), Adverb (Yellow), Other (Gray)
+    pos_colors = {
+        'N': '#33CC33',  # Green
+        'V': '#3366FF',  # Blue
+        'J': '#FF33B5',  # Pink (Adjective)
+        'R': '#FFCC00',  # Yellow (Adverb)
+        'Other': '#AAAAAA' # Gray
+    }
     
     # 2. Add Collocate Nodes and Edges
     for _, row in coll_df.iterrows():
@@ -140,14 +162,21 @@ def create_pyvis_graph(target_word, coll_df):
         pos_prefix = row['POS'][0].upper() if row['POS'] else 'Other'
         color = pos_colors.get(pos_prefix, pos_colors['Other'])
         
-        # Node size based on observed frequency
-        node_size = 10 + min(observed, 50) / 2 # Scale node size, cap at 50 obs
+        # Node size based on LL score (Collocate Bubble Size change)
+        if ll_range > 0:
+            # Scale LL to node size range (e.g., 10 to 40)
+            normalized_ll = (ll_score - min_ll) / ll_range
+            node_size = 15 + normalized_ll * 25 # Min size 15, Max size 40
+        else:
+            node_size = 25
+            
+        # Edge width is now fixed in net.set_options (width: 5)
+        edge_width = 5 
         
-        # Edge thickness scaled by LL score
-        edge_width = 1 + (ll_score / max_ll) * 5
-        
+        # Collocate Nodes
         net.add_node(collocate, label=collocate, size=node_size, color=color, title=f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}")
         
+        # Edges (fixed width=5)
         net.add_edge(target_word, collocate, value=ll_score, width=edge_width, title=f"LL: {ll_score:.2f}")
 
     # --- FIX: Use a Temporary HTML File ---
@@ -462,10 +491,11 @@ if analyze_btn and target_input:
             
             st.markdown(
                 """
-                **Graph Key:**
-                * Central Node (Target): **Orange**
+                **Graph Key (Revised):**
+                * Central Node (Target): **Yellow**
                 * Collocate Node Color: Noun (**Green**), Verb (**Blue**), Adjective (**Pink**), Adverb (**Yellow**), Other (**Gray**)
-                * Edge Thickness: Scales with Log-Likelihood (LL) score (Thicker = Stronger Collocation)
+                * Edge Thickness: **All Thick** (Uniform)
+                * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation)
                 * Hover over nodes for details (POS, Observed Freq, LL score).
                 """
             )
