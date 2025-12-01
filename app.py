@@ -184,14 +184,14 @@ with col1:
         "Metric": ["Corpus size (tokens)", "Unique types", "Lemma count", "STTR (per 1000)"],
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
-    st.table(info_df)
+    st.dataframe(info_df, use_container_width=True) # CHANGED: st.table -> st.dataframe
 
 with col2:
     st.subheader("Top frequency (token / POS / freq)")
     freq_df = df.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
     freq_head = freq_df.head(10).copy()
     freq_head.insert(0,"No", range(1, len(freq_head)+1))
-    st.table(freq_head)
+    st.dataframe(freq_head, use_container_width=True) # CHANGED: st.table -> st.dataframe
     # download freq
     st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -254,7 +254,7 @@ if analyze_btn and target_input:
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.head(10).copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
-        st.table(kwic_preview)
+        st.dataframe(kwic_preview, use_container_width=True) # CHANGED: st.table -> st.dataframe
 
         # full concordance download
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -334,31 +334,23 @@ if analyze_btn and target_input:
             cols = st.columns(5, gap="small")
             with cols[0]:
                 st.markdown("**Full (LL)**")
-                st.table(full_ll)
+                st.dataframe(full_ll, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols[1]:
                 st.markdown("**N (N*) — LL**")
-                st.table(ll_N)
+                st.dataframe(ll_N, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols[2]:
                 st.markdown("**V (V*) — LL**")
-                st.table(ll_V)
+                st.dataframe(ll_V, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols[3]:
                 st.markdown("**J (J*) — LL**")
-                st.table(ll_J)
+                st.dataframe(ll_J, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols[4]:
                 st.markdown("**R (R*) — LL**")
-                st.table(ll_R)
+                st.dataframe(ll_R, use_container_width=True) # CHANGED: st.table -> st.dataframe
 
-            # small per-category download buttons (These are currently all displayed right after the LL tables in the original script)
-            # The download buttons are placed out of the columns block so they take full width.
-            # I will keep the original placement for the download buttons below, but they are currently slightly cluttered.
-
+            # small per-category download buttons (Now placed in columns for better organization)
             st.markdown("---")
             st.subheader("Download Top 10 Tables")
-            
-            # This loop prints the buttons inline/scattered because it's outside any column/container.
-            # I'll modify the loop to use columns for better organization, replacing the previous `coldl = st.columns(5)` which was unused.
-            
-            # Group buttons by metric type for clarity
             
             st.markdown("**LL Top 10 Downloads**")
             ll_dl_cols = st.columns(5)
@@ -386,18 +378,18 @@ if analyze_btn and target_input:
             cols_mi = st.columns(5, gap="small")
             with cols_mi[0]:
                 st.markdown("**Full (MI)**")
-                st.table(full_mi)
+                st.dataframe(full_mi, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols_mi[1]:
                 st.markdown("**N (N*) — MI**")
-                st.table(mi_N)
+                st.dataframe(mi_N, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols_mi[2]:
                 st.markdown("**V (V*) — MI**")
-                st.table(mi_V)
+                st.dataframe(mi_V, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols_mi[3]:
                 st.markdown("**J (J*) — MI**")
-                st.table(mi_J)
+                st.dataframe(mi_J, use_container_width=True) # CHANGED: st.table -> st.dataframe
             with cols_mi[4]:
                 st.markdown("**R (R*) — MI**")
-                st.table(mi_R)
+                st.dataframe(mi_R, use_container_width=True) # CHANGED: st.table -> st.dataframe
 
 st.caption("Tip: Deploy this file to Streamlit Cloud or HuggingFace Spaces to share with others.")
