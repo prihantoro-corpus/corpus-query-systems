@@ -5,6 +5,8 @@ import numpy as np
 import math
 from collections import Counter
 from io import BytesIO
+import tempfile # For creating temporary files for pyvis
+import os       # For managing temporary files
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
@@ -23,6 +25,10 @@ def safe_log(x):
 def compute_ll(k11, k12, k21, k22):
     """
     Computes the Log-Likelihood (LL) statistic based on a 2x2 contingency table.
+    k11: observed frequency of target and collocate
+    k12: observed frequency of target but not collocate
+    k21: observed frequency of collocate but not target
+    k22: observed frequency of neither target nor collocate
     """
     total = k11 + k12 + k21 + k22
     if total == 0:
@@ -35,18 +41,27 @@ def compute_ll(k11, k12, k21, k22):
     e22 = (k21 + k22) * (k12 + k22) / total
     
     s = 0.0
+    # Sum of k * log(k / e) for each cell
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
+        # Check to avoid log(0)
         if k > 0 and e > 0:
             s += k * math.log(k / e)
+            
+    # LL = 2 * sum
     return 2.0 * s
 
 def compute_mi(k11, target_freq, coll_total, corpus_size):
     """
     Computes the Mutual Information (MI) statistic.
+    k11: observed frequency of target and collocate
+    target_freq: frequency of the target word
+    coll_total: frequency of the collocate word
+    corpus_size: total number of tokens
     """
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0:
         return 0.0
+    # MI = log2(Observed / Expected)
     return math.log2(k11 / expected)
 
 def significance_from_ll(ll_val):
@@ -74,10 +89,11 @@ def df_to_excel_bytes(df):
 def df_to_csv_bytes(df):
     return df.to_csv(index=False).encode('utf-8')
 
-# --- NEW HELPER FOR NETWORK GRAPH ---
+@st.cache_data
 def create_pyvis_graph(target_word, coll_df):
     """
     Creates a Pyvis interactive network graph for the top collocates.
+    Uses a temporary file path to satisfy Pyvis requirements.
     """
     # Initialize Pyvis network
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
@@ -134,12 +150,29 @@ def create_pyvis_graph(target_word, coll_df):
         
         net.add_edge(target_word, collocate, value=ll_score, width=edge_width, title=f"LL: {ll_score:.2f}")
 
-    # Save the network to an HTML file in memory
-    html_file = BytesIO()
-    # Need to set 'notebook=False' to generate a full HTML file suitable for embedding
-    net.write_html(html_file, notebook=False)
-    html_file.seek(0)
-    return html_file.read().decode('utf-8')
+    # --- FIX: Use a Temporary HTML File ---
+    html_content = ""
+    temp_path = None
+    try:
+        # Create a temporary file path that ends in .html in a temporary directory
+        temp_filename = "pyvis_graph.html"
+        temp_dir = tempfile.gettempdir()
+        temp_path = os.path.join(temp_dir, temp_filename)
+        
+        # Write the network to the temporary HTML file
+        net.write_html(temp_path, notebook=False)
+        
+        # Read the content back into a variable
+        with open(temp_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+            
+    finally:
+        # Crucial: Clean up the temporary file immediately
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    return html_content
+    # --- END OF FIX ---
 
 
 # ---------------------------
@@ -147,7 +180,7 @@ def create_pyvis_graph(target_word, coll_df):
 # ---------------------------
 @st.cache_data
 def load_corpus_file(file_bytes, sep=r"\s+"):
-    # ... (load_corpus_file remains unchanged)
+    # Attempt to read vertical 3-column format token pos lemma
     try:
         # read as whitespace-separated with no header
         df = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
@@ -255,6 +288,7 @@ with col1:
         "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, per 1000)"],
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
+    # Hide index
     st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
 with col2:
@@ -267,6 +301,7 @@ with col2:
     
     freq_head = freq_df.head(10).copy()
     freq_head.insert(0,"No", range(1, len(freq_head)+1))
+    # Hide index
     st.dataframe(freq_head, use_container_width=True, hide_index=True) 
     
     # download freq (use the full filtered list)
@@ -332,6 +367,7 @@ if analyze_btn and target_input:
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.head(10).copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        # Hide index
         st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
 
         # full concordance download
@@ -418,11 +454,10 @@ if analyze_btn and target_input:
             st.markdown("---")
             st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
             
-            # Generate the network HTML
+            # Generate the network HTML (cached)
             network_html = create_pyvis_graph(target_input, network_df)
             
             # Embed the network using Streamlit Components
-            # Set height to match Pyvis height argument (400px)
             components.html(network_html, height=450)
             
             st.markdown(
@@ -439,11 +474,9 @@ if analyze_btn and target_input:
 
             # ---------- Side-by-side display for LL: N | V | J | R ----------
             st.subheader("Log-Likelihood — Top 10 by POS")
+            # Changed to 4 columns since the Full LL table is now the graph
             cols = st.columns(4, gap="small")
             
-            # Note: The "Full (LL)" table has been replaced by the Network Graph above.
-            # We now only display the POS-filtered tables side-by-side.
-
             with cols[0]:
                 st.markdown("**N (N*) — LL**")
                 st.dataframe(ll_N, use_container_width=True, hide_index=True)
@@ -458,15 +491,13 @@ if analyze_btn and target_input:
                 st.dataframe(ll_R, use_container_width=True, hide_index=True)
 
 
-            # small per-category download buttons (Kept as is)
+            # small per-category download buttons 
             st.markdown("---")
             st.subheader("Download Top 10 Tables")
             
-            # ... (Download buttons section remains unchanged)
-
             st.markdown("**LL Top 10 Downloads**")
             ll_dl_cols = st.columns(5)
-            # Added Full LL back to the download list since it's no longer displayed as a table
+            # Added Full LL back to the download list
             ll_mapping = {
                 "Full": full_ll, "N": ll_N, "V": ll_V, "J": ll_J, "R": ll_R
             }
