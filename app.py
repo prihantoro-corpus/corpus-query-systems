@@ -17,26 +17,51 @@ def safe_log(x):
     return math.log(max(x, EPS))
 
 def compute_ll(k11, k12, k21, k22):
+    """
+    Computes the Log-Likelihood (LL) statistic based on a 2x2 contingency table.
+    k11: observed frequency of target and collocate
+    k12: observed frequency of target but not collocate
+    k21: observed frequency of collocate but not target
+    k22: observed frequency of neither target nor collocate
+    """
     total = k11 + k12 + k21 + k22
     if total == 0:
         return 0.0
+    
+    # Expected frequencies
     e11 = (k11 + k12) * (k11 + k21) / total
     e12 = (k11 + k12) * (k12 + k22) / total
     e21 = (k21 + k22) * (k11 + k21) / total
     e22 = (k21 + k22) * (k12 + k22) / total
+    
     s = 0.0
+    # Sum of k * log(k / e) for each cell
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
+        # Check to avoid log(0)
         if k > 0 and e > 0:
             s += k * math.log(k / e)
+            
+    # LL = 2 * sum
     return 2.0 * s
 
 def compute_mi(k11, target_freq, coll_total, corpus_size):
+    """
+    Computes the Mutual Information (MI) statistic.
+    k11: observed frequency of target and collocate
+    target_freq: frequency of the target word
+    coll_total: frequency of the collocate word
+    corpus_size: total number of tokens
+    """
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0:
         return 0.0
+    # MI = log2(Observed / Expected)
     return math.log2(k11 / expected)
 
 def significance_from_ll(ll_val):
+    """
+    Converts Log-Likelihood value to significance level (based on 1 d.f. Chi-squared).
+    """
     if ll_val >= 15.13:
         return '*** (p<0.001)'
     if ll_val >= 10.83:
@@ -46,10 +71,14 @@ def significance_from_ll(ll_val):
     return 'ns'
 
 def df_to_excel_bytes(df):
+    """
+    Converts a pandas DataFrame to an Excel file (xlsx) in memory (BytesIO).
+    Fix: Removed writer.save() which is deprecated in modern pandas versions.
+    """
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Sheet1")
-        writer.save()
+        # writer.save() is no longer needed/supported within the 'with' block
     buf.seek(0)
     return buf.getvalue()
 
@@ -291,7 +320,7 @@ if analyze_btn and target_input:
                 mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
                 return ll_sub, mi_sub
 
-            ll_N, mi_N = category_df(("N",))   # N (NN*, NNP*, ...)
+            ll_N, mi_N = category_df(("N",))    # N (NN*, NNP*, ...)
             ll_V, mi_V = category_df(("V",))
             ll_J, mi_J = category_df(("J",))
             ll_R, mi_R = category_df(("R",))
@@ -319,24 +348,38 @@ if analyze_btn and target_input:
                 st.markdown("**R (R*) — LL**")
                 st.table(ll_R)
 
-            # small per-category download buttons
-            coldl = st.columns(5)
-            mapping = {
-                ("LL","Full"): full_ll,
-                ("LL","N"): ll_N,
-                ("LL","V"): ll_V,
-                ("LL","J"): ll_J,
-                ("LL","R"): ll_R,
-                ("MI","Full"): full_mi,
-                ("MI","N"): mi_N,
-                ("MI","V"): mi_V,
-                ("MI","J"): mi_J,
-                ("MI","R"): mi_R,
+            # small per-category download buttons (These are currently all displayed right after the LL tables in the original script)
+            # The download buttons are placed out of the columns block so they take full width.
+            # I will keep the original placement for the download buttons below, but they are currently slightly cluttered.
+
+            st.markdown("---")
+            st.subheader("Download Top 10 Tables")
+            
+            # This loop prints the buttons inline/scattered because it's outside any column/container.
+            # I'll modify the loop to use columns for better organization, replacing the previous `coldl = st.columns(5)` which was unused.
+            
+            # Group buttons by metric type for clarity
+            
+            st.markdown("**LL Top 10 Downloads**")
+            ll_dl_cols = st.columns(5)
+            ll_mapping = {
+                "Full": full_ll, "N": ll_N, "V": ll_V, "J": ll_J, "R": ll_R
             }
-            # display per-category top10 downloads
-            for (mtype,cat), df_tab in mapping.items():
-                bname = f"{mtype} {cat} top10"
-                st.download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target}_{mtype}_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            for i, (cat, df_tab) in enumerate(ll_mapping.items()):
+                bname = f"LL {cat} top10"
+                ll_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target}_LL_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+            st.markdown("---")
+            st.markdown(f"**MI Top 10 Downloads (obs ≥ {mi_min_freq})**")
+            mi_dl_cols = st.columns(5)
+            mi_mapping = {
+                "Full": full_mi, "N": mi_N, "V": mi_V, "J": mi_J, "R": mi_R
+            }
+            for i, (cat, df_tab) in enumerate(mi_mapping.items()):
+                bname = f"MI {cat} top10"
+                mi_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target}_MI_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                
+            st.markdown("---")
 
             # ---------- Side-by-side display for MI: Full | N | V | J | R ----------
             st.subheader(f"Mutual Information — Top 10 (obs ≥ {mi_min_freq})")
