@@ -167,7 +167,6 @@ st.sidebar.success(f"Loaded: {total_tokens:,} tokens")
 tokens_lower = df["_token_low"].tolist()
 pos_tags = df["pos"].tolist()
 # Define punctuation tokens to filter out (simple approach)
-# These are typically words that are only symbols/punctuation based on low-cased token
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
 # Filter tokens for frequency list
 tokens_lower_filtered = [t for t in tokens_lower if t not in PUNCTUATION and not t.isdigit()]
@@ -197,7 +196,8 @@ with col1:
         "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, per 1000)"],
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
-    st.dataframe(info_df, use_container_width=True)
+    # HIDING INDEX HERE
+    st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
 with col2:
     st.subheader("Top frequency (token / POS / freq) (Punctuation skipped)")
@@ -208,8 +208,9 @@ with col2:
     freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
     
     freq_head = freq_df.head(10).copy()
-    freq_head.insert(0,"No", range(1, len(freq_head)+1)) # FIXED: Start index from 1
-    st.dataframe(freq_head, use_container_width=True)
+    freq_head.insert(0,"No", range(1, len(freq_head)+1))
+    # HIDING INDEX HERE
+    st.dataframe(freq_head, use_container_width=True, hide_index=True) 
     
     # download freq (use the full filtered list)
     st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -273,8 +274,9 @@ if analyze_btn and target_input:
             kwic_rows.append({"Left": " ".join(left), "Node": node_orig, "Right": " ".join(right)})
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.head(10).copy().reset_index(drop=True)
-        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1)) # FIXED: Start index from 1
-        st.dataframe(kwic_preview, use_container_width=True)
+        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        # HIDING INDEX HERE
+        st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
 
         # full concordance download
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -326,11 +328,11 @@ if analyze_btn and target_input:
         else:
             # full LL top10
             full_ll = stats_df.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
-            full_ll.insert(0, "Rank", range(1, len(full_ll)+1)) # FIXED: Start index from 1
+            full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
             # full MI (apply MI min freq)
             full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
             full_mi = full_mi_all.head(10).copy()
-            full_mi.insert(0, "Rank", range(1, len(full_mi)+1)) # FIXED: Start index from 1
+            full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
             # category tables (multi-POS allowed)
             def category_df(prefixes):
@@ -339,9 +341,9 @@ if analyze_btn and target_input:
                     mask = mask | stats_df["POS"].str.startswith(pref, na=False)
                 sub = stats_df[mask].copy()
                 ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
-                ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1)) # FIXED: Start index from 1
+                ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
                 mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(10).copy()
-                mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1)) # FIXED: Start index from 1
+                mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
                 return ll_sub, mi_sub
 
             ll_N, mi_N = category_df(("N",))    # N (NN*, NNP*, ...)
@@ -358,19 +360,24 @@ if analyze_btn and target_input:
             cols = st.columns(5, gap="small")
             with cols[0]:
                 st.markdown("**Full (LL)**")
-                st.dataframe(full_ll, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(full_ll, use_container_width=True, hide_index=True)
             with cols[1]:
                 st.markdown("**N (N*) — LL**")
-                st.dataframe(ll_N, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(ll_N, use_container_width=True, hide_index=True)
             with cols[2]:
                 st.markdown("**V (V*) — LL**")
-                st.dataframe(ll_V, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(ll_V, use_container_width=True, hide_index=True)
             with cols[3]:
                 st.markdown("**J (J*) — LL**")
-                st.dataframe(ll_J, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(ll_J, use_container_width=True, hide_index=True)
             with cols[4]:
                 st.markdown("**R (R*) — LL**")
-                st.dataframe(ll_R, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(ll_R, use_container_width=True, hide_index=True)
 
             # small per-category download buttons (Now placed in columns for better organization)
             st.markdown("---")
@@ -402,18 +409,23 @@ if analyze_btn and target_input:
             cols_mi = st.columns(5, gap="small")
             with cols_mi[0]:
                 st.markdown("**Full (MI)**")
-                st.dataframe(full_mi, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(full_mi, use_container_width=True, hide_index=True)
             with cols_mi[1]:
                 st.markdown("**N (N*) — MI**")
-                st.dataframe(mi_N, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(mi_N, use_container_width=True, hide_index=True)
             with cols_mi[2]:
                 st.markdown("**V (V*) — MI**")
-                st.dataframe(mi_V, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(mi_V, use_container_width=True, hide_index=True)
             with cols_mi[3]:
                 st.markdown("**J (J*) — MI**")
-                st.dataframe(mi_J, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(mi_J, use_container_width=True, hide_index=True)
             with cols_mi[4]:
                 st.markdown("**R (R*) — MI**")
-                st.dataframe(mi_R, use_container_width=True)
+                # HIDING INDEX HERE
+                st.dataframe(mi_R, use_container_width=True, hide_index=True)
 
 st.caption("Tip: Deploy this file to Streamlit Cloud or HuggingFace Spaces to share with others.")
