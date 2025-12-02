@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import math
 from collections import Counter
-from io import BytesIO, StringIO # Added StringIO
+from io import BytesIO, StringIO 
 import tempfile 
 import os       
 import re       
@@ -192,7 +192,7 @@ def download_file_to_bytesio(url):
         return None
 
 # ---------------------------
-# Cached loading (Conditional Logic Implemented)
+# Cached loading (Robust Encoding & Parsing Implemented)
 # ---------------------------
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
@@ -204,35 +204,45 @@ def load_corpus_file(file_source, sep=r"\s+"):
     if file_source is None:
         return None
 
-    # 1. Try to read as structured 3-column data (Vertical Corpus)
+    # --- Step 1: Robustly read and clean the content string ---
     try:
         file_source.seek(0)
-        file_content_str = file_source.read().decode('utf-8')
+        file_bytes = file_source.read()
+
+        # Try robust decoding to handle BOM/encoding issues
+        try:
+            file_content_str = file_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                # Fallback to Latin-1/ISO-8859-1 (common for older/non-standard files)
+                file_content_str = file_bytes.decode('iso-8859-1')
+            except Exception:
+                # Last resort: decode using errors='ignore'
+                file_content_str = file_bytes.decode('utf-8', errors='ignore')
         
-        # Use StringIO to handle the string content for reliable pandas parsing
         # Filter out potential comments/metadata lines before parsing
         clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
         clean_content = "\n".join(clean_lines)
         
         file_buffer_for_pandas = StringIO(clean_content)
 
+    except Exception as e:
+        st.error(f"Error reading file stream: {e}")
+        return None
+    
+    # --- Step 2: Try Structured Parsing (Tab-separated) ---
+    try:
         # Attempt 1: Tab Separator (most common for tagged corpora)
+        file_buffer_for_pandas.seek(0)
         try:
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
         except Exception:
-            file_buffer_for_pandas.seek(0) # Reset buffer
+            file_buffer_for_pandas.seek(0) 
             # Attempt 2: Default Separator (Whitespace)
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
             
-        # Continue with structural check
-        is_vertical = False
-        
         # FIX: Check only for the number of columns (3+) to detect a tagged file
         if df_attempt.shape[1] >= 3:
-            # Assume 3+ columns means it's a tagged vertical file
-            is_vertical = True
-            
-        if is_vertical:
             # --- PROCESS TAGGED/VERTICAL FILE ---
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
@@ -247,13 +257,8 @@ def load_corpus_file(file_source, sep=r"\s+"):
          # If structured reading fails entirely, proceed to raw text processing
          pass
 
-    # 2. Fallback: Treat as Raw Horizontal Text (Fast Regex Tokenizer + Nonsense Tags)
+    # --- Step 3: Fallback to Raw Horizontal Text ---
     try:
-        # We already have file_content_str from the failed attempt, or need to re-read
-        if 'file_content_str' not in locals():
-            file_source.seek(0)
-            file_content_str = file_source.read().decode('utf-8')
-            
         raw_text = file_content_str
         
         # Regex to split tokens based on space and punctuation, keeping punctuation as separate tokens
