@@ -12,11 +12,8 @@ import re
 import requests 
 import matplotlib.pyplot as plt 
 from wordcloud import WordCloud 
-from matplotlib.colors import to_rgb, rgb2hex 
-
-# Import for Pyvis Network Graph
 from pyvis.network import Network
-import streamlit.components.v1 as components # Import for HTML embedding
+import streamlit.components.v1 as components 
 
 st.set_page_config(page_title="CORTEX - Corpus Explorer v13", layout="wide")
 
@@ -49,9 +46,8 @@ def set_view(view_name):
     st.session_state['view'] = view_name
     
 def reset_analysis():
-    # Clear the entire Streamlit cache to force re-reading and re-analysis
     st.cache_data.clear()
-    st.session_state['view'] = 'overview' # Reset view to overview on corpus change
+    st.session_state['view'] = 'overview'
     
 # ---------------------------
 # Helpers: stats, IO utilities
@@ -125,13 +121,9 @@ def create_word_cloud(freq_data, is_tagged_mode):
     if single_word_freq_data.empty:
         return None
 
-    # Convert frequency data to a dictionary for WordCloud
     word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
-    
-    # Map from word to its POS tag (used by the custom color function)
     word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
     
-    # Define stopwords (must be in lowercase)
     stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
     
     wc = WordCloud(
@@ -143,23 +135,18 @@ def create_word_cloud(freq_data, is_tagged_mode):
         min_font_size=10
     )
     
-    # 1. Generate the WordCloud first to calculate layout
     wordcloud = wc.generate_from_frequencies(word_freq_dict)
 
     if is_tagged_mode:
-        # Define the custom color function (must be defined inside the cacheable function)
         def final_color_func(word, *args, **kwargs):
-            # This function returns the HEX color string based on POS
             pos_tag = word_to_pos.get(word, 'O')
             pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
             if pos_code not in POS_COLOR_MAP:
                 pos_code = 'O'
             return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
 
-        # 2. Recolor the generated WordCloud
         wordcloud = wordcloud.recolor(color_func=final_color_func)
         
-    # Plot the WordCloud image
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.imshow(wordcloud, interpolation='bilinear')
     ax.axis("off")
@@ -179,7 +166,6 @@ def create_pyvis_graph(target_word, coll_df):
     min_ll = coll_df['LL'].min()
     ll_range = max_ll - min_ll
     
-    # JSON MUST NOT contain // comments
     net.set_options(f"""
     var options = {{
       "nodes": {{
@@ -209,19 +195,14 @@ def create_pyvis_graph(target_word, coll_df):
     }}
     """)
     
-    # 1. Add Target Node 
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
-    # 2. Add Collocate Nodes and Edges
     for _, row in coll_df.iterrows():
         collocate = row['Collocate']
         ll_score = row['LL']
         observed = row['Observed']
         
-        # Get the POS tag and determine the color
         pos_tag = row['POS']
-        
-        # Determine color based on POS prefix
         pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
         
         if pos_tag.startswith('##'):
@@ -231,7 +212,6 @@ def create_pyvis_graph(target_word, coll_df):
         
         color = POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
         
-        # Node size based on LL score
         if ll_range > 0:
             normalized_ll = (ll_score - min_ll) / ll_range
             node_size = 15 + normalized_ll * 25 
@@ -241,7 +221,6 @@ def create_pyvis_graph(target_word, coll_df):
         net.add_node(collocate, label=collocate, size=node_size, color=color, title=f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}")
         net.add_edge(target_word, collocate, value=ll_score, width=5, title=f"LL: {ll_score:.2f}")
 
-    # --- Use a Temporary HTML File ---
     html_content = ""
     temp_path = None
     try:
@@ -256,8 +235,6 @@ def create_pyvis_graph(target_word, coll_df):
             os.remove(temp_path)
 
     return html_content
-    # --- END OF FIX ---
-
 
 @st.cache_data
 def download_file_to_bytesio(url):
@@ -283,23 +260,18 @@ def load_corpus_file(file_source, sep=r"\s+"):
     if file_source is None:
         return None
 
-    # --- Step 1: Robustly read and clean the content string ---
     try:
         file_source.seek(0)
         file_bytes = file_source.read()
 
-        # Try robust decoding to handle BOM/encoding issues
         try:
             file_content_str = file_bytes.decode('utf-8')
         except UnicodeDecodeError:
             try:
-                # Fallback to Latin-1/ISO-8859-1 (common for older/non-standard files)
                 file_content_str = file_bytes.decode('iso-8859-1')
             except Exception:
-                # Last resort: decode using errors='ignore'
                 file_content_str = file_bytes.decode('utf-8', errors='ignore')
         
-        # Filter out potential comments/metadata lines before parsing
         clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
         clean_content = "\n".join(clean_lines)
         
@@ -309,25 +281,19 @@ def load_corpus_file(file_source, sep=r"\s+"):
         st.error(f"Error reading file stream: {e}")
         return None
     
-    # --- Step 2: Try Structured Parsing (Tab-separated) ---
     df_attempt = None
     
     try:
-        # Attempt 1: Tab Separator (most common for tagged corpora)
         file_buffer_for_pandas.seek(0)
         try:
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
         except Exception:
             file_buffer_for_pandas.seek(0) 
-            # Attempt 2: Default Separator (Whitespace)
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
             
-        # Check only for the number of columns (3+) to detect a tagged file
         if df_attempt is not None and df_attempt.shape[1] >= 3:
-            # --- PROCESS TAGGED/VERTICAL FILE ---
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
-            # Preserve original tags and lemmas for visualization
             df["token"] = df["token"].fillna("").astype(str)
             df["pos"] = df["pos"].fillna("###").astype(str)
             df["lemma"] = df["lemma"].fillna("###").astype(str)
@@ -335,18 +301,13 @@ def load_corpus_file(file_source, sep=r"\s+"):
             return df
             
     except Exception:
-         # If structured reading fails entirely, proceed to raw text processing
          pass
 
-    # --- Step 3: Fallback to Raw Horizontal Text ---
     try:
         raw_text = file_content_str
-        
-        # Regex to split tokens based on space and punctuation, keeping punctuation as separate tokens
         tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
-        tokens = [t.strip() for t in tokens if t.strip()] # Clean up any empty strings
+        tokens = [t.strip() for t in tokens if t.strip()] 
 
-        # Assign nonsense tag and lemma
         nonsense_tag = "##"
         nonsense_lemma = "##"
         
@@ -385,7 +346,6 @@ with st.sidebar:
     
     st.subheader("1. Choose Corpus Source")
     
-    # Added callback to reset cache when built-in corpus selection changes
     selected_corpus_name = st.selectbox(
         "Select a pre-loaded corpus:", 
         options=list(BUILT_IN_CORPORA.keys()),
@@ -393,7 +353,6 @@ with st.sidebar:
         on_change=reset_analysis
     )
     
-    # Added callback to reset cache when file is uploaded
     uploaded_file = st.file_uploader(
         "OR Upload your own corpus file", 
         type=["txt","csv"],
@@ -403,7 +362,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Determine the corpus source
     if uploaded_file is not None:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
@@ -419,18 +377,15 @@ with st.sidebar:
         
     st.markdown("---")
     
-    # --- NEW: PERSISTENT NAVIGATION (TOOLS) ---
+    # --- PERSISTENT NAVIGATION (TOOLS) ---
     st.subheader("TOOLS")
     
-    # Navigation buttons for Overview
     is_active_o = st.session_state['view'] == 'overview'
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
     
-    # Navigation buttons for Concordance
     is_active_c = st.session_state['view'] == 'concordance'
     st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
 
-    # Navigation buttons for Collocation
     is_active_l = st.session_state['view'] == 'collocation'
     st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
 
@@ -464,8 +419,7 @@ with st.sidebar:
         st.session_state['collocate_regex'] = collocate_regex
         
         # 2. POS Filter (Dynamic)
-        if 'pos' in df.columns:
-            # Generate unique POS tags present in the corpus (excluding generic markers)
+        if 'pos' in df.columns and not is_raw_mode:
             all_pos_tags = sorted([tag for tag in df['pos'].unique() if tag != '##'])
             
             if all_pos_tags:
@@ -484,8 +438,8 @@ with st.sidebar:
             st.session_state['selected_pos_tags'] = None
 
         # 3. Lemma Filter
-        if 'lemma' in df.columns:
-            collocate_lemma = st.text_input("Filter by Lemma (case-insensitive)", value="", help="Enter the base form (e.g., 'approach'). Uses the same wildcard/regex logic as the main search on the lemma.")
+        if 'lemma' in df.columns and not is_raw_mode:
+            collocate_lemma = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value="", help="Enter the base form (e.g., 'approach'). Uses wildcard/regex logic on the lemma.")
             st.session_state['collocate_lemma'] = collocate_lemma
         else:
             st.info("Lemma filtering requires a lemmatized corpus.")
@@ -892,7 +846,9 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         for j in range(start, end):
             if i <= j < i + primary_target_len:
                 continue
-            coll_pairs.append((tokens_lower[j], df["pos"].iloc[j], df["lemma"].iloc[j])) # Include lemma here
+            # Ensure we include the lemma for filtering
+            lemma_val = df["lemma"].iloc[j].lower() if "lemma" in df.columns else "##"
+            coll_pairs.append((tokens_lower[j], df["pos"].iloc[j], lemma_val)) 
 
     coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos", "lemma_collocate"])
     
@@ -934,13 +890,15 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         
         # 1. Word/Regex Filter
         if collocate_regex:
-            # Prepare pattern: replace * with .* and use | for multiple words
-            pattern = re.escape(collocate_regex).replace(r'\*', '.*')
+            # Prepare pattern: replace * with .*
+            pattern = re.escape(collocate_regex).replace(r'\*', '.*').replace(r'\|', '|').replace(r'\.', '.')
+            # The search must be case-insensitive, so we rely on the lowercase 'Collocate' column.
+            # However, the input 'w' in stats_list is already lowercased (token_lower[j]).
             try:
-                # Apply filter to the 'Collocate' (token) column
-                filtered_df = filtered_df[filtered_df['Collocate'].str.fullmatch(pattern, case=False, na=False)]
+                # Use str.contains to allow the regular expressions to work properly
+                filtered_df = filtered_df[filtered_df['Collocate'].str.fullmatch(pattern, case=True, na=False)]
             except re.error:
-                st.error(f"Invalid regular expression: '{collocate_regex}'")
+                st.error(f"Invalid regular expression for Word/Regex filter: '{collocate_regex}'")
                 filtered_df = pd.DataFrame() # Clear results if regex is bad
 
         # 2. POS Filter
@@ -950,12 +908,12 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         # 3. Lemma Filter
         if collocate_lemma and 'Lemma' in filtered_df.columns:
             # Prepare lemma pattern: replace * with .*
-            lemma_pattern = re.escape(collocate_lemma).replace(r'\*', '.*')
+            lemma_pattern = re.escape(collocate_lemma).replace(r'\*', '.*').replace(r'\|', '|').replace(r'\.', '.')
             try:
-                # Apply filter to the 'Lemma' column
-                filtered_df = filtered_df[filtered_df['Lemma'].str.fullmatch(lemma_pattern, case=False, na=False)]
+                # Apply filter to the 'Lemma' column (already lowercased)
+                filtered_df = filtered_df[filtered_df['Lemma'].str.fullmatch(lemma_pattern, case=True, na=False)]
             except re.error:
-                 st.error(f"Invalid regular expression for lemma filter: '{collocate_lemma}'")
+                 st.error(f"Invalid regular expression for Lemma filter: '{collocate_lemma}'")
                  filtered_df = pd.DataFrame()
         
         stats_df_filtered = filtered_df
