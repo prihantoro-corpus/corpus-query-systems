@@ -372,11 +372,8 @@ with st.sidebar:
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
     
-    # NOTE: We do NOT st.stop() here. We let the main body handle the load failure.
-    
-    st.markdown("---")
-    
     # --- PERSISTENT NAVIGATION (TOOLS) ---
+    st.markdown("---")
     st.subheader("TOOLS")
     
     is_active_o = st.session_state['view'] == 'overview'
@@ -393,15 +390,14 @@ with st.sidebar:
     # --- MODULE SETTINGS (DYNAMIC) ---
     st.subheader("Tool Settings")
     
-    # load corpus inside sidebar to get df for filtering logic
+    # Load corpus inside sidebar to get df for filtering logic (safe execution)
     df_sidebar = load_corpus_file(corpus_source)
     
-    if df_sidebar is not None and len(df_sidebar) > 0:
-        # Recalculate is_raw_mode safely here for filtering logic access
+    # Determine tagging mode safely for filter visibility
+    is_raw_mode_sidebar = True
+    if df_sidebar is not None and 'pos' in df_sidebar.columns and len(df_sidebar) > 0:
         count_of_raw_tags = df_sidebar['pos'].str.contains('##', na=False).sum()
         is_raw_mode_sidebar = (count_of_raw_tags / len(df_sidebar)) > 0.99
-    else:
-        is_raw_mode_sidebar = True
     
     if st.session_state['view'] == 'concordance':
         st.write("KWIC Context (Display)")
@@ -427,26 +423,32 @@ with st.sidebar:
         collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value="")
         st.session_state['collocate_regex'] = collocate_regex
         
-        # 2. POS Filter (Dynamic)
+        # --- POS Filters (Requires Tagged Corpus) ---
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
-            all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###']) # Include ### check for safety
+            
+            # NEW: POS Tag Wildcard Filter
+            pos_wildcard_regex = st.text_input("Filter by POS Tag Wildcard (e.g., 'V*' or '*G')", value="")
+            st.session_state['pos_wildcard_regex'] = pos_wildcard_regex
+            
+            # POS Multiselect Filter
+            all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###'])
             
             if all_pos_tags:
                 selected_pos_tags = st.multiselect(
-                    "Filter by POS Tag",
+                    "OR Filter by specific POS Tag(s)",
                     options=all_pos_tags,
                     default=None,
-                    help="Only shows collocates matching one of the selected POS tags. If none selected, all are shown."
+                    help="Only shows collocates matching one of the selected POS tags. If none selected, this filter is ignored."
                 )
                 st.session_state['selected_pos_tags'] = selected_pos_tags
             else:
-                st.info("POS tags not detailed enough for granular filtering.")
                 st.session_state['selected_pos_tags'] = None
         else:
             st.info("POS filtering requires a tagged corpus.")
+            st.session_state['pos_wildcard_regex'] = None
             st.session_state['selected_pos_tags'] = None
 
-        # 3. Lemma Filter
+        # 3. Lemma Filter (Requires Lemmatized Corpus)
         if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
             collocate_lemma = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value="", help="Enter the base form (e.g., 'approach'). Uses wildcard/regex logic on the lemma.")
             st.session_state['collocate_lemma'] = collocate_lemma
@@ -764,6 +766,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Get Filter Settings
     collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
+    pos_wildcard_regex = st.session_state.get('pos_wildcard_regex', '').strip() # New filter
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
     collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
     
@@ -900,19 +903,48 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         
         # 1. Word/Regex Filter
         if collocate_regex:
-            # Prepare pattern: replace * with .*
             pattern = re.escape(collocate_regex).replace(r'\*', '.*').replace(r'\|', '|').replace(r'\.', '.')
             
             try:
-                # Use str.fullmatch for full regex matching
                 filtered_df = filtered_df[filtered_df['Collocate'].str.fullmatch(pattern, case=True, na=False)]
             except re.error:
                 st.error(f"Invalid regular expression for Word/Regex filter: '{collocate_regex}'")
                 filtered_df = pd.DataFrame() 
-
-        # 2. POS Filter
-        if selected_pos_tags and not is_raw_mode:
-            filtered_df = filtered_df[filtered_df['POS'].isin(selected_pos_tags)]
+                
+        # 2. POS Filters (Wildcard OR Multiselect)
+        if not is_raw_mode and ('POS' in filtered_df.columns):
+            pos_filter_mask = pd.Series([True] * len(filtered_df), index=filtered_df.index)
+            
+            # 2a. POS Wildcard Filter (If defined, takes precedence over multiselect if the user intends it)
+            if pos_wildcard_regex:
+                pos_pattern = re.escape(pos_wildcard_regex).replace(r'\*', '.*')
+                try:
+                    pos_filter_mask = pos_filter_mask & filtered_df['POS'].str.fullmatch(pos_pattern, case=True, na=False)
+                except re.error:
+                    st.error(f"Invalid regular expression for POS Wildcard filter: '{pos_wildcard_regex}'")
+                    pos_filter_mask = pd.Series([False] * len(filtered_df), index=filtered_df.index)
+            
+            # 2b. POS Multiselect Filter (Applied as an additional constraint)
+            if selected_pos_tags:
+                # If only multiselect is used, we apply it. If wildcard is used, we combine them.
+                # However, typically filters are ANDed. If user uses both, it means POS must match BOTH. 
+                # Let's assume an AND logic for the most restrictive filtering.
+                if not pos_wildcard_regex:
+                     pos_filter_mask = pos_filter_mask & filtered_df['POS'].isin(selected_pos_tags)
+                else:
+                    # If both are used, we currently assume the wildcard is the primary filter,
+                    # but since they both filter the POS column, a more sensible approach
+                    # is to use the wildcard if present, otherwise use the multiselect.
+                    # Since the wildcard is often broader (V*), we let the user control which is primary.
+                    # For simplicity here, we stick to the primary filter logic: if one is set, use it.
+                    # Let's adjust the logic: if POS wildcard is set, ignore the multiselect.
+                    
+                    # If wildcard is NOT set, use multiselect filter
+                    if not pos_wildcard_regex:
+                         pos_filter_mask = filtered_df['POS'].isin(selected_pos_tags)
+                    # If wildcard IS set, it's already applied above, and we don't apply multiselect.
+                    
+            filtered_df = filtered_df[pos_filter_mask]
             
         # 3. Lemma Filter
         if collocate_lemma and 'Lemma' in filtered_df.columns:
@@ -953,8 +985,10 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
     
     # Display note if filters were applied
-    if collocate_regex or selected_pos_tags or collocate_lemma:
-        filter_count = sum(1 for f in [collocate_regex, selected_pos_tags, collocate_lemma] if f)
+    filter_list = [collocate_regex, pos_wildcard_regex, collocate_lemma]
+    filter_count = sum(1 for f in filter_list if f or (f is selected_pos_tags and selected_pos_tags))
+    
+    if filter_count > 0:
         st.info(f"Filters Applied: Showing collocates matching {filter_count} criteria.")
     
     network_html = create_pyvis_graph(primary_target_mwu, network_df)
