@@ -766,7 +766,11 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     # --- Start Analysis ---
     kwic_left = st.session_state.get('kwic_left', 7)
     kwic_right = st.session_state.get('kwic_right', 7)
-    target = target_input.lower()
+    
+    # Use raw input for structural parsing to preserve case
+    raw_target_input = target_input
+    # Lowercase version used only for traditional word/MWU/wildcard searches
+    target = raw_target_input.lower()
     
     # --- PATTERN SEARCH VARIABLES ---
     pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
@@ -785,14 +789,15 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     is_structural_search = False
     
     # 1. NEW: Structural Search Parsing and Execution (Priority 1 if tagged)
-    if not is_raw_mode and ('[' in target_input or '_' in target_input):
+    # Uses raw_target_input to preserve POS case
+    if not is_raw_mode and ('[' in raw_target_input or '_' in raw_target_input):
         
         # --- Structural Search Parsing ---
         structural_lemma_pattern = None
         structural_pos_pattern = None
         
-        # Extract Lemma: [lemma]
-        lemma_match = re.search(r"\[(.*?)\]", target_input)
+        # Extract Lemma: [lemma] -> always lowercased for searching lemma column
+        lemma_match = re.search(r"\[(.*?)\]", raw_target_input)
         if lemma_match:
             lemma_input = lemma_match.group(1).strip().lower()
             if lemma_input:
@@ -800,15 +805,17 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 lemma_pattern_str = re.escape(lemma_input).replace(r'\*', '.*')
                 structural_lemma_pattern = re.compile(f"^{lemma_pattern_str}$")
                 
-        # Extract POS: _POS
-        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", target_input)
+        # Extract POS: _POS -> kept in original case for searching POS column
+        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", raw_target_input)
         if pos_match:
+            # POS input is taken directly without lowercasing
             pos_input = pos_match.group(1).strip()
             if pos_input:
                 # Convert wildcard/concatenation to regex: _V*|NN -> ^(V.*|NN)$
                 pos_patterns = [p.strip() for p in pos_input.split('|') if p.strip()]
                 full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
                 if full_pos_regex_list:
+                    # Case-sensitive regex compilation (default for re.compile)
                     structural_pos_pattern = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
 
         if structural_lemma_pattern or structural_pos_pattern:
@@ -817,9 +824,11 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             # --- Structural Search Execution ---
             match_series = pd.Series(True, index=df.index)
             
+            # Match lemma against lowercased lemma column
             if structural_lemma_pattern:
                 match_series &= df['lemma'].str.lower().apply(lambda x: bool(structural_lemma_pattern.fullmatch(x)))
                 
+            # Match POS against original POS column
             if structural_pos_pattern:
                 match_series &= df['pos'].apply(lambda x: bool(structural_pos_pattern.fullmatch(x)))
                 
@@ -827,12 +836,12 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             
             # Structural search always matches single tokens (primary_target_len = 1)
             primary_target_len = 1
-            primary_target_mwu = target_input
-            target_display = f"Structural Pattern '{target_input}'"
+            primary_target_mwu = raw_target_input
+            target_display = f"Structural Pattern '{raw_target_input}'"
             literal_freq = len(all_target_positions)
             
             if not all_target_positions:
-                st.warning(f"Structural target '{target_input}' not found in corpus.")
+                st.warning(f"Structural target '{raw_target_input}' not found in corpus.")
                 st.stop()
                 
             rel_freq = (literal_freq / total_tokens) * 1_000_000
@@ -840,6 +849,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
 
     # 2. OLD LOGIC: Word/MWU/Wildcard Search Execution (Priority 2 if not structural)
+    # Uses the lowercased 'target' string.
     if not is_structural_search:
         
         # Logic to resolve target to a specific MWU or token (if wildcard is used)
@@ -879,21 +889,21 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
                 primary_target_tokens = primary_target_mwu.split()
                 primary_target_len = len(primary_target_tokens)
-                target_display = f"'{target_input}' (Most Frequent Match: '{primary_target_mwu}')"
+                target_display = f"'{raw_target_input}' (Most Frequent Match: '{primary_target_mwu}')"
             else:
-                st.warning(f"Target pattern '{target_input}' not found in corpus.")
+                st.warning(f"Target pattern '{raw_target_input}' not found in corpus.")
                 st.stop()
         else:
             primary_target_mwu = target
             primary_target_tokens = target.split()
             primary_target_len = len(primary_target_tokens)
-            target_display = f"'{target_input}'"
+            target_display = f"'{raw_target_input}'"
             literal_freq = 0
             for i in range(len(tokens_lower) - primary_target_len + 1):
                  if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                      literal_freq += 1
             if literal_freq == 0:
-                st.warning(f"Target '{target_input}' not found in corpus.")
+                st.warning(f"Target '{raw_target_input}' not found in corpus.")
                 st.stop()
             rel_freq = (literal_freq / total_tokens) * 1_000_000
             wildcard_freq_df = pd.DataFrame([{"Query Result": primary_target_mwu, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
@@ -1107,7 +1117,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         results_panel_data.append({
             "Metric": "Node Word/Pattern Frequency",
             # Use the input string for the value if it's a structural search, otherwise the found token/mwu.
-            "Value": target_input if is_structural_search else primary_target_mwu,
+            "Value": raw_target_input if is_structural_search else primary_target_mwu,
             "Frequency": literal_freq
         })
         # 2. Observed Collocate Frequency (The actual target count in the co-occurrence window)
@@ -1139,7 +1149,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     if is_pattern_search_active:
         st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with the specified criteria within ±{current_kwic_left} tokens.")
     elif is_structural_search:
-        st.success(f"Structural search successful! Found **{total_matches}** occurrences matching '{target_input}'.")
+        st.success(f"Structural search successful! Found **{total_matches}** occurrences matching '{raw_target_input}'.")
     else:
         st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
     # -----------------------------------------------------
@@ -1225,7 +1235,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             st.caption(f"The total corpus frequency of the collocate pattern is listed above.")
         else:
             if contains_wildcard or is_structural_search:
-                st.subheader(f"Search Results: '{target_input}' (Top 10)")
+                st.subheader(f"Search Results: '{raw_target_input}' (Top 10)")
             else:
                 st.subheader(f"Target Frequency")
                 
@@ -1260,34 +1270,39 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
     collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
     
-    target = target_input.lower()
+    # Use raw input for structural parsing to preserve case
+    raw_target_input = target_input
+    # Lowercase version used only for traditional word/MWU/wildcard searches
+    target = raw_target_input.lower()
     
     # --- Structural Search Parsing and Execution for Collocation Node ---
     is_structural_search_coll = False
     all_target_positions = []
     
-    if not is_raw_mode and ('[' in target_input or '_' in target_input):
+    if not is_raw_mode and ('[' in raw_target_input or '_' in raw_target_input):
         
         # --- Structural Search Parsing ---
         structural_lemma_pattern = None
         structural_pos_pattern = None
         
-        # Extract Lemma: [lemma]
-        lemma_match = re.search(r"\[(.*?)\]", target_input)
+        # Extract Lemma: [lemma] -> always lowercased for searching lemma column
+        lemma_match = re.search(r"\[(.*?)\]", raw_target_input)
         if lemma_match:
             lemma_input = lemma_match.group(1).strip().lower()
             if lemma_input:
                 lemma_pattern_str = re.escape(lemma_input).replace(r'\*', '.*')
                 structural_lemma_pattern = re.compile(f"^{lemma_pattern_str}$")
                 
-        # Extract POS: _POS
-        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", target_input)
+        # Extract POS: _POS -> kept in original case for searching POS column
+        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", raw_target_input)
         if pos_match:
+            # POS input is taken directly without lowercasing
             pos_input = pos_match.group(1).strip()
             if pos_input:
                 pos_patterns = [p.strip() for p in pos_input.split('|') if p.strip()]
                 full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
                 if full_pos_regex_list:
+                    # Case-sensitive regex compilation (default for re.compile)
                     structural_pos_pattern = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
 
         if structural_lemma_pattern or structural_pos_pattern:
@@ -1306,12 +1321,12 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             
             # Structural search always matches single tokens
             primary_target_len = 1
-            primary_target_mwu = target_input
-            target_display = f"Structural Pattern '{target_input}'"
+            primary_target_mwu = raw_target_input
+            target_display = f"Structural Pattern '{raw_target_input}'"
             freq = len(all_target_positions)
             
             if not all_target_positions:
-                st.warning(f"Structural target '{target_input}' not found in corpus.")
+                st.warning(f"Structural target '{raw_target_input}' not found in corpus.")
                 st.stop()
             
     # --- MWU/WILDCARD RESOLUTION (Focus on single primary target - fallback/traditional) ---
@@ -1351,20 +1366,20 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                     primary_target_tokens = primary_target_mwu.split()
                     primary_target_len = len(primary_target_tokens)
             if not primary_target_mwu:
-                st.warning(f"Target pattern '{target_input}' not found in corpus.")
+                st.warning(f"Target pattern '{raw_target_input}' not found in corpus.")
                 st.stop()
-            target_display = f"'{target_input}' (Analysis on Most Frequent Match: '{primary_target_mwu}')"
+            target_display = f"'{raw_target_input}' (Analysis on Most Frequent Match: '{primary_target_mwu}')"
         else:
             primary_target_mwu = target
             primary_target_tokens = target.split()
             primary_target_len = len(primary_target_tokens)
-            target_display = f"'{target_input}'"
+            target_display = f"'{raw_target_input}'"
             literal_freq = 0
             for i in range(len(tokens_lower) - primary_target_len + 1):
                  if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                      literal_freq += 1
             if literal_freq == 0:
-                st.warning(f"Target '{target_input}' not found in corpus.")
+                st.warning(f"Target '{raw_target_input}' not found in corpus.")
                 st.stop()
             freq = literal_freq
         
@@ -1543,7 +1558,9 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         st.subheader(f"Left Collocates Only (Top {len(left_directional_df)} LL)")
         
         if not left_directional_df.empty:
-            network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
+            # Use the input string for the graph display if structural search was used
+            graph_target_word = raw_target_input if is_structural_search_coll else primary_target_mwu
+            network_html_left = create_pyvis_graph(graph_target_word, left_directional_df)
             components.html(network_html_left, height=450)
             st.markdown(
                 """
@@ -1558,7 +1575,9 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         st.subheader(f"Right Collocates Only (Top {len(right_directional_df)} LL)")
         
         if not right_directional_df.empty:
-            network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
+            # Use the input string for the graph display if structural search was used
+            graph_target_word = raw_target_input if is_structural_search_coll else primary_target_mwu
+            network_html_right = create_pyvis_graph(graph_target_word, right_directional_df)
             components.html(network_html_right, height=450)
             st.markdown(
                 """
