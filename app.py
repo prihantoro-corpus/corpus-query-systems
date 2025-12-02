@@ -426,11 +426,11 @@ with st.sidebar:
         # --- POS Filters (Requires Tagged Corpus) ---
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
             
-            # NEW: POS Tag Wildcard Filter
+            # 2a. POS Tag Wildcard Filter
             pos_wildcard_regex = st.text_input("Filter by POS Tag Wildcard (e.g., 'V*' or '*G')", value="")
             st.session_state['pos_wildcard_regex'] = pos_wildcard_regex
             
-            # POS Multiselect Filter
+            # 2b. POS Multiselect Filter
             all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###'])
             
             if all_pos_tags:
@@ -455,6 +455,19 @@ with st.sidebar:
         else:
             st.info("Lemma filtering requires a lemmatized corpus.")
             st.session_state['collocate_lemma'] = None
+
+        st.markdown("---")
+        st.subheader("Contextual Pattern Filter")
+        st.warning("This filter is computationally intensive and may slow down analysis.")
+        
+        # 4. User-Defined Contextual Pattern Filter
+        contextual_pattern = st.text_area(
+            "User-Defined Pattern Filter", 
+            value="[] + * $ * + []", 
+            height=100,
+            help="Enter one pattern per line. `[]` or `[word]` = collocate slot. `$` = Target Node. `*` = Optional token (0 or more). `+` = Obligatory token (1 or more)."
+        )
+        st.session_state['contextual_pattern'] = contextual_pattern
 
 
     st.markdown("---")
@@ -766,40 +779,34 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Get Filter Settings
     collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
-    pos_wildcard_regex = st.session_state.get('pos_wildcard_regex', '').strip() # New filter
+    pos_wildcard_regex = st.session_state.get('pos_wildcard_regex', '').strip()
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
     collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
+    contextual_pattern = st.session_state.get('contextual_pattern', '').strip()
     
     target = target_input.lower()
 
     # --- MWU/WILDCARD RESOLUTION (Focus on single primary target) ---
-    
-    # Re-run MWU/Wildcard resolution to establish primary_target_mwu and freq
     primary_target_mwu = None
     primary_target_tokens = []
     primary_target_len = 0
     
     if contains_wildcard:
         wildcard_matches = []
-        
-        # Run resolution logic to get the most frequent match
         if ' ' not in target:
             pattern = re.escape(target).replace(r'\*', '.*')
             wildcard_matches = [token for token in token_counts if re.fullmatch(pattern, token)]
             match_counts = {token: token_counts[token] for token in wildcard_matches if token in token_counts}
             sorted_matches = sorted(match_counts.items(), key=lambda item: item[1], reverse=True)
-            
             if sorted_matches:
                 primary_target_mwu = sorted_matches[0][0]
                 freq = sorted_matches[0][1]
                 primary_target_tokens = [primary_target_mwu]
                 primary_target_len = 1
-            
         else:
             target_pattern_parts = target.split(' ')
             num_parts = len(target_pattern_parts)
             mwu_matches = []
-            
             for i in range(len(tokens_lower) - num_parts + 1):
                 match = True
                 for k, part in enumerate(target_pattern_parts):
@@ -809,37 +816,29 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                         break
                 if match:
                     mwu_matches.append(" ".join(tokens_lower[i:i + num_parts]))
-            
             match_counts = Counter(mwu_matches)
             if match_counts:
                 primary_target_mwu, freq = match_counts.most_common(1)[0]
                 primary_target_tokens = primary_target_mwu.split()
                 primary_target_len = len(primary_target_tokens)
-            
         if not primary_target_mwu:
             st.warning(f"Target pattern '{target_input}' not found in corpus.")
             st.stop()
-        
         target_display = f"'{target_input}' (Analysis on Most Frequent Match: '{primary_target_mwu}')"
-
-    # Literal Search
     else:
         primary_target_mwu = target
         primary_target_tokens = target.split()
         primary_target_len = len(primary_target_tokens)
         target_display = f"'{target_input}'"
-        
-        # Calculate literal frequency
-        freq = 0
+        literal_freq = 0
         for i in range(len(tokens_lower) - primary_target_len + 1):
              if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
-                 freq += 1
-        
-        if freq == 0:
+                 literal_freq += 1
+        if literal_freq == 0:
             st.warning(f"Target '{target_input}' not found in corpus.")
             st.stop()
+        freq = literal_freq
     
-    # Calculate global target frequency and display info
     primary_target_positions = []
     for i in range(len(tokens_lower) - primary_target_len + 1):
         if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
@@ -850,37 +849,157 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader("🔗 Collocation Analysis Results")
     st.success(f"Analyzing target {target_display}. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
 
-    # --- COLLOCATION COUNTING ---
-    coll_pairs = []
+    # --- COLLOCATION COUNTING AND CONTEXTUAL FILTERING (UPDATED FOR $, +, *, []) ---
+    
+    context_filtered_collocates = Counter()
+    
+    # Parse contextual patterns once
+    context_rules = [rule.strip() for rule in contextual_pattern.split('\n') if rule.strip()]
+    
+    # Helper to convert pattern tokens to regex
+    def token_to_regex(token):
+        if token == '+':
+            # Obligatory token (one or more non-space character, followed by a space)
+            return r'[^ ]+' 
+        elif token == '*' or token == '**':
+            # Optional token (zero or more non-space characters)
+            return r'[^ ]*?' # Non-greedy optional
+        else:
+            return re.escape(token)
+
+    # 1. GENERATE ALL COLLOCATE INSTANCES AND CONTEXTS
     for i in primary_target_positions:
-        start = max(0, i - coll_window)
-        end = min(total_tokens, i + primary_target_len + coll_window) 
+        start_index = max(0, i - coll_window)
+        end_index = min(total_tokens, i + primary_target_len + coll_window) 
         
-        for j in range(start, end):
+        target_relative_start = i - start_index
+        target_relative_end = target_relative_start + primary_target_len
+        
+        for j in range(start_index, end_index):
             if i <= j < i + primary_target_len:
                 continue
-            # Ensure we include the lemma for filtering
-            lemma_val = df["lemma"].iloc[j].lower() if "lemma" in df.columns else "##"
-            coll_pairs.append((tokens_lower[j], df["pos"].iloc[j], lemma_val)) 
+            
+            w = tokens_lower[j]
+            p = df["pos"].iloc[j]
+            l = df["lemma"].iloc[j].lower() if "lemma" in df.columns else "##"
+            
+            collocate_relative_index = j - start_index
+            
+            is_context_match = True
+            
+            if context_rules:
+                is_context_match = False
+                
+                for rule in context_rules:
+                    # Find the collocate slot: [] or [word]
+                    collocate_slot_match = re.search(r'\[(.*?)\]', rule)
+                    if not collocate_slot_match: continue # Must contain a collocate slot
+                    
+                    expected_collocate = collocate_slot_match.group(1).strip().lower()
+                    collocate_placeholder = re.escape(collocate_slot_match.group(0))
+                    
+                    # 2a. Check if the actual collocate matches the specific word in the slot
+                    if expected_collocate and expected_collocate != w:
+                        continue 
+                        
+                    # 2b. Prepare the pattern template for regex matching
+                    
+                    # Split the rule at the collocate slot
+                    rule_parts = rule.split(collocate_slot_match.group(0))
+                    pre_collocate_rule = rule_parts[0].strip()
+                    post_collocate_rule = rule_parts[1].strip()
+                    
+                    # Split by '$' (Target Node) to get the final context to check
+                    pre_target_pattern_tokens = []
+                    post_target_pattern_tokens = []
+                    
+                    # --- Pre-Target Context Check (Collocate is to the left of the Target) ---
+                    if collocate_relative_index < target_relative_start and '$' in post_collocate_rule:
+                        # Context to check: tokens from collocate position 'j' backward to start_index
+                        
+                        # The pattern must be PRE-COLLOCATE and POST-TARGET in the rule
+                        
+                        # 1. Parse tokens BEFORE collocate slot
+                        pre_collocate_tokens = [t.lower() for t in pre_collocate_rule.split()]
+                        
+                        # 2. Parse tokens AFTER target node ($)
+                        post_target_tokens = [t.lower() for t in post_collocate_rule.split('$')[1].strip().split()]
+                        
+                        # Check if the context BEFORE collocate matches the pre-collocate rule
+                        
+                        # Context: [token_before_rule_start, ..., token_j-1, token_j (collocate)]
+                        pre_context_length = len(pre_collocate_tokens)
+                        context_start_for_rule = j - pre_context_length
+                        
+                        if context_start_for_rule >= start_index:
+                            match_context = tokens_lower[context_start_for_rule:j]
+                            
+                            required_pattern = [token_to_regex(t) for t in pre_collocate_tokens]
+                            
+                            match_string = ' '.join(match_context + [w])
+                            pattern_string = '^' + ' '.join(required_pattern) + ' ' + re.escape(w) + '$'
+                            
+                            try:
+                                if re.match(pattern_string, match_string, re.IGNORECASE):
+                                    is_context_match = True
+                                    break
+                            except Exception:
+                                continue
 
-    coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos", "lemma_collocate"])
+                    # --- Post-Target Context Check (Collocate is to the right of the Target) ---
+                    elif collocate_relative_index >= target_relative_end and '$' in pre_collocate_rule:
+                        # Context to check: tokens from collocate position 'j' forward to end_index
+                        
+                        # The pattern must be POST-COLLOCATE and PRE-TARGET in the rule
+                        
+                        # 1. Parse tokens AFTER collocate slot
+                        post_collocate_tokens = [t.lower() for t in post_collocate_rule.split()]
+                        
+                        # 2. Parse tokens BEFORE target node ($)
+                        pre_target_tokens = [t.lower() for t in pre_collocate_rule.split('$')[0].strip().split()]
+
+                        # Check if the context AFTER collocate matches the post-collocate rule
+                        
+                        # Context: [token_j (collocate), token_j+1, ..., token_end_index-1]
+                        post_context_length = len(post_collocate_tokens)
+                        context_end_for_rule = j + 1 + post_context_length
+                        
+                        if context_end_for_rule <= end_index:
+                            match_context = tokens_lower[j+1:context_end_for_rule]
+                            
+                            required_pattern = [token_to_regex(t) for t in post_collocate_tokens]
+                            
+                            match_string = ' '.join([w] + match_context)
+                            pattern_string = '^' + re.escape(w) + ' ' + ' '.join(required_pattern) + '$'
+                            
+                            try:
+                                if re.match(pattern_string, match_string, re.IGNORECASE):
+                                    is_context_match = True
+                                    break
+                            except Exception:
+                                continue
+                                
+            # 3. IF CONTEXT MATCHES (OR NO PATTERN IS SET), RECORD THE INSTANCE
+            if is_context_match:
+                key = (w, p, l)
+                context_filtered_collocates[key] += 1
     
-    # --- CALCULATE BASE STATS ---
-    coll_counts = coll_df.groupby(["collocate","pos", "lemma_collocate"]).size().reset_index(name="Observed")
+    # --- END COLLOCATION COUNTING AND CONTEXTUAL FILTERING ---
+
+    # --- RECALCULATE STATS BASED ONLY ON CONTEXT-FILTERED COUNTS ---
     
     stats_list = []
     token_counts_unfiltered = Counter(tokens_lower) 
     
-    for _, row in coll_counts.iterrows():
-        w = row["collocate"]
-        p = row["pos"]
-        l = row["lemma_collocate"]
-        observed = int(row["Observed"])
+    for (w, p, l), observed in context_filtered_collocates.items():
         total_freq = token_counts_unfiltered.get(w, 0)
+        
+        # Use the context-filtered observed count (k11)
         k11 = observed
-        k12 = freq - k11
-        k21 = total_freq - k11
+        k12 = freq - k11 # Total target hits minus this collocate's filtered hits
+        k21 = total_freq - k11 # Total collocate hits minus this collocate's filtered hits
         k22 = total_tokens - (k11 + k12 + k21)
+        
         ll = compute_ll(k11, k12, k21, k22)
         mi = compute_mi(k11, freq, total_freq, total_tokens)
         sig = significance_from_ll(ll)
@@ -897,61 +1016,37 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
 
     stats_df = pd.DataFrame(stats_list)
     
-    # --- APPLY FILTERS ---
+    # --- APPLY OTHER (NON-CONTEXTUAL) FILTERS ---
     if not stats_df.empty:
         filtered_df = stats_df.copy()
         
         # 1. Word/Regex Filter
         if collocate_regex:
             pattern = re.escape(collocate_regex).replace(r'\*', '.*').replace(r'\|', '|').replace(r'\.', '.')
-            
             try:
                 filtered_df = filtered_df[filtered_df['Collocate'].str.fullmatch(pattern, case=True, na=False)]
             except re.error:
                 st.error(f"Invalid regular expression for Word/Regex filter: '{collocate_regex}'")
                 filtered_df = pd.DataFrame() 
                 
-        # 2. POS Filters (Wildcard OR Multiselect)
-        if not is_raw_mode and ('POS' in filtered_df.columns):
-            pos_filter_mask = pd.Series([True] * len(filtered_df), index=filtered_df.index)
+        # 2a. POS Wildcard Filter
+        if pos_wildcard_regex and not is_raw_mode:
+            pos_pattern = re.escape(pos_wildcard_regex).replace(r'\*', '.*')
+            try:
+                filtered_df = filtered_df[filtered_df['POS'].str.fullmatch(pos_pattern, case=True, na=False)]
+            except re.error:
+                st.error(f"Invalid regular expression for POS Wildcard filter: '{pos_wildcard_regex}'")
+                filtered_df = pd.DataFrame()
             
-            # 2a. POS Wildcard Filter (If defined, takes precedence over multiselect if the user intends it)
-            if pos_wildcard_regex:
-                pos_pattern = re.escape(pos_wildcard_regex).replace(r'\*', '.*')
-                try:
-                    pos_filter_mask = pos_filter_mask & filtered_df['POS'].str.fullmatch(pos_pattern, case=True, na=False)
-                except re.error:
-                    st.error(f"Invalid regular expression for POS Wildcard filter: '{pos_wildcard_regex}'")
-                    pos_filter_mask = pd.Series([False] * len(filtered_df), index=filtered_df.index)
-            
-            # 2b. POS Multiselect Filter (Applied as an additional constraint)
-            if selected_pos_tags:
-                # If only multiselect is used, we apply it. If wildcard is used, we combine them.
-                # However, typically filters are ANDed. If user uses both, it means POS must match BOTH. 
-                # Let's assume an AND logic for the most restrictive filtering.
-                if not pos_wildcard_regex:
-                     pos_filter_mask = pos_filter_mask & filtered_df['POS'].isin(selected_pos_tags)
-                else:
-                    # If both are used, we currently assume the wildcard is the primary filter,
-                    # but since they both filter the POS column, a more sensible approach
-                    # is to use the wildcard if present, otherwise use the multiselect.
-                    # Since the wildcard is often broader (V*), we let the user control which is primary.
-                    # For simplicity here, we stick to the primary filter logic: if one is set, use it.
-                    # Let's adjust the logic: if POS wildcard is set, ignore the multiselect.
-                    
-                    # If wildcard is NOT set, use multiselect filter
-                    if not pos_wildcard_regex:
-                         pos_filter_mask = filtered_df['POS'].isin(selected_pos_tags)
-                    # If wildcard IS set, it's already applied above, and we don't apply multiselect.
-                    
-            filtered_df = filtered_df[pos_filter_mask]
+        # 2b. POS Multiselect Filter
+        if selected_pos_tags and not is_raw_mode and not pos_wildcard_regex:
+            # Only apply multiselect if POS Wildcard is NOT used.
+            filtered_df = filtered_df[filtered_df['POS'].isin(selected_pos_tags)]
             
         # 3. Lemma Filter
         if collocate_lemma and 'Lemma' in filtered_df.columns:
-            # Prepare lemma pattern: replace * with .*
             lemma_pattern = re.escape(collocate_lemma).replace(r'\*', '.*').replace(r'\|', '|').replace(r'\.', '.')
             try:
-                # Apply filter to the 'Lemma' column (already lowercased)
                 filtered_df = filtered_df[filtered_df['Lemma'].str.fullmatch(lemma_pattern, case=True, na=False)]
             except re.error:
                  st.error(f"Invalid regular expression for Lemma filter: '{collocate_lemma}'")
@@ -985,7 +1080,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
     
     # Display note if filters were applied
-    filter_list = [collocate_regex, pos_wildcard_regex, collocate_lemma]
+    filter_list = [collocate_regex, pos_wildcard_regex, collocate_lemma, contextual_pattern]
     filter_count = sum(1 for f in filter_list if f or (f is selected_pos_tags and selected_pos_tags))
     
     if filter_count > 0:
