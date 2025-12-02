@@ -247,7 +247,7 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("Corpus Collocation Explorer version 12-Dec-25")
+st.title("CORTEX -- Corpus Texts Explorer version 12-Dec-25")
 st.caption("Upload vertical corpus (token POS lemma). Search tokens, view KWIC, LL & MI collocates, and download results.")
 
 # ---------------------------
@@ -567,3 +567,4 @@ if analyze_btn and target_input:
                 st.dataframe(mi_R, use_container_width=True, hide_index=True)
 
 st.caption("Tip: Deploy this file to Streamlit Cloud or HuggingFace Spaces to share with others.")
+
