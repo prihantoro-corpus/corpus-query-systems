@@ -10,18 +10,31 @@ import os
 import re       
 import spacy    # Using spaCy for tagging raw text
 import nltk     # Keeping import for tokenization fallback
+import pyvis.network as Network # Pyvis Network
 
-# --- Load spaCy Model ---
-# NOTE: The spaCy model MUST be installed in your environment before deployment.
-# Typically done with: python -m spacy download en_core_web_sm
+# --- Load spaCy Model (Now attempts download if missing) ---
 @st.cache_resource
 def load_spacy_model():
+    """Loads or attempts to download the spaCy model."""
+    MODEL_NAME = "en_core_web_sm"
     try:
-        # Load the small English model
-        return spacy.load("en_core_web_sm")
+        # 1. Attempt to load the model normally
+        nlp = spacy.load(MODEL_NAME)
+        st.sidebar.success("spaCy model loaded successfully.")
+        return nlp
     except OSError:
-        st.error("Error: spaCy model 'en_core_web_sm' not found. Please install it using 'python -m spacy download en_core_web_sm' or run the app in a pre-configured environment.")
-        return None
+        st.sidebar.warning(f"spaCy model '{MODEL_NAME}' not found locally. Attempting programmatic download...")
+        try:
+            # 2. If not found, attempt to download it programmatically
+            spacy.cli.download(MODEL_NAME)
+            # 3. Reload the model after successful download
+            nlp = spacy.load(MODEL_NAME)
+            st.sidebar.success(f"spaCy model '{MODEL_NAME}' downloaded and loaded.")
+            return nlp
+        except Exception as e:
+            # 4. Handle failure (e.g., permission issues, network error)
+            st.error(f"Failed to load/download spaCy model: {e}. Raw text tagging will not be functional.")
+            return None
 
 NLP_MODEL = load_spacy_model()
 # ---------------------------
@@ -89,7 +102,7 @@ def create_pyvis_graph(target_word, coll_df):
     """
     Creates a Pyvis interactive network graph with custom styling.
     """
-    net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
+    net = Network.Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
     
     max_ll = coll_df['LL'].max()
     min_ll = coll_df['LL'].min()
@@ -130,10 +143,10 @@ def create_pyvis_graph(target_word, coll_df):
     
     # Define colors for POS categories
     pos_colors = {
-        'N': '#33CC33',  # Noun
-        'V': '#3366FF',  # Verb
-        'J': '#FF33B5',  # Adjective (J*)
-        'R': '#FFCC00',  # Adverb (R*)
+        'N': '#33CC33',  # Noun (N*, NOUN, PROPN)
+        'V': '#3366FF',  # Verb (V*, VERB, AUX)
+        'J': '#FF33B5',  # Adjective (J*, ADJ)
+        'R': '#FFCC00',  # Adverb (R*, ADV)
         'O': '#AAAAAA',  # Other (from spaCy: other parts, punct, etc.)
         'RAW': '#AAAAAA', # Placeholder/Raw tag
         '###': '#AAAAAA' # Placeholder/Raw tag
@@ -144,7 +157,22 @@ def create_pyvis_graph(target_word, coll_df):
         collocate = row['Collocate']
         ll_score = row['LL']
         observed = row['Observed']
-        pos_code = row['POS'][0].upper() if row['POS'] else 'O'
+        
+        # Determine color based on POS tag, checking for the first letter of common tags or placeholders
+        pos_tag = row['POS']
+        if pos_tag in ['NOUN', 'PROPN']:
+            pos_code = 'N'
+        elif pos_tag in ['VERB', 'AUX']:
+            pos_code = 'V'
+        elif pos_tag == 'ADJ':
+            pos_code = 'J'
+        elif pos_tag == 'ADV':
+            pos_code = 'R'
+        elif pos_tag in ['RAW', '###']:
+            pos_code = 'RAW'
+        else:
+            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 and pos_tag != 'RAW' else 'O' # Fallback to first letter or 'O'
+            
         color = pos_colors.get(pos_code, pos_colors['O'])
         
         # Node size based on LL score
@@ -185,16 +213,13 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
         file_bytes.seek(0)
         df_attempt = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
         
-        # Heuristic to check if it's a vertical corpus
         is_vertical = False
         if df_attempt.shape[1] >= 3:
             df_check = df_attempt.iloc[:, :3].copy()
-            # If the number of unique tokens in the first column is significantly less than total rows, it's likely structured (not raw run-on text)
             if df_check.iloc[:, 0].nunique() < len(df_check) * 0.95 and len(df_check) > 5:
                 is_vertical = True
             
         if is_vertical:
-            # Use the structured file
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
             df["token"] = df["token"].fillna("").astype(str)
@@ -203,19 +228,19 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
             df["_token_low"] = df["token"].str.lower()
             return df
             
-        file_bytes.seek(0) # Reset pointer for raw reading
+        file_bytes.seek(0)
 
     except Exception:
          file_bytes.seek(0) 
-         pass # Proceed to raw text processing
+         pass
 
     # 2. Fallback: Treat as Raw Horizontal Text (Tagging using spaCy if model loaded)
     try:
         raw_text = file_bytes.read().decode('utf-8')
         
         if NLP_MODEL:
-            # Use spaCy for accurate tokenization, POS, and lemmatization
             doc = NLP_MODEL(raw_text)
+            # Filter out empty tokens
             tokens = [token.text for token in doc if token.text.strip()]
             pos_tags = [token.pos_ for token in doc if token.text.strip()]
             lemmas = [token.lemma_ for token in doc if token.text.strip()]
@@ -445,7 +470,6 @@ if analyze_btn and target_input:
                 mask = pd.Series(False, index=stats_df.index)
                 for pref in prefixes:
                     mask = mask | stats_df["POS"].str.startswith(pref, na=False)
-                # Also include "RAW" and "###" in a separate 'Other' category if needed, but here we focus on major POS tags
                 sub = stats_df[mask].copy()
                 ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
                 ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
@@ -453,7 +477,6 @@ if analyze_btn and target_input:
                 mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
                 return ll_sub, mi_sub
 
-            # Using standard spaCy/Universal POS conventions for better compatibility
             ll_N, mi_N = category_df(("NOUN", "PROPN"))    # Noun
             ll_V, mi_V = category_df(("VERB", "AUX"))      # Verb/Auxiliary
             ll_J, mi_J = category_df(("ADJ",))             # Adjective
@@ -467,7 +490,7 @@ if analyze_btn and target_input:
             st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
             
             network_html = create_pyvis_graph(target_input, network_df)
-            components.html(network_html, height=450)
+            st.components.v1.html(network_html, height=450)
             
             st.markdown(
                 """
