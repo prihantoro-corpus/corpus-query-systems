@@ -27,7 +27,11 @@ BUILT_IN_CORPORA = {
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
 
-
+# --- NEW FUNCTION: Cache Reset ---
+def reset_analysis():
+    # Clear the entire Streamlit cache to force re-reading and re-analysis
+    st.cache_data.clear()
+    
 # ---------------------------
 # Helpers: stats, IO utilities
 # ---------------------------
@@ -305,14 +309,21 @@ with st.sidebar:
     
     st.subheader("1. Choose Corpus Source")
     
-    # Option A: Built-in Corpus Selection
+    # NEW: Added callback to reset cache when built-in corpus selection changes
     selected_corpus_name = st.selectbox(
         "Select a pre-loaded corpus:", 
-        options=list(BUILT_IN_CORPORA.keys())
+        options=list(BUILT_IN_CORPORA.keys()),
+        key="corpus_select", 
+        on_change=reset_analysis
     )
     
-    # Option B: Upload File
-    uploaded_file = st.file_uploader("OR Upload your own corpus file", type=["txt","csv"])
+    # NEW: Added callback to reset cache when file is uploaded
+    uploaded_file = st.file_uploader(
+        "OR Upload your own corpus file", 
+        type=["txt","csv"],
+        key="file_upload",
+        on_change=reset_analysis
+    )
     
     st.markdown("---")
     
@@ -358,12 +369,12 @@ if df is None:
     st.stop()
     
 # --- RECALCULATE is_raw_mode using a restrictive check ---
-# Raw mode is True ONLY if >99% of the POS tags contain the nonsense marker '##'
 if 'pos' in df.columns and len(df) > 0:
     count_of_raw_tags = df['pos'].str.contains('##', na=False).sum()
+    # Raw mode is True ONLY if >99% of the POS tags contain the nonsense marker '##'
     is_raw_mode = (count_of_raw_tags / len(df)) > 0.99
 else:
-    is_raw_mode = True # Default to raw if structure is compromised/empty
+    is_raw_mode = True 
 
 
 if is_raw_mode:
@@ -411,7 +422,7 @@ with col2:
     
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
     
-    # Only suppress POS tags if RAW mode was detected (using the new, strict definition)
+    # Only suppress POS tags if RAW mode was detected
     if is_raw_mode:
          freq_df_filtered['pos'] = '##'
 
