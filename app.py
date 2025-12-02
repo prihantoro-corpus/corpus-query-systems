@@ -827,11 +827,12 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             
             # Match lemma against lowercased lemma column
             if structural_lemma_pattern:
-                match_series &= df['lemma'].str.lower().apply(lambda x: bool(structural_lemma_pattern.fullmatch(x)))
+                match_series &= df['lemma'].str.lower().str.contains(structural_lemma_pattern.pattern, regex=True, na=False)
                 
             # Match POS against original POS column
             if structural_pos_pattern:
-                match_series &= df['pos'].apply(lambda x: bool(structural_pos_pattern.fullmatch(x)))
+                # FIX: Using str.contains with the compiled pattern string for robustness
+                match_series &= df['pos'].str.contains(structural_pos_pattern.pattern, regex=True, na=False)
                 
             all_target_positions = match_series[match_series].index.tolist()
             
@@ -1314,10 +1315,11 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             match_series = pd.Series(True, index=df.index)
             
             if structural_lemma_pattern:
-                match_series &= df['lemma'].str.lower().apply(lambda x: bool(structural_lemma_pattern.fullmatch(x)))
+                match_series &= df['lemma'].str.lower().str.contains(structural_lemma_pattern.pattern, regex=True, na=False)
                 
             if structural_pos_pattern:
-                match_series &= df['pos'].apply(lambda x: bool(structural_pos_pattern.fullmatch(x)))
+                # FIX: Using str.contains with the compiled pattern string for robustness
+                match_series &= df['pos'].str.contains(structural_pos_pattern.pattern, regex=True, na=False)
                 
             all_target_positions = match_series[match_series].index.tolist()
             
