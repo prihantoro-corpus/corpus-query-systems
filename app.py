@@ -1,4 +1,5 @@
-# app.py
+# app.py now 
+# handles non tagged and non lemmatised text
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,10 +12,7 @@ import re
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
-import streamlit.components.v1 as components 
-
-# Import for Coordinate Chart
-import altair as alt
+import streamlit.components.v1 as components # Import for HTML embedding
 
 st.set_page_config(page_title="Corpus Explorer Version 12 Dec 25", layout="wide")
 
@@ -115,6 +113,10 @@ def create_pyvis_graph(target_word, coll_df):
     
     # Define colors (only Gray is truly relevant now)
     pos_colors = {
+        'N': '#33CC33',  # Noun 
+        'V': '#3366FF',  # Verb
+        'J': '#FF33B5',  # Adjective
+        'R': '#FFCC00',  # Adverb
         '#': '#AAAAAA',  # Nonsense Tag / Other (Gray)
         'O': '#AAAAAA'   # Other (Gray)
     }
@@ -156,70 +158,6 @@ def create_pyvis_graph(target_word, coll_df):
     return html_content
     # --- END OF FIX ---
 
-@st.cache_data
-def create_coordinate_chart(chart_df):
-    """
-    Creates an Altair Coordinate Chart (Upside-Down T).
-    FIX: Ensure explicit X-encoding in the labels layer.
-    """
-    
-    # Max absolute value for a symmetric X-axis
-    max_x = chart_df['Signed_Observed'].abs().max() + 1
-    max_y = chart_df['LL'].max() * 1.05
-
-    # 1. Define Base Chart and Shared Tooltips
-    base = alt.Chart(chart_df).encode(
-        y=alt.Y('LL', scale=alt.Scale(domain=[0, max_y]), title="Log-Likelihood (Strength)"),
-        x=alt.X('Signed_Observed', 
-                scale=alt.Scale(domain=[-max_x, max_x]), 
-                title="Observed Frequency (Left = Negative | Right = Positive)"),
-        tooltip=[
-            alt.Tooltip('Collocate', title="Collocate"),
-            alt.Tooltip('LL', title="LL Score", format=".2f"),
-            alt.Tooltip('Observed', title="Total Observed"),
-            alt.Tooltip('Signed_Observed', title="Signed Observed", format=".0f"),
-            alt.Tooltip('POS', title="POS")
-        ]
-    ).properties(
-        title="Collocation Strength vs. Positional Observed Frequency"
-    )
-
-    # 2. Scatter Points
-    points = base.mark_circle(size=60).encode(
-        color=alt.condition(
-            alt.datum.Signed_Observed < 0,
-            alt.value("#FF33B5"),  # Pink for Left Side
-            alt.value("#3366FF")   # Blue for Right Side
-        )
-    )
-
-    # 3. Text Labels (Explicit X-encoding for stability)
-    labels = base.mark_text(
-        fontSize=10,
-    ).encode(
-        # CRITICAL FIX: Explicitly encoding X here prevents caching conflict
-        x=alt.X('Signed_Observed'), 
-        text=alt.Text('Collocate'),
-        color=alt.condition(
-            alt.datum.Signed_Observed < 0,
-            alt.value("#FF33B5"),
-            alt.value("#3366FF")
-        ),
-        # Positioning: Use conditional alignment and offset to place the label next to the dot.
-        align=alt.condition(alt.datum.Signed_Observed < 0, alt.value('right'), alt.value('left')),
-        dx=alt.condition(alt.datum.Signed_Observed < 0, alt.value(-8), alt.value(8))
-    )
-    
-    # 4. Center Line (Upside-down T base)
-    center_line = alt.Chart(pd.DataFrame({'x': [0], 'y': [0]})).mark_rule(color='gray', strokeDash=[3, 3]).encode(x='x')
-
-    chart = (points + labels + center_line).interactive()
-    
-    # Save chart as JSON
-    chart_filename = "coordinate_chart.json"
-    chart.save(chart_filename)
-    return chart_filename
-
 
 # ---------------------------
 # Cached loading (Fast regex tokenization)
@@ -229,17 +167,20 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
     # 1. Try to read as structured 3-column data (Vertical Corpus)
     try:
         file_bytes.seek(0)
+        # Using the standard regex for tokenization (whitespace and punctuation delimiter)
         df_attempt = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
         
         is_vertical = False
         if df_attempt.shape[1] >= 3:
             df_check = df_attempt.iloc[:, :3].copy()
+            # Heuristic: if unique tokens are significantly less than total rows, it's structured
             if df_check.iloc[:, 0].nunique() < len(df_check) * 0.95 and len(df_check) > 5:
                 is_vertical = True
             
         if is_vertical:
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
+            # Keep original POS/Lemma for structured file
             df["token"] = df["token"].fillna("").astype(str)
             df["pos"] = df["pos"].fillna("###").astype(str)
             df["lemma"] = df["lemma"].fillna("###").astype(str)
@@ -258,6 +199,7 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
         raw_text = file_bytes.read().decode('utf-8')
         
         # Regex to split tokens based on space and punctuation, keeping punctuation as separate tokens
+        # (This is a simplified equivalent to the request "Use space and punctiations to delimit token")
         tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
         tokens = [t.strip() for t in tokens if t.strip()] # Clean up any empty strings
 
@@ -358,6 +300,7 @@ with col1:
 with col2:
     st.subheader("Top frequency (token / POS / freq) (Punctuation skipped)")
     
+    # Replace the existing POS with '##' if needed for display consistency
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
     if all(freq_df_filtered['pos'].str.contains('##')):
          freq_df_filtered['pos'] = '##'
@@ -426,51 +369,26 @@ if analyze_btn and target_input:
 
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        # ---------- COLLATION: compute stats (MODIFIED for L/R tracking) ----------
-        coll_records = []
+        # ---------- COLLATION: compute stats ----------
+        coll_pairs = []
         for i in positions:
-            # Left side
-            for j in range(max(0, i - coll_window), i):
-                coll_records.append((tokens_lower[j], df["pos"].iloc[j], 'Left'))
-            # Right side
-            for j in range(i + 1, min(total_tokens, i + coll_window + 1)):
-                coll_records.append((tokens_lower[j], df["pos"].iloc[j], 'Right'))
+            start = max(0, i - coll_window)
+            end = min(total_tokens, i + coll_window + 1)
+            for j in range(start, end):
+                if j == i:
+                    continue
+                coll_pairs.append((tokens_lower[j], df["pos"].iloc[j]))
 
-        coll_df_raw = pd.DataFrame(coll_records, columns=["collocate", "pos", "side"])
-        
-        # Aggregate counts by collocate, pos, AND side
-        coll_counts_by_side = coll_df_raw.groupby(["collocate", "pos", "side"]).size().reset_index(name="Observed_Side")
-
-        # Pivot to get L/R counts side-by-side
-        coll_counts_pivot = coll_counts_by_side.pivot_table(
-            index=["collocate", "pos"], 
-            columns="side", 
-            values="Observed_Side", 
-            fill_value=0
-        ).reset_index().rename(columns={'Left': 'Observed_Left', 'Right': 'Observed_Right'})
-        
-        # Calculate Total Observed and Signed Observed Frequency
-        coll_counts_pivot['Observed'] = coll_counts_pivot['Observed_Left'] + coll_counts_pivot['Observed_Right']
-        
-        coll_counts_pivot['Dominant_Side'] = np.where(coll_counts_pivot['Observed_Left'] > coll_counts_pivot['Observed_Right'], 
-                                                      'Left', 'Right')
-        # Use total observed magnitude, signed by the dominant side
-        coll_counts_pivot['Signed_Observed'] = np.where(coll_counts_pivot['Dominant_Side'] == 'Left', 
-                                                       -coll_counts_pivot['Observed'], 
-                                                       coll_counts_pivot['Observed'])
-        
+        coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos"])
+        coll_counts = coll_df.groupby(["collocate","pos"]).size().reset_index(name="Observed")
 
         stats_list = []
         token_counts_unfiltered = Counter(tokens_lower) 
         
-        for _, row in coll_counts_pivot.iterrows():
+        for _, row in coll_counts.iterrows():
             w = row["collocate"]
             p = row["pos"]
             observed = int(row["Observed"])
-            observed_left = int(row["Observed_Left"])
-            observed_right = int(row["Observed_Right"])
-            signed_observed = int(row["Signed_Observed"])
-
             total_freq = token_counts_unfiltered.get(w, 0)
             k11 = observed
             k12 = freq - k11
@@ -483,9 +401,7 @@ if analyze_btn and target_input:
                 "Collocate": w,
                 "POS": p,
                 "Observed": observed,
-                "Observed_Left": observed_left,
-                "Observed_Right": observed_right,
-                "Signed_Observed": signed_observed,
+                "Total_Freq": total_freq,
                 "LL": round(ll,6),
                 "MI": round(mi,6),
                 "Significance": sig
@@ -497,8 +413,6 @@ if analyze_btn and target_input:
         else:
             stats_df_sorted = stats_df.sort_values("LL", ascending=False)
             network_df = stats_df_sorted.head(20).copy()
-            
-            chart_df = stats_df_sorted[stats_df_sorted['LL'] > 0].head(50).copy()
 
             # full LL top10
             full_ll = stats_df_sorted.head(10).copy()
@@ -508,18 +422,6 @@ if analyze_btn and target_input:
             full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
             full_mi = full_mi_all.head(10).copy()
             full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
-
-            # --- Coordinate Chart Visualization ---
-            st.markdown("---")
-            st.subheader("Collocation Positional Bias Coordinate Chart")
-            
-            if not chart_df.empty:
-                chart_filename = create_coordinate_chart(chart_df)
-                st.altair_chart(alt.load(chart_filename), use_container_width=True)
-                st.caption("This chart displays the **collocation strength (LL)** vertically against the **total observed frequency** horizontally, signed by the dominant position (Left = Pink/Negative, Right = Blue/Positive).")
-            else:
-                 st.info("Not enough data points with LL > 0 to render the coordinate chart.")
-
 
             # --- Collocation Network Graph (Visually all nodes will be Gray) ---
             st.markdown("---")
@@ -558,22 +460,18 @@ if analyze_btn and target_input:
             st.markdown("---")
             st.subheader("Download Full Results")
             
-            cols_to_download = [
-                "Collocate", "POS", "Observed", "Observed_Left", 
-                "Observed_Right", "LL", "MI", "Significance"
-            ]
-            
             st.download_button(
                 "⬇ Download full LL results (xlsx)", 
-                data=df_to_excel_bytes(stats_df_sorted[cols_to_download]), 
+                data=df_to_excel_bytes(stats_df_sorted), 
                 file_name=f"{target}_LL_full.xlsx", 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             st.download_button(
                 f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
-                data=df_to_excel_bytes(full_mi_all[cols_to_download]), 
+                data=df_to_excel_bytes(full_mi_all), 
                 file_name=f"{target}_MI_full_obsge{mi_min_freq}.xlsx", 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
 st.caption("Tip: This fast processing mode uses generic tags (`##`), which means collocation results are word-based only, ignoring grammar.")
+
