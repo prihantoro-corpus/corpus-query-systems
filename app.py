@@ -154,6 +154,7 @@ def create_word_cloud(freq_data, is_tagged_mode):
     
     return fig
 
+
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
     """
@@ -195,8 +196,10 @@ def create_pyvis_graph(target_word, coll_df):
     }}
     """)
     
+    # 1. Add Target Node 
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
+    # 2. Add Collocate Nodes and Edges (Reverted to basic tooltip)
     for _, row in coll_df.iterrows():
         collocate = row['Collocate']
         ll_score = row['LL']
@@ -218,9 +221,13 @@ def create_pyvis_graph(target_word, coll_df):
         else:
             node_size = 25
             
-        net.add_node(collocate, label=collocate, size=node_size, color=color, title=f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}")
+        # Reverted tooltip to standard stats only
+        tooltip_title = f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}"
+
+        net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_title)
         net.add_edge(target_word, collocate, value=ll_score, width=5, title=f"LL: {ll_score:.2f}")
 
+    # --- Use a Temporary HTML File ---
     html_content = ""
     temp_path = None
     try:
@@ -456,19 +463,7 @@ with st.sidebar:
             st.info("Lemma filtering requires a lemmatized corpus.")
             st.session_state['collocate_lemma'] = None
 
-        st.markdown("---")
-        st.subheader("Contextual Pattern Filter")
-        st.warning("This filter is computationally intensive and may slow down analysis.")
-        
-        # 4. User-Defined Contextual Pattern Filter - Set to empty string by default
-        contextual_pattern = st.text_area(
-            "User-Defined Pattern Filter", 
-            value="", # <-- Set to empty string
-            height=100,
-            help="Enter one pattern per line. `[]` or `[word]` = collocate slot. `$` = Target Node. `*` = Optional token (0 or more). `+` = Obligatory token (1 or more). Example: `[] + * $ * + []`"
-        )
-        st.session_state['contextual_pattern'] = contextual_pattern
-
+    # Removed Contextual Pattern Filter section entirely
 
     st.markdown("---")
     st.write("Shareable deployment tip:")
@@ -777,12 +772,11 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
     max_collocates = st.session_state.get('max_collocates', 20) 
     
-    # Get Filter Settings
+    # Get Filter Settings (Contextual pattern logic entirely removed)
     collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
     pos_wildcard_regex = st.session_state.get('pos_wildcard_regex', '').strip()
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
     collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
-    contextual_pattern = st.session_state.get('contextual_pattern', '').strip()
     
     target = target_input.lower()
 
@@ -849,31 +843,13 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader("🔗 Collocation Analysis Results")
     st.success(f"Analyzing target {target_display}. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
 
-    # --- COLLOCATION COUNTING AND CONTEXTUAL FILTERING (UPDATED FOR $, +, *, []) ---
+    # --- COLLOCATION COUNTING (REVERTED to standard window counting) ---
     
-    context_filtered_collocates = Counter()
+    collocates_counter = Counter()
     
-    # Parse contextual patterns once
-    context_rules = [rule.strip() for rule in contextual_pattern.split('\n') if rule.strip()]
-    
-    # Helper to convert pattern tokens to regex
-    def token_to_regex(token):
-        if token == '+':
-            # Obligatory token (one or more non-space character, followed by a space)
-            return r'[^ ]+' 
-        elif token == '*' or token == '**':
-            # Optional token (zero or more non-space characters)
-            return r'[^ ]*?' # Non-greedy optional
-        else:
-            return re.escape(token)
-
-    # 1. GENERATE ALL COLLOCATE INSTANCES AND CONTEXTS
     for i in primary_target_positions:
         start_index = max(0, i - coll_window)
         end_index = min(total_tokens, i + primary_target_len + coll_window) 
-        
-        target_relative_start = i - start_index
-        target_relative_end = target_relative_start + primary_target_len
         
         for j in range(start_index, end_index):
             if i <= j < i + primary_target_len:
@@ -883,129 +859,21 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             p = df["pos"].iloc[j]
             l = df["lemma"].iloc[j].lower() if "lemma" in df.columns else "##"
             
-            collocate_relative_index = j - start_index
-            
-            is_context_match = True
-            
-            if context_rules:
-                is_context_match = False
-                
-                for rule in context_rules:
-                    # Find the collocate slot: [] or [word]
-                    collocate_slot_match = re.search(r'\[(.*?)\]', rule)
-                    if not collocate_slot_match: continue # Must contain a collocate slot
-                    
-                    expected_collocate = collocate_slot_match.group(1).strip().lower()
-                    collocate_placeholder = collocate_slot_match.group(0)
-                    
-                    # 2a. Check if the actual collocate matches the specific word in the slot
-                    if expected_collocate and expected_collocate != w:
-                        continue 
-                        
-                    # 2b. Prepare the pattern template for regex matching
-                    
-                    # Split the rule by the target node marker '$'
-                    rule_parts_by_node = rule.split('$')
-                    if len(rule_parts_by_node) != 2: continue # Must contain exactly one $ for now
-                    pre_node_rule = rule_parts_by_node[0].strip()
-                    post_node_rule = rule_parts_by_node[1].strip()
-                    
-                    # --- Pre-Target Context Check (Collocate is to the left of the Target) ---
-                    if collocate_relative_index < target_relative_start and pre_node_rule.find(collocate_placeholder) != -1:
-                        # The rule is defined as: (context) [collocate] (context) $
-                        
-                        # The pattern only needs to match the tokens between start_index and i (target start)
-                        
-                        # 1. Split pre_node_rule at the collocate slot
-                        pre_coll_context, post_coll_context = pre_node_rule.split(collocate_placeholder, 1)
-                        
-                        pre_coll_tokens = [t.lower() for t in pre_coll_context.split()]
-                        post_coll_tokens = [t.lower() for t in post_coll_context.split()]
-                        
-                        # --- Check the tokens required BEFORE the collocate ---
-                        pre_context_length = len(pre_coll_tokens)
-                        context_start_for_rule = j - pre_context_length
-                        
-                        if context_start_for_rule >= start_index:
-                            match_context = tokens_lower[context_start_for_rule:j]
-                            required_pattern = [token_to_regex(t) for t in pre_coll_tokens]
-                            
-                            match_string = ' '.join(match_context)
-                            pattern_string = '^' + ' '.join(required_pattern) + '$'
-                            
-                            if re.match(pattern_string, match_string, re.IGNORECASE):
-                                # --- Check the tokens required AFTER the collocate ---
-                                post_context_length = len(post_coll_tokens)
-                                context_end_for_rule = j + 1 + post_context_length
-                                
-                                if context_end_for_rule <= i: # Must end before the target
-                                    match_context = tokens_lower[j+1:context_end_for_rule]
-                                    required_pattern = [token_to_regex(t) for t in post_coll_tokens]
-                                    
-                                    match_string = ' '.join(match_context)
-                                    pattern_string = '^' + ' '.join(required_pattern) + '$'
-                                    
-                                    if re.match(pattern_string, match_string, re.IGNORECASE):
-                                        is_context_match = True
-                                        break
-
-                    # --- Post-Target Context Check (Collocate is to the right of the Target) ---
-                    elif collocate_relative_index >= target_relative_end and post_node_rule.find(collocate_placeholder) != -1:
-                        # The rule is defined as: $ (context) [collocate] (context)
-                        
-                        # 1. Split post_node_rule at the collocate slot
-                        pre_coll_context, post_coll_context = post_node_rule.split(collocate_placeholder, 1)
-                        
-                        pre_coll_tokens = [t.lower() for t in pre_coll_context.split()]
-                        post_coll_tokens = [t.lower() for t in post_coll_context.split()]
-
-                        # --- Check the tokens required BEFORE the collocate ---
-                        pre_context_length = len(pre_coll_tokens)
-                        context_start_for_rule = j - pre_context_length
-                        
-                        if context_start_for_rule >= i + primary_target_len: # Must start after the target
-                            match_context = tokens_lower[context_start_for_rule:j]
-                            required_pattern = [token_to_regex(t) for t in pre_coll_tokens]
-                            
-                            match_string = ' '.join(match_context)
-                            pattern_string = '^' + ' '.join(required_pattern) + '$'
-                            
-                            if re.match(pattern_string, match_string, re.IGNORECASE):
-                                # --- Check the tokens required AFTER the collocate ---
-                                post_context_length = len(post_coll_tokens)
-                                context_end_for_rule = j + 1 + post_context_length
-                                
-                                if context_end_for_rule <= end_index: # Must end before the window limit
-                                    match_context = tokens_lower[j+1:context_end_for_rule]
-                                    required_pattern = [token_to_regex(t) for t in post_coll_tokens]
-                                    
-                                    match_string = ' '.join(match_context)
-                                    pattern_string = '^' + ' '.join(required_pattern) + '$'
-                                    
-                                    if re.match(pattern_string, match_string, re.IGNORECASE):
-                                        is_context_match = True
-                                        break
-
-
-            # 3. IF CONTEXT MATCHES (OR NO PATTERN IS SET), RECORD THE INSTANCE
-            if is_context_match:
-                key = (w, p, l)
-                context_filtered_collocates[key] += 1
+            key = (w, p, l)
+            collocates_counter[key] += 1
     
-    # --- END COLLOCATION COUNTING AND CONTEXTUAL FILTERING ---
-
-    # --- RECALCULATE STATS BASED ONLY ON CONTEXT-FILTERED COUNTS ---
+    # --- RECALCULATE STATS BASED on all standard counts ---
     
     stats_list = []
     token_counts_unfiltered = Counter(tokens_lower) 
     
-    for (w, p, l), observed in context_filtered_collocates.items():
+    for (w, p, l), observed in collocates_counter.items():
         total_freq = token_counts_unfiltered.get(w, 0)
         
-        # Use the context-filtered observed count (k11)
+        # Use the standard observed count (k11)
         k11 = observed
-        k12 = freq - k11 # Total target hits minus this collocate's filtered hits
-        k21 = total_freq - k11 # Total collocate hits minus this collocate's filtered hits
+        k12 = freq - k11 # Total target hits minus this collocate's hits
+        k21 = total_freq - k11 # Total collocate hits minus this collocate's hits
         k22 = total_tokens - (k11 + k12 + k21)
         
         ll = compute_ll(k11, k12, k21, k22)
@@ -1024,7 +892,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
 
     stats_df = pd.DataFrame(stats_list)
     
-    # --- APPLY OTHER (NON-CONTEXTUAL) FILTERS ---
+    # --- APPLY OTHER FILTERS (Standard filters retained) ---
     if not stats_df.empty:
         filtered_df = stats_df.copy()
         
@@ -1048,7 +916,6 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             
         # 2b. POS Multiselect Filter
         if selected_pos_tags and not is_raw_mode and not pos_wildcard_regex:
-            # Only apply multiselect if POS Wildcard is NOT used.
             filtered_df = filtered_df[filtered_df['POS'].isin(selected_pos_tags)]
             
         # 3. Lemma Filter
@@ -1088,13 +955,18 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
     
     # Display note if filters were applied
-    filter_list = [collocate_regex, pos_wildcard_regex, collocate_lemma, contextual_pattern]
+    filter_list = [collocate_regex, pos_wildcard_regex, collocate_lemma]
     filter_count = sum(1 for f in filter_list if f or (f is selected_pos_tags and selected_pos_tags))
     
     if filter_count > 0:
         st.info(f"Filters Applied: Showing collocates matching {filter_count} criteria.")
     
-    network_html = create_pyvis_graph(primary_target_mwu, network_df)
+    # Revert: Call create_pyvis_graph without context args
+    network_html = create_pyvis_graph(
+        primary_target_mwu, 
+        network_df
+    )
+    
     components.html(network_html, height=450)
     
     st.markdown(
@@ -1104,7 +976,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         * Collocate Node Color: Noun (Prefix 'N') **Green**, Verb (Prefix 'V') **Blue**, Adjective (Prefix 'J') **Pink**, Adverb (Prefix 'R') **Yellow**. All other tags/raw text (`##`) are **Gray**.
         * Edge Thickness: **All Thick** (Uniform)
         * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation)
-        * Hover over nodes for details (POS, Observed Freq, LL score).
+        * Hover over collocate nodes for details (POS, Observed Freq, LL score).
         """
     )
     st.markdown("---")
