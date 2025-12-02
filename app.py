@@ -47,7 +47,6 @@ POS_COLOR_MAP = {
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
     st.session_state['view'] = view_name
-    # Don't rerun immediately here, rely on Streamlit's implicit rerun on button click
     
 def reset_analysis():
     # Clear the entire Streamlit cache to force re-reading and re-analysis
@@ -448,7 +447,7 @@ with st.sidebar:
         st.session_state['kwic_right'] = kwic_right
         
     elif st.session_state['view'] == 'collocation':
-        # New customizable setting
+        # Collocation Settings
         max_collocates = st.number_input("Max Collocates to Show (Network/Tables)", min_value=5, max_value=100, value=20, step=5, help="Maximum number of collocates displayed in the network graph and top tables.")
         coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=5, step=1, help="Window used for collocation counting (default ±5).")
         mi_min_freq = st.number_input("MI minimum observed freq", min_value=1, max_value=100, value=1, step=1)
@@ -456,6 +455,42 @@ with st.sidebar:
         st.session_state['max_collocates'] = max_collocates
         st.session_state['coll_window'] = coll_window
         st.session_state['mi_min_freq'] = mi_min_freq
+
+        st.markdown("---")
+        st.subheader("Collocate Filters")
+        
+        # 1. Word/Regex Filter
+        collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value="")
+        st.session_state['collocate_regex'] = collocate_regex
+        
+        # 2. POS Filter (Dynamic)
+        if 'pos' in df.columns:
+            # Generate unique POS tags present in the corpus (excluding generic markers)
+            all_pos_tags = sorted([tag for tag in df['pos'].unique() if tag != '##'])
+            
+            if all_pos_tags:
+                selected_pos_tags = st.multiselect(
+                    "Filter by POS Tag",
+                    options=all_pos_tags,
+                    default=None,
+                    help="Only shows collocates matching one of the selected POS tags. If none selected, all are shown."
+                )
+                st.session_state['selected_pos_tags'] = selected_pos_tags
+            else:
+                st.info("POS tags not detailed enough for granular filtering.")
+                st.session_state['selected_pos_tags'] = None
+        else:
+            st.info("POS filtering requires a tagged corpus.")
+            st.session_state['selected_pos_tags'] = None
+
+        # 3. Lemma Filter
+        if 'lemma' in df.columns:
+            collocate_lemma = st.text_input("Filter by Lemma (case-insensitive)", value="", help="Enter the base form (e.g., 'approach'). Uses the same wildcard/regex logic as the main search on the lemma.")
+            st.session_state['collocate_lemma'] = collocate_lemma
+        else:
+            st.info("Lemma filtering requires a lemmatized corpus.")
+            st.session_state['collocate_lemma'] = None
+
 
     st.markdown("---")
     st.write("Shareable deployment tip:")
@@ -758,9 +793,16 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 # -----------------------------------------------------
 if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
+    # Get Collocation Settings
     coll_window = st.session_state.get('coll_window', 5)
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
-    max_collocates = st.session_state.get('max_collocates', 20) # Get the new max collocates setting
+    max_collocates = st.session_state.get('max_collocates', 20) 
+    
+    # Get Filter Settings
+    collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
+    selected_pos_tags = st.session_state.get('selected_pos_tags', [])
+    collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
+    
     target = target_input.lower()
 
     # --- MWU/WILDCARD RESOLUTION (Focus on single primary target) ---
@@ -841,7 +883,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader("🔗 Collocation Analysis Results")
     st.success(f"Analyzing target {target_display}. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
 
-    # --- COLLOCATION CALCULATION ---
+    # --- COLLOCATION COUNTING ---
     coll_pairs = []
     for i in primary_target_positions:
         start = max(0, i - coll_window)
@@ -850,17 +892,20 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         for j in range(start, end):
             if i <= j < i + primary_target_len:
                 continue
-            coll_pairs.append((tokens_lower[j], df["pos"].iloc[j]))
+            coll_pairs.append((tokens_lower[j], df["pos"].iloc[j], df["lemma"].iloc[j])) # Include lemma here
 
-    coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos"])
-    coll_counts = coll_df.groupby(["collocate","pos"]).size().reset_index(name="Observed")
-
+    coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos", "lemma_collocate"])
+    
+    # --- CALCULATE BASE STATS ---
+    coll_counts = coll_df.groupby(["collocate","pos", "lemma_collocate"]).size().reset_index(name="Observed")
+    
     stats_list = []
     token_counts_unfiltered = Counter(tokens_lower) 
     
     for _, row in coll_counts.iterrows():
         w = row["collocate"]
         p = row["pos"]
+        l = row["lemma_collocate"]
         observed = int(row["Observed"])
         total_freq = token_counts_unfiltered.get(w, 0)
         k11 = observed
@@ -873,6 +918,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         stats_list.append({
             "Collocate": w,
             "POS": p,
+            "Lemma": l,
             "Observed": observed,
             "Total_Freq": total_freq,
             "LL": round(ll,6),
@@ -881,19 +927,56 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         })
 
     stats_df = pd.DataFrame(stats_list)
-    if stats_df.empty:
+    
+    # --- APPLY FILTERS ---
+    if not stats_df.empty:
+        filtered_df = stats_df.copy()
+        
+        # 1. Word/Regex Filter
+        if collocate_regex:
+            # Prepare pattern: replace * with .* and use | for multiple words
+            pattern = re.escape(collocate_regex).replace(r'\*', '.*')
+            try:
+                # Apply filter to the 'Collocate' (token) column
+                filtered_df = filtered_df[filtered_df['Collocate'].str.fullmatch(pattern, case=False, na=False)]
+            except re.error:
+                st.error(f"Invalid regular expression: '{collocate_regex}'")
+                filtered_df = pd.DataFrame() # Clear results if regex is bad
+
+        # 2. POS Filter
+        if selected_pos_tags and not is_raw_mode:
+            filtered_df = filtered_df[filtered_df['POS'].isin(selected_pos_tags)]
+            
+        # 3. Lemma Filter
+        if collocate_lemma and 'Lemma' in filtered_df.columns:
+            # Prepare lemma pattern: replace * with .*
+            lemma_pattern = re.escape(collocate_lemma).replace(r'\*', '.*')
+            try:
+                # Apply filter to the 'Lemma' column
+                filtered_df = filtered_df[filtered_df['Lemma'].str.fullmatch(lemma_pattern, case=False, na=False)]
+            except re.error:
+                 st.error(f"Invalid regular expression for lemma filter: '{collocate_lemma}'")
+                 filtered_df = pd.DataFrame()
+        
+        stats_df_filtered = filtered_df
+        
+        if stats_df_filtered.empty:
+            st.warning("No collocates found after applying filters.")
+            st.stop()
+            
+        stats_df_sorted = stats_df_filtered.sort_values("LL", ascending=False)
+
+    else:
         st.warning("No collocates found.")
         st.stop()
-        
-    stats_df_sorted = stats_df.sort_values("LL", ascending=False)
-    
+
     # --- Apply max_collocates setting ---
     network_df = stats_df_sorted.head(max_collocates).copy()
 
     full_ll = stats_df_sorted.head(max_collocates).copy()
     full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
     
-    full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
+    full_mi_all = stats_df_filtered[stats_df_filtered["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
     full_mi = full_mi_all.head(max_collocates).copy()
     full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
@@ -901,6 +984,11 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     # --- Collocation Network Graph ---
     st.markdown("---")
     st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
+    
+    # Display note if filters were applied
+    if collocate_regex or selected_pos_tags or collocate_lemma:
+        filter_count = sum(1 for f in [collocate_regex, selected_pos_tags, collocate_lemma] if f)
+        st.info(f"Filters Applied: Showing collocates matching {filter_count} criteria.")
     
     network_html = create_pyvis_graph(primary_target_mwu, network_df)
     components.html(network_html, height=450)
@@ -920,10 +1008,10 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     # --- Conditional POS Table Display ---
     if not is_raw_mode:
         def category_df(prefixes):
-            mask = pd.Series(False, index=stats_df.index)
+            mask = pd.Series(False, index=stats_df_filtered.index)
             for pref in prefixes:
-                mask = mask | stats_df["POS"].str.startswith(pref, na=False)
-            sub = stats_df[mask].copy()
+                mask = mask | stats_df_filtered["POS"].str.startswith(pref, na=False)
+            sub = stats_df_filtered[mask].copy()
             # Use max_collocates for category tables as well
             ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(max_collocates).copy()
             ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
@@ -982,13 +1070,13 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.download_button(
         f"⬇ Download full LL results (xlsx) (Top {max_collocates} used in tables)", 
         data=df_to_excel_bytes(stats_df_sorted), 
-        file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full.xlsx", 
+        file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full_filtered.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     st.download_button(
         f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx) (Top {max_collocates} used in tables)", 
         data=df_to_excel_bytes(full_mi_all), 
-        file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}.xlsx", 
+        file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}_filtered.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
