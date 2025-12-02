@@ -10,6 +10,8 @@ import tempfile
 import os       
 import re       
 import requests 
+import matplotlib.pyplot as plt # NEW: Import for plotting
+from wordcloud import WordCloud # NEW: Import for word cloud generation
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
@@ -81,6 +83,33 @@ def df_to_excel_bytes(df):
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     buf.seek(0)
     return buf.getvalue()
+
+# --- NEW: Word Cloud Function ---
+@st.cache_data
+def create_word_cloud(token_list):
+    """Generates a word cloud from a list of filtered tokens."""
+    # Join the list of tokens into a single string
+    text = " ".join(token_list)
+    
+    # Define stopwords (must be in lowercase)
+    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
+    
+    wordcloud = WordCloud(
+        width=800,
+        height=400,
+        background_color='black',
+        colormap='viridis',
+        stopwords=stopwords,
+        min_font_size=10
+    ).generate(text)
+    
+    # Plot the WordCloud image
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    
+    return fig
 
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
@@ -416,6 +445,14 @@ with col1:
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
     st.dataframe(info_df, use_container_width=True, hide_index=True) 
+
+    # --- NEW: Word Cloud Display ---
+    st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
+    if tokens_lower_filtered:
+        wordcloud_fig = create_word_cloud(tokens_lower_filtered)
+        st.pyplot(wordcloud_fig)
+    else:
+        st.info("Not enough tokens to generate a word cloud.")
 
 with col2:
     st.subheader("Top frequency (token / POS / freq) (Punctuation skipped)")
