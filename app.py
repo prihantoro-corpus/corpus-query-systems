@@ -231,6 +231,8 @@ def load_corpus_file(file_source, sep=r"\s+"):
         return None
     
     # --- Step 2: Try Structured Parsing (Tab-separated) ---
+    df_attempt = None
+    
     try:
         # Attempt 1: Tab Separator (most common for tagged corpora)
         file_buffer_for_pandas.seek(0)
@@ -241,8 +243,8 @@ def load_corpus_file(file_source, sep=r"\s+"):
             # Attempt 2: Default Separator (Whitespace)
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
             
-        # FIX: Check only for the number of columns (3+) to detect a tagged file
-        if df_attempt.shape[1] >= 3:
+        # Check only for the number of columns (3+) to detect a tagged file
+        if df_attempt is not None and df_attempt.shape[1] >= 3:
             # --- PROCESS TAGGED/VERTICAL FILE ---
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
@@ -355,8 +357,14 @@ if df is None:
     st.error("Corpus failed to load. Please check the file format or download source.")
     st.stop()
     
-# Determine if raw mode was used by checking for the nonsense tag in the output DataFrame
-is_raw_mode = 'pos' in df.columns and any(df['pos'].str.contains('##', na=False))
+# --- RECALCULATE is_raw_mode using a restrictive check ---
+# Raw mode is True ONLY if >99% of the POS tags contain the nonsense marker '##'
+if 'pos' in df.columns and len(df) > 0:
+    count_of_raw_tags = df['pos'].str.contains('##', na=False).sum()
+    is_raw_mode = (count_of_raw_tags / len(df)) > 0.99
+else:
+    is_raw_mode = True # Default to raw if structure is compromised/empty
+
 
 if is_raw_mode:
     st.header(f"Analyzing Corpus: {corpus_name} (RAW/LINEAR MODE)")
@@ -403,7 +411,7 @@ with col2:
     
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
     
-    # Only suppress POS tags if RAW mode was detected
+    # Only suppress POS tags if RAW mode was detected (using the new, strict definition)
     if is_raw_mode:
          freq_df_filtered['pos'] = '##'
 
