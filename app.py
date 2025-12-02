@@ -101,15 +101,26 @@ def create_word_cloud(freq_data, is_tagged_mode):
     """Generates a word cloud from frequency data with conditional POS coloring."""
     
     # Filter out multi-word units for visualization stability
-    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
+    single_word_freq_data = freq_data[~freq_data['Query Result'].str.contains(' ')].copy()
     if single_word_freq_data.empty:
         return None
 
     # Convert frequency data to a dictionary for WordCloud
-    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
+    word_freq_dict = single_word_freq_data.set_index('Query Result')['Raw Frequency'].to_dict()
     
     # Map from word to its POS tag (used by the custom color function)
-    word_to_pos = single_word_freq_data.set_index('token')['pos'].to_dict()
+    # We must merge POS tags back onto the single-word list, assuming the source freq_df has 'token' and 'pos' columns
+    
+    # Use the token/pos columns from the source freq_df (pre-wildcard list) for coloring if possible
+    # We must adapt this function to the new wildcard_freq_df structure if that's what's passed,
+    # but the simplest way is to ensure we use the core freq_df for the Word Cloud.
+    
+    # Since we use the overall corpus freq_df (not the wildcard search result df) for the word cloud,
+    # we need to ensure the column names match the expected format for word_to_pos dictionary creation.
+    
+    # Assuming the core freq_df (token, pos, frequency) is passed, we rename internally for clarity:
+    
+    word_to_pos = single_word_freq_data.set_index('Query Result').get('pos', pd.Series('O')).to_dict()
     
     # Define stopwords (must be in lowercase)
     stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
@@ -484,7 +495,9 @@ with col1:
     # --- Word Cloud Display (Conditional Coloring) ---
     st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
     if not freq_df.empty:
-        wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode) # Pass the full frequency df and the mode
+        # Note: Word Cloud uses the main corpus frequency table for general visualization
+        # We rename columns internally to fit the create_word_cloud function's expectation (token, pos, frequency)
+        wordcloud_fig = create_word_cloud(freq_df.rename(columns={'token': 'Query Result', 'frequency': 'Raw Frequency'}), not is_raw_mode)
         
         # Display the legend key if in tagged mode
         if not is_raw_mode:
@@ -521,7 +534,7 @@ st.markdown("---")
 st.subheader("Target word input")
 col_a, col_b = st.columns(2)
 with col_a:
-    typed_target = st.text_input("Type a token (case-insensitive) or use wildcard (*)", value="")
+    typed_target = st.text_input("Type a token (e.g., 'house'), an MWU (e.g., 'in the'), or a wildcard pattern (e.g., 'in*', '*as'). Then click Analyze.", value="")
 with col_b:
     uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
 
@@ -553,36 +566,34 @@ if analyze_btn and target_input:
     # 1. MWU/Wildcard detection and position finding
     
     # Case A: Wildcard Search
+    wildcard_matches = []
+    
+    # FIX: Initialize target_tokens to empty list to prevent NameError if no matches are found.
+    primary_target_mwu = None
+    primary_target_tokens = []
+    primary_target_len = 0
+    
     if contains_wildcard:
+        
         # Build the regex pattern, replacing '*' with '.*'
-        pattern = re.escape(target).replace(r'\*', '.*')
+        # The pattern needs to match the tokens_lower list which contains single tokens.
         
-        wildcard_matches = []
-        
-        # Determine if it's a single token match or a multi-word sequence match
         if ' ' not in target:
             # Single-token wildcard (in*, *as, pi*e)
+            pattern = re.escape(target).replace(r'\*', '.*')
+            
             for token in token_counts:
                 if re.fullmatch(pattern, token):
+                    # For single-token wildcard, matches are single tokens
                     wildcard_matches.append(token)
             
-            # Since we need to calculate frequency for *all* matches, we re-use the target_tokens mechanism
-            # For collocation, we treat each match as a separate target word for now, 
-            # and search only for the single word MWU
-            # We will use the *most frequent* match as the representative for KWIC/Collocation if needed
-            
-            # For single-token wildcard, positions will be calculated for the most frequent match later if MWU is 1.
-            target_tokens = [wildcard_matches[0]] if wildcard_matches else []
-            target_len = 1
-            
         else:
-            # Multi-word wildcard (in *) - only space as a separator
+            # Multi-word wildcard (in *) - space is the token boundary
             
-            # Split the target by space, handling the pattern parts
             target_pattern_parts = target.split(' ')
+            num_parts = len(target_pattern_parts)
             
-            # Iterate through the entire corpus list to find matching sequences
-            for i in range(len(tokens_lower) - len(target_pattern_parts) + 1):
+            for i in range(len(tokens_lower) - num_parts + 1):
                 match = True
                 current_match_tokens = []
                 for k, part in enumerate(target_pattern_parts):
@@ -595,95 +606,109 @@ if analyze_btn and target_input:
                     current_match_tokens.append(current_token)
                 
                 if match:
-                    # Store the MWU string and its starting position
+                    # Store the MWU string
                     mwu_string = " ".join(current_match_tokens)
                     wildcard_matches.append(mwu_string)
-                    # We only care about the first one for the KWIC/Collocation target for now
-                    if not target_tokens:
-                        target_tokens = current_match_tokens 
-                        target_len = len(target_tokens)
-                        
-            # If target_tokens still empty, set a dummy length
-            if not target_tokens:
-                 target_len = len(target_pattern_parts) # Use the length of the pattern parts
+                    
+            # Use Counter to get frequencies of MWU strings
+            match_counts = Counter(wildcard_matches)
             
-            # For multi-word wildcard, the wildcard_matches array already contains the MWU results
+            # --- Compile Wildcard Frequency Table for MWU Wildcards ---
+            wildcard_freq_list = []
+            
+            for term, count in match_counts.most_common():
+                rel_freq = (count / total_tokens) * 1_000_000 # FIX: Recalculate Relative Frequency
+                wildcard_freq_list.append({
+                    "Query Result": term,
+                    "Raw Frequency": count,
+                    "Relative Frequency": f"{rel_freq:.4f}"
+                })
+            
+            wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
+            
+            # If we found matches, set the primary target to the most frequent one for KWIC/Collocation
+            if not wildcard_freq_df.empty:
+                primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
+                primary_target_tokens = primary_target_mwu.split()
+                primary_target_len = len(primary_target_tokens)
+                target_display = f"'{target_input}' (Most Frequent Match: '{primary_target_mwu}')"
+                
+            
+        # --- Compile Wildcard Frequency Table for Single-Token Wildcards ---
+        if ' ' not in target:
+            # Get token counts for single-token matches
+            match_counts = {token: token_counts[token] for token in wildcard_matches if token in token_counts}
+            
+            wildcard_freq_list = []
+            sorted_matches = sorted(match_counts.items(), key=lambda item: item[1], reverse=True)
+            
+            for term, count in sorted_matches:
+                rel_freq = (count / total_tokens) * 1_000_000 # FIX: Recalculate Relative Frequency
+                wildcard_freq_list.append({
+                    "Query Result": term,
+                    "Raw Frequency": count,
+                    "Relative Frequency": f"{rel_freq:.4f}"
+                })
+            
+            wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
+            
+            # Set primary target for KWIC/Collocation to the most frequent match
+            if not wildcard_freq_df.empty:
+                primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
+                primary_target_tokens = [primary_target_mwu]
+                primary_target_len = 1
+                target_display = f"'{target_input}' (Most Frequent Match: '{primary_target_mwu}')"
+                
+        # Handle case where wildcard search yields no matches
+        if not wildcard_matches:
+            st.warning(f"Target pattern '{target_input}' not found in corpus.")
+            st.stop()
             
     # Case B: Literal Search (Single or MWU)
     else:
-        target_tokens = target.split()
-        target_len = len(target_tokens)
-        wildcard_matches = [target] # Treat the literal MWU as the result
-
-    # 2. Compile Wildcard Frequency Table
-    wildcard_freq_list = []
-    
-    # Count frequency of each unique match found
-    if contains_wildcard:
-        match_counts = Counter(wildcard_matches)
-    else:
-        # For literal search, the frequency is calculated by counting positions later, but we need the token_counts for relative freq.
-        # This branch ensures the frequency table is generated correctly for single words/MWUs even if MWU fails
-        match_counts = Counter()
+        # Literal search: calculate frequency once
+        primary_target_mwu = target
+        primary_target_tokens = target.split()
+        primary_target_len = len(primary_target_tokens)
+        target_display = f"'{target_input}'"
         
-        # Simple frequency calculation for literal MWU
         literal_freq = 0
-        
-        # Re-use the multi-word search logic to count frequency accurately
-        for i in range(len(tokens_lower) - target_len + 1):
-             if tokens_lower[i:i + target_len] == target_tokens:
+        for i in range(len(tokens_lower) - primary_target_len + 1):
+             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                  literal_freq += 1
-        match_counts[target] = literal_freq
         
-    
-    for term, count in match_counts.items():
-        if count > 0:
-            rel_freq = (count / total_tokens) * 1_000_000
-            wildcard_freq_list.append({
-                "Query Result": term,
-                "Raw Frequency": count,
-                "Relative Frequency": f"{rel_freq:.2f}"
-            })
+        if literal_freq == 0:
+            st.warning(f"Target '{target_input}' not found in corpus.")
+            st.stop()
+            
+        rel_freq = (literal_freq / total_tokens) * 1_000_000
+        
+        wildcard_freq_df = pd.DataFrame([{
+            "Query Result": primary_target_mwu,
+            "Raw Frequency": literal_freq,
+            "Relative Frequency": f"{rel_freq:.4f}"
+        }])
 
-    wildcard_freq_df = pd.DataFrame(wildcard_freq_list).sort_values("Raw Frequency", ascending=False)
+    # 2. Find positions (Only for the primary target to generate KWIC/Collocation)
     
-    # 3. Find positions (Only for the first or literal target to generate KWIC/Collocation)
+    positions = []
     
-    if not target_tokens:
+    # Check if primary target was successfully defined (important for wildcard path)
+    if not primary_target_tokens:
         st.warning(f"Target '{target_input}' not found in corpus.")
         st.stop()
         
-    # Re-calculate positions for the *most frequent* match if wildcard, or the *literal* target
-    # We use the literal target for the primary analysis context (KWIC/Collocation)
-    positions = []
-    
-    # Determine the token sequence to use for KWIC/Collocation (the literal target or the top wildcard match)
-    if contains_wildcard and not wildcard_freq_df.empty:
-        # Use the most frequent match as the MWU for the primary analysis
-        primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
-        primary_target_tokens = primary_target_mwu.split()
-        primary_target_len = len(primary_target_tokens)
-        
-        target_display = f"'{target_input}' (Most Frequent Match: '{primary_target_mwu}')"
-    else:
-        # Use the literal MWU
-        primary_target_mwu = target
-        primary_target_tokens = target_tokens
-        primary_target_len = target_len
-        target_display = f"'{target_input}'"
-
-    # Find positions for the primary target
     for i in range(len(tokens_lower) - primary_target_len + 1):
         if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
             positions.append(i)
             
     freq = len(positions)
     
-    # 4. Display Results
+    # 3. Display Results
     
     st.success(f"Found {freq} occurrences of the primary target {target_display} (case-insensitive).")
     rel_freq = (freq / total_tokens) * 1_000_000
-    st.write(f"Relative frequency: **{rel_freq:.2f}** per million")
+    st.write(f"Relative frequency: **{rel_freq:.4f}** per million")
 
     # --- Concordance and Wildcard Frequency Tables ---
     st.markdown("---")
@@ -721,7 +746,12 @@ if analyze_btn and target_input:
             
         freq_results_preview = wildcard_freq_df.head(10).copy()
         
-        st.dataframe(freq_results_preview, use_container_width=True, hide_index=True)
+        # Display table with formatting
+        st.dataframe(
+            freq_results_preview, 
+            use_container_width=True, 
+            hide_index=True,
+        )
         
         # Add download button for the full frequency list
         st.download_button(
@@ -733,7 +763,7 @@ if analyze_btn and target_input:
         
     st.markdown("---")
 
-    # 5. Collocation Calculation (Uses the primary target MWU found above)
+    # 4. Collocation Calculation (Uses the primary target MWU found above)
     
     # ---------- COLLATION: compute stats (MWU Collocation) ----------
     coll_pairs = []
