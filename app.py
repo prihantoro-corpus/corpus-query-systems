@@ -44,7 +44,11 @@ POS_COLOR_MAP = {
     'O': '#AAAAAA'   # Other (Gray)
 }
 
-# --- NEW FUNCTION: Cache Reset ---
+# --- NAVIGATION FUNCTIONS ---
+def set_view(view_name):
+    st.session_state['view'] = view_name
+    st.rerun()
+
 def reset_analysis():
     # Clear the entire Streamlit cache to force re-reading and re-analysis
     st.cache_data.clear()
@@ -100,7 +104,7 @@ def df_to_excel_bytes(df):
     buf.seek(0)
     return buf.getvalue()
 
-# --- MISSING FUNCTION RESTORED: Standardized Type-Token Ratio ---
+# --- Standardized Type-Token Ratio ---
 def compute_sttr_tokens(tokens_list, chunk=1000):
     if len(tokens_list) < chunk:
         return (len(set(tokens_list)) / len(tokens_list)) if len(tokens_list) > 0 else 0.0
@@ -470,19 +474,27 @@ else:
     app_mode = f"Analyzing Corpus: {corpus_name} (TAGGED MODE)"
 st.header(app_mode)
 
-# --- NAVIGATION BUTTONS (OVERVIEW/TOP LEVEL) ---
-if st.session_state['view'] == 'overview':
-    st.subheader("Corpus Explorer Modules")
-    col_nav = st.columns(2)
-    with col_nav[0]:
-        if st.button("📚 Concordance (KWIC)", use_container_width=True):
-            st.session_state['view'] = 'concordance'
-            st.rerun()
-    with col_nav[1]:
-        if st.button("🔗 Collocation Network", use_container_width=True):
-            st.session_state['view'] = 'collocation'
-            st.rerun()
-    st.markdown("---")
+
+# --- NEW: PERSISTENT NAVIGATION BAR ---
+col_nav_overview, col_nav_concordance, col_nav_collocation = st.columns(3)
+
+with col_nav_overview:
+    is_active = st.session_state['view'] == 'overview'
+    label = "📌 Overview" if is_active else "📖 Overview"
+    if st.button(label, use_container_width=True, type="primary" if is_active else "secondary"):
+        set_view('overview')
+with col_nav_concordance:
+    is_active = st.session_state['view'] == 'concordance'
+    label = "📌 Concordance" if is_active else "📚 Concordance"
+    if st.button(label, use_container_width=True, type="primary" if is_active else "secondary"):
+        set_view('concordance')
+with col_nav_collocation:
+    is_active = st.session_state['view'] == 'collocation'
+    label = "📌 Collocation" if is_active else "🔗 Collocation"
+    if st.button(label, use_container_width=True, type="primary" if is_active else "secondary"):
+        set_view('collocation')
+
+st.markdown("---")
 
 
 # -----------------------------------------------------
@@ -584,8 +596,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     primary_target_len = 0
     wildcard_freq_df = pd.DataFrame()
     
-    # FIX: Initialize primary target variables to prevent NameError
-    
     if contains_wildcard:
         
         # Single-token wildcard (in*, *as, pi*e)
@@ -679,7 +689,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 if tokens_lower[i:i + mwu_len] == mwu_tokens:
                     mwu_positions.append(i)
             
-            # Determine how many lines to take from this MWU (min of its freq, and lines remaining)
+            # Determine how many lines to take from this MWU (min of 1, lines remaining)
             lines_to_take = min(1, max_kwic_lines - total_kwic_lines, len(mwu_positions))
             
             # Take a sample (the first 'lines_to_take' occurrences)
