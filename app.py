@@ -449,12 +449,11 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Pattern Search Filter")
         
-        # REMOVED: pattern_node_word input
+        st.caption("The Node Word is set by the primary search input above.")
         
         pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the Node Word.")
-        pattern_collocate = st.text_input("Collocate Word (for Pattern Search)", value="", key="pattern_collocate_input", help="The specific word required to be in the context window (will be **bolded and highlighted**).")
+        pattern_collocate = st.text_input("Collocate Word/Pattern (* for wildcard)", value="", key="pattern_collocate_input", help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly').")
 
-        # Removed setting of 'pattern_node_word' to session state
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
         
@@ -767,8 +766,14 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     final_positions = []
     
     if is_pattern_search_active:
-        st.info(f"Pattern Search Active: Node='{primary_target_mwu}', Collocate='{pattern_collocate}' within ±{pattern_window} tokens.")
-        collocate_pattern = re.compile(re.escape(pattern_collocate))
+        
+        # --- NEW: Collocate Wildcard/Regex Handling ---
+        # Convert user input (e.g., '*ly') into a full regex pattern (e.g., '.*ly')
+        collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
+        collocate_regex = re.compile(collocate_pattern_str)
+        # ---------------------------------------------
+        
+        st.info(f"Pattern Search Active: Node='{primary_target_mwu}', Collocate Pattern='{pattern_collocate}' (Regex: `{collocate_pattern_str}`), Window=±{pattern_window} tokens.")
         
         for i in all_target_positions:
             start_index = max(0, i - pattern_window)
@@ -780,7 +785,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 if i <= j < i + primary_target_len:
                     continue # Skip the node word itself
                 
-                if collocate_pattern.fullmatch(tokens_lower[j]):
+                # Check token against the generated collocate regex
+                if collocate_regex.fullmatch(tokens_lower[j]):
                     found_collocate = True
                     break
             
@@ -811,6 +817,11 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         formatted_line = []
         node_orig_tokens = []
         
+        # Re-initialize collocate regex if pattern search is active
+        if is_pattern_search_active:
+            collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
+            collocate_regex = re.compile(collocate_pattern_str)
+
         for k, token in enumerate(full_line_tokens):
             token_index_in_corpus = kwic_start + k
             token_lower = token.lower()
@@ -819,7 +830,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             
             is_collocate = False
             if is_pattern_search_active and not is_node_word:
-                if token_lower == pattern_collocate:
+                # Use regex check for potential collocate match
+                if collocate_regex.fullmatch(token_lower):
                     is_collocate = True
             
             if is_node_word:
@@ -863,7 +875,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         
         # 1. Custom CSS for table appearance (Alignment and Font)
-        # Updated CSS for better dark mode readability (white text for context)
         kwic_table_style = """
              <style>
              .dataframe {
