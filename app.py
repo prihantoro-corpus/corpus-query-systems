@@ -73,6 +73,7 @@ def reset_analysis():
 # --- Analysis Trigger Callback ---
 def trigger_analysis_callback():
     # Only trigger if the input value is non-empty, otherwise it triggers on clearing the input
+    # Checking against input widgets directly is safest for callbacks
     if st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('typed_target_input', '').strip():
         st.session_state['trigger_analyze'] = True
 
@@ -344,17 +345,17 @@ def load_corpus_file(file_source, sep=r"\s+"):
         file_buffer_for_pandas = StringIO(clean_content)
 
     except Exception as e:
-        st.error(f"Error reading file stream: {e}")
-        return None
-    
-    df_attempt = None
-    
+        # Fallback to raw text parsing attempt if structured parsing fails
+         pass
+
     try:
-        file_buffer_for_pandas.seek(0)
+        file_buffer_for_pandas.seek(0) 
         try:
+            # Try structured format first
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
         except Exception:
-            file_buffer_for_pandas.seek(0) 
+            # Fallback to space/general delimiter
+            file_buffer_for_pandas.seek(0)
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
             
         if df_attempt is not None and df_attempt.shape[1] >= 3:
@@ -366,11 +367,11 @@ def load_corpus_file(file_source, sep=r"\s+"):
             df["_token_low"] = df["token"].str.lower()
             return df
             
-    except Exception as e:
-        # Fallback to raw text parsing attempt if structured parsing fails
-         pass
+    except Exception:
+         pass # Continue to raw text tokenization if all else fails
 
     try:
+        # Raw text tokenization as a final fallback
         raw_text = file_content_str
         tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
         tokens = [t.strip() for t in tokens if t.strip()] 
@@ -560,9 +561,11 @@ with st.sidebar:
 # load corpus (cached) for main body access
 df = load_corpus_file(corpus_source)
 
-# --- NEW: Check for initial load failure and display better message ---
+# --- Check for initial load failure and display better message ---
 if df is None:
-    st.error("Corpus failed to load. **Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
+    # POSITIVE AND CLEAR MESSAGE
+    st.header("👋 Welcome to CORTEX!")
+    st.markdown("**Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
     st.stop()
 # ---------------------------------------------------------------------
     
@@ -578,7 +581,8 @@ total_tokens = len(df)
 tokens_lower = df["_token_low"].tolist()
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
 tokens_lower_filtered = [t for t in tokens_lower if t not in PUNCTUATION and not t.isdigit()]
-token_counts = Counter(tokens_lower_filtered)
+token_counts = Counter(tokens_lower) # Use unfiltered lower tokens for total counts
+token_counts_filtered = Counter(tokens_lower_filtered)
 unique_types = len(set(tokens_lower_filtered))
 unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
 sttr_score = compute_sttr_tokens(tokens_lower_filtered)
@@ -717,11 +721,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     current_inputs = (target_input, st.session_state.get('pattern_collocate_input'), st.session_state.get('pattern_search_window_input'))
     last_inputs = (st.session_state['last_target_input'], st.session_state['last_pattern_collocate'], st.session_state['last_pattern_search_window'])
 
-    # Skip analysis if triggered implicitly (not by explicit button press) AND inputs haven't changed.
-    # We allow the first run to proceed regardless of input matching initial state.
     if not analyze_btn_explicit and current_inputs == last_inputs:
          if st.session_state.get('initial_load_complete'):
-             # st.write("Skipping redundant implicit analysis.") # Debug
              st.stop()
     
     # Store current inputs for next run comparison
@@ -816,6 +817,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         for i in range(len(tokens_lower) - target_match_len + 1):
              if tokens_lower[i:i + target_match_len] == target_match:
                  all_target_positions.append(i)
+        
     else:
         for i in range(len(tokens_lower) - primary_target_len + 1):
             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
@@ -823,6 +825,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
     # 2b. Apply pattern filtering if active (FIXED logic to ensure collocate presence)
     final_positions = []
+    collocate_count_in_context = 0
     
     if is_pattern_search_active:
         
@@ -853,6 +856,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             # ONLY append positions where collocate was found
             if found_collocate:
                 final_positions.append(i)
+                collocate_count_in_context += 1 # Count of successful co-occurrences
                 
         if not final_positions:
             st.warning(f"Pattern search found 0 instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within the window.")
@@ -861,6 +865,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     else:
         # Standard search: all instances found earlier
         final_positions = all_target_positions
+        collocate_count_in_context = 0 # Not relevant for standard search
 
     # 2c. Format KWIC lines (applies to filtered or unfiltered positions)
     
@@ -901,8 +906,9 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             is_node_word = (i <= token_index_in_corpus < i + primary_target_len)
             
             is_collocate = False
+            # Check for collocate match *only* within the displayed KWIC window, if pattern search is active
             if is_pattern_search_active and not is_node_word:
-                # Use regex check for potential collocate match
+                 # Check token against the generated collocate regex
                 if collocate_regex.fullmatch(token_lower):
                     is_collocate = True
             
@@ -931,6 +937,37 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             "Node": node_orig, 
             "Right": " ".join(right_context)
         })
+    
+    # --- Prepare Collocate Frequency Data ---
+    results_panel_data = []
+    
+    if is_pattern_search_active:
+        # Calculate expected frequency (total frequency of the collocate pattern in the whole corpus)
+        collocate_pattern_total_freq = sum(1 for token in tokens_lower if collocate_regex.fullmatch(token))
+        
+        results_panel_data.append({
+            "Metric": "Node Word",
+            "Value": primary_target_mwu,
+            "Frequency": literal_freq if not contains_wildcard else wildcard_freq_df.iloc[0]["Raw Frequency"]
+        })
+        results_panel_data.append({
+            "Metric": "Observed Collocate",
+            "Value": pattern_collocate,
+            "Frequency": collocate_count_in_context # Raw count of successful co-occurrences
+        })
+        results_panel_data.append({
+            "Metric": "Expected Collocate (Total Corpus)",
+            "Value": pattern_collocate,
+            "Frequency": collocate_pattern_total_freq # Total frequency of the collocate pattern in the corpus
+        })
+        
+        results_df = pd.DataFrame(results_panel_data)
+        results_df["Frequency"] = results_df["Frequency"].apply(lambda x: f"{x:,}")
+
+    else:
+        # Standard display for non-pattern searches
+        results_df = wildcard_freq_df.rename(columns={"Relative Frequency": "Expected Frequency"})
+        
     
     # --- KWIC Display ---
     st.subheader("📚 Concordance Results")
@@ -1016,18 +1053,29 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     with col_freq:
-        if contains_wildcard:
-            st.subheader(f"Wildcard Results: '{target_input}' (Top 10)")
-        else:
-            st.subheader(f"Target Frequency")
+        if is_pattern_search_active:
+            st.subheader(f"Pattern Search Frequencies")
+            # Custom display for pattern search
+            st.dataframe(results_df, use_container_width=True, hide_index=True)
             
-        freq_results_preview = wildcard_freq_df.head(10).copy()
-        st.dataframe(freq_results_preview, use_container_width=True, hide_index=True)
+            st.caption(f"The collocate pattern '{pattern_collocate}' occurs {results_df[results_df['Metric'].str.contains('Expected')]['Frequency'].iloc[0]} times in the whole corpus.")
+        else:
+            if contains_wildcard:
+                st.subheader(f"Wildcard Results: '{target_input}' (Top 10)")
+            else:
+                st.subheader(f"Target Frequency")
+                
+            freq_results_preview = results_df.head(10).copy()
+            st.dataframe(freq_results_preview, use_container_width=True, hide_index=True)
+        
+        # Download button handles either case (wildcard_freq_df or results_df)
+        download_df = kwic_df if is_pattern_search_active else wildcard_freq_df
+        download_filename = f"{target.replace(' ', '_')}_pattern_results.xlsx" if is_pattern_search_active else f"{target.replace(' ', '_')}_wildcard_frequency_full.xlsx"
         
         st.download_button(
-            "⬇ Download full result frequency (xlsx)", 
-            data=df_to_excel_bytes(wildcard_freq_df), 
-            file_name=f"{target.replace(' ', '_')}_wildcard_frequency_full.xlsx", 
+            "⬇ Download frequency results (xlsx)", 
+            data=df_to_excel_bytes(download_df), 
+            file_name=download_filename, 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
