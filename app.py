@@ -34,6 +34,8 @@ if 'last_pattern_search_window' not in st.session_state:
     st.session_state['last_pattern_search_window'] = 0
 if 'collocate_pos_regex' not in st.session_state: 
     st.session_state['collocate_pos_regex'] = ''
+if 'pattern_collocate_pos' not in st.session_state: # NEW: Concordance Collocate POS Pattern
+    st.session_state['pattern_collocate_pos'] = ''
 
 
 # --- CONSTANTS ---
@@ -492,7 +494,7 @@ with st.sidebar:
             on_change=trigger_analysis_callback # Trigger analysis if window changes
         )
         
-        # Collocate Input with Auto-Analysis Trigger
+        # Collocate Word/Pattern Input
         pattern_collocate = st.text_input(
             "Collocate Word/Pattern (* for wildcard)", 
             value="", 
@@ -500,6 +502,20 @@ with st.sidebar:
             help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
             on_change=trigger_analysis_callback # Use callback to set the analysis flag when value changes/Enter is pressed
         )
+        
+        # Collocate POS Pattern Input (NEW for Concordance)
+        if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
+            pattern_collocate_pos_input = st.text_input(
+                "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
+                value="", 
+                key="pattern_collocate_pos_input",
+                help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag."
+            )
+            st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
+        else:
+            st.info("POS filtering for collocates requires a tagged corpus.")
+            st.session_state['pattern_collocate_pos'] = ''
+
 
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
@@ -527,8 +543,8 @@ with st.sidebar:
             # 2a. POS Tag Pattern Filter 
             collocate_pos_regex_input = st.text_input(
                 "Filter by POS Tag Pattern (Wildcard/Concatenation)", 
-                value="", 
-                key="collocate_pos_regex_input",
+                value=st.session_state['collocate_pos_regex'], # Use session state value
+                key="collocate_pos_regex_input_coll",
                 help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Uses regex on POS tags."
             )
             st.session_state['collocate_pos_regex'] = collocate_pos_regex_input
@@ -699,9 +715,9 @@ if st.session_state['view'] != 'overview':
     # Check if we should use the Pattern Search parameters instead
     use_pattern_search = False
     if st.session_state['view'] == 'concordance':
-        if primary_input and st.session_state.get('pattern_collocate'):
-            pattern_collocate_val = st.session_state['pattern_collocate'].strip()
-            if pattern_collocate_val:
+        # Check if Node Word, Collocate Word/Pattern, OR Collocate POS Pattern is provided
+        if primary_input and (st.session_state.get('pattern_collocate', '').strip() or st.session_state.get('pattern_collocate_pos', '').strip()):
+            if st.session_state.get('pattern_collocate', '').strip() or st.session_state.get('pattern_collocate_pos', '').strip():
                 use_pattern_search = True
     
     target_input = primary_input
@@ -729,8 +745,8 @@ if st.session_state['view'] != 'overview':
 if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- Check for redundant analysis and early exit ---
-    current_inputs = (target_input, st.session_state.get('pattern_collocate_input'), st.session_state.get('pattern_search_window_input'))
-    last_inputs = (st.session_state['last_target_input'], st.session_state['last_pattern_collocate'], st.session_state['last_pattern_search_window'])
+    current_inputs = (target_input, st.session_state.get('pattern_collocate_input'), st.session_state.get('pattern_search_window_input'), st.session_state.get('pattern_collocate_pos'))
+    last_inputs = (st.session_state['last_target_input'], st.session_state['last_pattern_collocate'], st.session_state['last_pattern_search_window'], st.session_state.get('last_pattern_collocate_pos_run', ''))
 
     if not analyze_btn_explicit and current_inputs == last_inputs:
          if st.session_state.get('initial_load_complete'):
@@ -740,6 +756,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     st.session_state['last_target_input'] = target_input
     st.session_state['last_pattern_collocate'] = st.session_state.get('pattern_collocate_input')
     st.session_state['last_pattern_search_window'] = st.session_state.get('pattern_search_window_input')
+    st.session_state['last_pattern_collocate_pos_run'] = st.session_state.get('pattern_collocate_pos')
     st.session_state['initial_load_complete'] = True
     
     # --- Start Analysis ---
@@ -749,9 +766,10 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- PATTERN SEARCH VARIABLES ---
     pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
+    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos', '').strip() # NEW
     pattern_window = st.session_state.get('pattern_search_window', 0)
     
-    is_pattern_search_active = use_pattern_search and pattern_collocate and pattern_window > 0
+    is_pattern_search_active = use_pattern_search and (pattern_collocate or pattern_collocate_pos) and pattern_window > 0
 
     # --- MWU/WILDCARD RESOLUTION (Retained logic) ---
     primary_target_mwu = None
@@ -840,15 +858,33 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     if is_pattern_search_active:
         
-        # Collocate Wildcard/Regex Handling
-        collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
-        try:
-             collocate_regex = re.compile(collocate_pattern_str)
-        except re.error as e:
-             st.error(f"Invalid Collocate Pattern/Regex: {e}")
-             st.stop()
+        # --- 1. Prepare Collocate Word/Pattern Regex ---
+        collocate_word_regex = None
+        collocate_pattern_str = None
+        if pattern_collocate:
+            collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
+            try:
+                 collocate_word_regex = re.compile(collocate_pattern_str)
+            except re.error as e:
+                 st.error(f"Invalid Collocate Word/Pattern Regex: {e}")
+                 st.stop()
+                 
+        # --- 2. Prepare Collocate POS Pattern Regex ---
+        collocate_pos_regex = None
+        if pattern_collocate_pos and not is_raw_mode:
+            pos_patterns = [p.strip() for p in pattern_collocate_pos.split('|') if p.strip()]
+            full_pos_regex_list = []
+            for pattern in pos_patterns:
+                escaped_pattern = re.escape(pattern).replace(r'\*', '.*')
+                full_pos_regex_list.append(escaped_pattern)
+            
+            if full_pos_regex_list:
+                # Anchor needed for full tag match
+                full_pos_regex = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
+                collocate_pos_regex = full_pos_regex
+
         
-        st.info(f"Pattern Search Active: Node='{primary_target_mwu}', Collocate Pattern='{pattern_collocate}' (Regex: `{collocate_pattern_str}`), Window=±{pattern_window} tokens.")
+        st.info(f"Pattern Search Active: Node='{primary_target_mwu}', Collocate Criteria: Word='{pattern_collocate}', POS='{pattern_collocate_pos}', Window=±{pattern_window} tokens.")
         
         for i in all_target_positions:
             start_index = max(0, i - pattern_window)
@@ -859,8 +895,17 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 if i <= j < i + primary_target_len:
                     continue # Skip the node word itself
                 
-                # Check token against the generated collocate regex
-                if collocate_regex.fullmatch(tokens_lower[j]):
+                token_lower = tokens_lower[j]
+                token_pos = df["pos"].iloc[j]
+                
+                # Check 1: Word/Pattern Match (Required if provided)
+                word_matches = (collocate_word_regex is None) or collocate_word_regex.fullmatch(token_lower)
+                
+                # Check 2: POS Tag Match (Required if provided)
+                pos_matches = (collocate_pos_regex is None) or (collocate_pos_regex.fullmatch(token_pos) if not is_raw_mode else False)
+
+                # Collocate must match ALL active criteria
+                if word_matches and pos_matches:
                     found_collocate = True
                     break
             
@@ -870,7 +915,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 collocate_count_in_context += 1 # Count of successful co-occurrences
                 
         if not final_positions:
-            st.warning(f"Pattern search found 0 instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within the window.")
+            st.warning(f"Pattern search found 0 instances of '{primary_target_mwu}' co-occurring with the specified collocate criteria within the window.")
             st.stop()
             
     else:
@@ -905,29 +950,46 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         formatted_line = []
         node_orig_tokens = []
         
-        # Re-initialize collocate regex if pattern search is active
-        if is_pattern_search_active:
+        # Re-initialize collocate regex objects for highlighting purposes
+        collocate_word_regex_highlight = None
+        if pattern_collocate:
             collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
-            collocate_regex = re.compile(collocate_pattern_str)
+            collocate_word_regex_highlight = re.compile(collocate_pattern_str)
+            
+        collocate_pos_regex_highlight = None
+        if pattern_collocate_pos and not is_raw_mode:
+            pos_patterns = [p.strip() for p in pattern_collocate_pos.split('|') if p.strip()]
+            full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
+            if full_pos_regex_list:
+                full_pos_regex = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
+                collocate_pos_regex_highlight = full_pos_regex
 
         for k, token in enumerate(full_line_tokens):
             token_index_in_corpus = kwic_start + k
             token_lower = token.lower()
+            token_pos = df["pos"].iloc[token_index_in_corpus]
             
             is_node_word = (i <= token_index_in_corpus < i + primary_target_len)
             
-            is_collocate = False
+            is_collocate_match = False
             # Check for collocate match *only* within the displayed KWIC window, if pattern search is active
             if is_pattern_search_active and not is_node_word:
-                 # Check token against the generated collocate regex
-                if collocate_regex.fullmatch(token_lower):
-                    is_collocate = True
+                 
+                 # Check 1: Word/Pattern Match (Required if provided)
+                 word_matches_highlight = (collocate_word_regex_highlight is None) or collocate_word_regex_highlight.fullmatch(token_lower)
+                
+                 # Check 2: POS Tag Match (Required if provided)
+                 pos_matches_highlight = (collocate_pos_regex_highlight is None) or (collocate_pos_regex_highlight.fullmatch(token_pos) if not is_raw_mode else False)
+                 
+                 # Collocate is highlighted if it matches ALL active criteria
+                 if word_matches_highlight and pos_matches_highlight:
+                    is_collocate_match = True
             
             if is_node_word:
                 # Node word remains unformatted in the context columns (but collected for the Node column)
                 node_orig_tokens.append(token)
                 
-            elif is_collocate:
+            elif is_collocate_match:
                 # Collocate must be BOLDED and BRIGHT YELLOW HIGHLIGHTED
                 html_token = f"<b><span style='color: black; background-color: #FFEA00;'>{token}</span></b>"
                 formatted_line.append(html_token)
@@ -954,11 +1016,26 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     if is_pattern_search_active:
         
-        # Recalculate collocate regex safely outside the loop if needed for expected freq
-        collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
-        collocate_regex = re.compile(collocate_pattern_str)
-        collocate_pattern_total_freq = sum(1 for token in tokens_lower if collocate_regex.fullmatch(token))
+        # Calculate expected frequency (total frequency of the collocate pattern/POS in the whole corpus)
+        # For mixed word/POS filters, total corpus frequency is complex. We calculate based on the single most restrictive filter.
+        
+        expected_metric = "Collocate Pattern/POS"
+        collocate_pattern_total_freq = 0
+        
+        if pattern_collocate: # Use word frequency as baseline if word pattern is present
+            collocate_pattern_str_for_freq = re.escape(pattern_collocate).replace(r'\*', '.*')
+            collocate_regex_for_freq = re.compile(collocate_pattern_str_for_freq)
+            collocate_pattern_total_freq = sum(1 for token in tokens_lower if collocate_regex_for_freq.fullmatch(token))
+            expected_metric = "Collocate Word Pattern"
 
+        elif pattern_collocate_pos and not is_raw_mode: # Use POS frequency if only POS is present
+            pos_patterns = [p.strip() for p in pattern_collocate_pos.split('|') if p.strip()]
+            full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
+            if full_pos_regex_list:
+                 full_pos_regex = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
+                 collocate_pattern_total_freq = sum(1 for pos in df["pos"] if full_pos_regex.fullmatch(pos))
+                 expected_metric = "Collocate POS Pattern"
+                 
         # 1. Node Word Frequency
         results_panel_data.append({
             "Metric": "Node Word Frequency",
@@ -968,13 +1045,13 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         # 2. Observed Collocate Frequency (The actual target count in the co-occurrence window)
         results_panel_data.append({
             "Metric": "Observed Collocate Frequency (Co-occurrence)",
-            "Value": pattern_collocate,
+            "Value": f"Word='{pattern_collocate}' POS='{pattern_collocate_pos}'",
             "Frequency": collocate_count_in_context 
         })
-        # 3. Expected Collocate Frequency (Total frequency of the Collocate Pattern in the corpus)
+        # 3. Expected Collocate Frequency (Total frequency of the most restrictive part of the Collocate Pattern in the corpus)
         results_panel_data.append({
-            "Metric": "Expected Collocate Frequency (Total Corpus)",
-            "Value": pattern_collocate,
+            "Metric": f"Expected Collocate Frequency (Total Corpus: {expected_metric})",
+            "Value": pattern_collocate if pattern_collocate else pattern_collocate_pos,
             "Frequency": collocate_pattern_total_freq
         })
         
@@ -992,7 +1069,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- Success message reflects pattern search ---
     if is_pattern_search_active:
-        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within ±{current_kwic_left} tokens.")
+        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with the specified criteria within ±{current_kwic_left} tokens.")
     else:
         st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
     # -----------------------------------------------------
@@ -1075,7 +1152,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             # Custom display for pattern search
             st.dataframe(results_df, use_container_width=True, hide_index=True)
             
-            st.caption(f"The total corpus frequency of the collocate pattern '{pattern_collocate}' is listed above.")
+            st.caption(f"The total corpus frequency of the collocate pattern is listed above.")
         else:
             if contains_wildcard:
                 st.subheader(f"Wildcard Results: '{target_input}' (Top 10)")
@@ -1274,7 +1351,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                 st.error(f"Invalid regular expression for Word/Regex filter: '{collocate_regex}'")
                 filtered_df = pd.DataFrame() 
                 
-        # 2a. POS Pattern Filter (NEW IMPLEMENTATION)
+        # 2a. POS Pattern Filter 
         if collocate_pos_regex_input and not is_raw_mode:
             # Convert user input like 'V*|NN*' into full regex: 'V.*|NN.*'
             pos_patterns = [p.strip() for p in collocate_pos_regex_input.split('|') if p.strip()]
