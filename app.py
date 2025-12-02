@@ -1,5 +1,7 @@
 # app.py
+# multi word searches OK
 # handles non tagged and non lemmatised text
+# TRYING to make wordcloud coloring meaningful for tagged text
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,6 +14,7 @@ import re
 import requests 
 import matplotlib.pyplot as plt 
 from wordcloud import WordCloud 
+from matplotlib.colors import to_rgb, rgb2hex # NEW: Import for color handling
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
@@ -27,6 +30,16 @@ BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only.txt",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
+}
+
+# Define color map constants globally
+POS_COLOR_MAP = {
+    'N': '#33CC33',  # Noun (Green)
+    'V': '#3366FF',  # Verb (Blue)
+    'J': '#FF33B5',  # Adjective (Pink)
+    'R': '#FFCC00',  # Adverb (Yellow)
+    '#': '#AAAAAA',  # Nonsense Tag / Raw (Gray)
+    'O': '#AAAAAA'   # Other (Gray)
 }
 
 # --- NEW FUNCTION: Cache Reset ---
@@ -84,25 +97,58 @@ def df_to_excel_bytes(df):
     buf.seek(0)
     return buf.getvalue()
 
-# --- Word Cloud Function ---
+# --- Custom Color Function for WordCloud ---
+def pos_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+    """
+    Custom function to map word frequency data to POS-based colors.
+    The POS tag is passed via the **kwargs dictionary as 'pos'.
+    """
+    pos_tag = kwargs.get('pos', 'O') # Default to 'O' (Other)
+    
+    pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
+    if pos_code not in POS_COLOR_MAP:
+        pos_code = 'O'
+        
+    hex_color = POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
+    
+    # wordcloud expects a color tuple (R, G, B) or an RGB string, not a Matplotlib color cycle
+    # We return the hex string here, as wordcloud can usually handle it when returned from a function.
+    return hex_color
+
+# --- Word Cloud Function (modified to accept POS tags) ---
 @st.cache_data
-def create_word_cloud(token_list):
-    """Generates a word cloud from a list of filtered tokens."""
-    # Join the list of tokens into a single string
-    text = " ".join(token_list)
+def create_word_cloud(freq_data, is_tagged_mode):
+    """Generates a word cloud from frequency data."""
+    
+    # Convert frequency data to a dictionary for WordCloud
+    word_freq_dict = freq_data.set_index('token')['frequency'].to_dict()
+    
+    # Map from word to its POS tag
+    word_to_pos = freq_data.set_index('token')['pos'].to_dict()
     
     # Define stopwords (must be in lowercase)
     stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
     
-    wordcloud = WordCloud(
+    wc = WordCloud(
         width=800,
         height=400,
         background_color='black',
-        colormap='viridis',
         stopwords=stopwords,
         min_font_size=10
-    ).generate(text)
+    )
     
+    if is_tagged_mode:
+        # Use custom color function that pulls the POS tag
+        def final_color_func(word, *args, **kwargs):
+            return pos_color_func(word, pos=word_to_pos.get(word, 'O'))
+
+        wc.recolor(color_func=final_color_func)
+        wordcloud = wc.generate_from_frequencies(word_freq_dict)
+        
+    else:
+        # Use generic colormap for raw mode
+        wordcloud = wc.generate_from_frequencies(word_freq_dict)
+
     # Plot the WordCloud image
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.imshow(wordcloud, interpolation='bilinear')
@@ -156,16 +202,6 @@ def create_pyvis_graph(target_word, coll_df):
     # 1. Add Target Node 
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
-    # Define colors for POS categories (Restored for tagged files)
-    pos_colors = {
-        'N': '#33CC33',  # Noun (Green)
-        'V': '#3366FF',  # Verb (Blue)
-        'J': '#FF33B5',  # Adjective (Pink)
-        'R': '#FFCC00',  # Adverb (Yellow)
-        '#': '#AAAAAA',  # Nonsense Tag / Raw (Gray)
-        'O': '#AAAAAA'   # Other (Gray)
-    }
-    
     # 2. Add Collocate Nodes and Edges
     for _, row in coll_df.iterrows():
         collocate = row['Collocate']
@@ -183,7 +219,7 @@ def create_pyvis_graph(target_word, coll_df):
         elif pos_code not in ['N', 'V', 'J', 'R']:
             pos_code = 'O'
         
-        color = pos_colors.get(pos_code, pos_colors['O'])
+        color = POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
         
         # Node size based on LL score
         if ll_range > 0:
@@ -437,6 +473,14 @@ def compute_sttr_tokens(tokens_list, chunk=1000):
 
 sttr_score = compute_sttr_tokens(tokens_lower_filtered)
 
+# Frequency dataframe needed for WordCloud and Top Frequency table
+freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
+if is_raw_mode:
+    freq_df_filtered['pos'] = '##'
+    
+freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+
+
 col1, col2 = st.columns([2,1])
 with col1:
     st.subheader("Corpus summary")
@@ -446,24 +490,31 @@ with col1:
     })
     st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
-    # --- Word Cloud Display ---
+    # --- Word Cloud Display (Conditional Coloring) ---
     st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
-    if tokens_lower_filtered:
-        wordcloud_fig = create_word_cloud(tokens_lower_filtered)
+    if not freq_df.empty:
+        wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode) # Pass the full frequency df and the mode
+        
+        # Display the legend key if in tagged mode
+        if not is_raw_mode:
+            st.markdown(
+                """
+                **Word Cloud Color Key (POS):**
+                | Color | POS Prefix |
+                | :--- | :--- |
+                | <span style="color:#33CC33;">**Green**</span> | Noun (N*) |
+                | <span style="color:#3366FF;">**Blue**</span> | Verb (V*) |
+                | <span style="color:#FF33B5;">**Pink**</span> | Adjective (J*) |
+                | <span style="color:#FFCC00;">**Yellow**</span> | Adverb (R*) |
+                """
+            , unsafe_allow_html=True)
+            
         st.pyplot(wordcloud_fig)
     else:
         st.info("Not enough tokens to generate a word cloud.")
 
 with col2:
     st.subheader("Top frequency (token / POS / freq) (Punctuation skipped)")
-    
-    freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
-    
-    # Only suppress POS tags if RAW mode was detected
-    if is_raw_mode:
-         freq_df_filtered['pos'] = '##'
-
-    freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
     
     freq_head = freq_df.head(10).copy()
     freq_head.insert(0,"No", range(1, len(freq_head)+1))
