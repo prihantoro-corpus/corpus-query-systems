@@ -100,6 +100,18 @@ def df_to_excel_bytes(df):
     buf.seek(0)
     return buf.getvalue()
 
+# --- MISSING FUNCTION RESTORED: Standardized Type-Token Ratio ---
+def compute_sttr_tokens(tokens_list, chunk=1000):
+    if len(tokens_list) < chunk:
+        return (len(set(tokens_list)) / len(tokens_list)) if len(tokens_list) > 0 else 0.0
+    ttrs = []
+    for i in range(0, len(tokens_list), chunk):
+        c = tokens_list[i:i+chunk]
+        if not c: continue
+        ttrs.append(len(set(c)) / len(c))
+    
+    return (sum(ttrs)/len(ttrs)) if ttrs else 0.0
+
 # --- Word Cloud Function ---
 @st.cache_data
 def create_word_cloud(freq_data, is_tagged_mode):
@@ -565,12 +577,14 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     kwic_right = st.session_state.get('kwic_right', 7)
     target = target_input.lower()
     
-    # --- MWU/WILDCARD RESOLUTION (Same as before) ---
+    # --- MWU/WILDCARD RESOLUTION ---
     
     primary_target_mwu = None
     primary_target_tokens = []
     primary_target_len = 0
     wildcard_freq_df = pd.DataFrame()
+    
+    # FIX: Initialize primary target variables to prevent NameError
     
     if contains_wildcard:
         
@@ -650,6 +664,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         max_kwic_lines = 10
         total_kwic_lines = 0
         
+        # Iterate over the top query results (MWU variations)
         for _, row in wildcard_freq_df.iterrows():
             if total_kwic_lines >= max_kwic_lines:
                 break
@@ -658,17 +673,22 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             mwu_tokens = mwu.split()
             mwu_len = len(mwu_tokens)
             
+            # Find all positions for this specific MWU variation
             mwu_positions = []
             for i in range(len(tokens_lower) - mwu_len + 1):
                 if tokens_lower[i:i + mwu_len] == mwu_tokens:
                     mwu_positions.append(i)
             
+            # Determine how many lines to take from this MWU (min of its freq, and lines remaining)
             lines_to_take = min(1, max_kwic_lines - total_kwic_lines, len(mwu_positions))
             
+            # Take a sample (the first 'lines_to_take' occurrences)
             for i in mwu_positions[:lines_to_take]:
+                # i is the index of the first token of the MWU
                 left = tokens_lower[max(0, i - kwic_left):i]
                 right = tokens_lower[i + mwu_len:i + mwu_len + kwic_right]
                 
+                # Node is the sequence of original tokens
                 node_orig_tokens = df["token"].iloc[i:i + mwu_len].tolist()
                 node_orig = " ".join(node_orig_tokens)
                 
@@ -733,7 +753,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
     target = target_input.lower()
 
-    # --- MWU/WILDCARD RESOLUTION (Same as Concordance, but focused on single primary target) ---
+    # --- MWU/WILDCARD RESOLUTION (Focus on single primary target) ---
     
     # Re-run MWU/Wildcard resolution to establish primary_target_mwu and freq
     primary_target_mwu = None
@@ -741,6 +761,8 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     primary_target_len = 0
     
     if contains_wildcard:
+        wildcard_matches = []
+        
         # Run resolution logic to get the most frequent match
         if ' ' not in target:
             pattern = re.escape(target).replace(r'\*', '.*')
@@ -939,7 +961,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.markdown("---")
     st.subheader("Download Full Results")
     
-    # Download logic for Collocation results... (omitted for brevity, assume similar to original)
+    # Download logic for Collocation results... 
     st.download_button(
         "⬇ Download full LL results (xlsx)", 
         data=df_to_excel_bytes(stats_df_sorted), 
