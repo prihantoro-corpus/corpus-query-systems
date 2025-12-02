@@ -95,12 +95,8 @@ def create_pyvis_graph(target_word, coll_df):
     Creates a Pyvis interactive network graph for the top collocates.
     Uses a temporary file path to satisfy Pyvis requirements.
     
-    MODIFICATIONS:
-    1. Central Node Color: Orange -> Yellow.
-    2. Collocate Node Colors: Updated to better match requested colors (Green, Blue, Pink, Yellow, Gray).
-    3. Edge Thickness: Fixed (all thick), no scaling.
-    4. Collocate Node Size: Scales with LL score (Thicker = Stronger Collocation).
-    5. Collocate Font Size: Increased overall font size.
+    Revised per user requests: Yellow target, LL-scaled bubble size, thick edges, large font.
+    Fixed: JSONDecodeError by removing comments from JSON string in net.set_options.
     """
     # Initialize Pyvis network
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
@@ -110,18 +106,18 @@ def create_pyvis_graph(target_word, coll_df):
     min_ll = coll_df['LL'].min()
     ll_range = max_ll - min_ll
     
-    # New Pyvis options, including physics and font size increase
+    # New Pyvis options (JSON MUST NOT contain // comments)
     net.set_options(f"""
     var options = {{
       "nodes": {{
         "borderWidth": 2,
         "size": 15,
         "font": {{
-            "size": 30 // Increased font size for all nodes (approx 4x larger than default 14)
+            "size": 30
         }}
       }},
       "edges": {{
-        "width": 5, // Fixed thick width
+        "width": 5,
         "smooth": {{
           "type": "dynamic"
         }}
@@ -141,10 +137,9 @@ def create_pyvis_graph(target_word, coll_df):
     """)
     
     # 1. Add Target Node (large and central)
-    # Changed from '#FF5733' (Orange) to '#FFFF00' (Yellow)
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
-    # Define colors for POS categories (Updated)
+    # Define colors for POS categories
     # Noun (Green), Verb (Blue), Adjective (Pink), Adverb (Yellow), Other (Gray)
     pos_colors = {
         'N': '#33CC33',  # Green
@@ -170,7 +165,7 @@ def create_pyvis_graph(target_word, coll_df):
         else:
             node_size = 25
             
-        # Edge width is now fixed in net.set_options (width: 5)
+        # Edge width is fixed (width=5) as requested
         edge_width = 5 
         
         # Collocate Nodes
@@ -300,10 +295,9 @@ unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
 def compute_sttr_tokens(tokens_list, chunk=1000):
     """
     Computes the Standardized Type-Token Ratio (STTR) by averaging TTR over fixed chunks.
-    CORRECTION: Removed final multiplication by 1000 to return a score between 0 and 1.
+    STTR is a ratio between 0 and 1.
     """
     if len(tokens_list) < chunk:
-        # Avoid division by zero if list is empty after filtering
         # For a short list, return the TTR itself (which is between 0 and 1)
         return (len(set(tokens_list)) / len(tokens_list)) if len(tokens_list) > 0 else 0.0
     ttrs = []
@@ -312,7 +306,7 @@ def compute_sttr_tokens(tokens_list, chunk=1000):
         if not c: continue
         ttrs.append(len(set(c)) / len(c))
     
-    # Corrected return: returns the average TTR (STTR) which is a ratio between 0 and 1.
+    # Returns the average TTR (STTR) as a ratio between 0 and 1.
     return (sum(ttrs)/len(ttrs)) if ttrs else 0.0
 
 sttr_score = compute_sttr_tokens(tokens_lower_filtered)
@@ -321,9 +315,7 @@ col1, col2 = st.columns([2,1])
 with col1:
     st.subheader("Corpus summary")
     info_df = pd.DataFrame({
-        # Updated Metric description
         "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, chunk=1000)"],
-        # Display the STTR value
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
     # Hide index
