@@ -226,11 +226,11 @@ def load_corpus_file(file_source, sep=r"\s+"):
             
         # Continue with structural check
         is_vertical = False
+        
+        # FIX: Check only for the number of columns (3+) to detect a tagged file
         if df_attempt.shape[1] >= 3:
-            df_check = df_attempt.iloc[:, :3].copy()
-            # Heuristic: if unique tokens are significantly less than total rows, it's structured
-            if df_check.iloc[:, 0].nunique() < len(df_check) * 0.95 and len(df_check) > 5:
-                is_vertical = True
+            # Assume 3+ columns means it's a tagged vertical file
+            is_vertical = True
             
         if is_vertical:
             # --- PROCESS TAGGED/VERTICAL FILE ---
