@@ -48,7 +48,8 @@ KWIC_INITIAL_DISPLAY_HEIGHT = 10 # Approximate lines for initial view
 
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
-    "Europarl 1M Only": "https://github.com/prihantoro-corpus/corpus-query-systems/blob/main/europarl_en-1M-only%20v2.txt",
+    # FIX: Corrected URL to raw content
+    "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
 
@@ -364,7 +365,10 @@ def load_corpus_file(file_source, sep=r"\s+"):
         if df_attempt is not None and df_attempt.shape[1] >= 3:
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
-            df["token"] = df["token"].fillna("").astype(str)
+            
+            # FIX: Explicitly strip all surrounding whitespace (including newlines) from tokens
+            df["token"] = df["token"].fillna("").astype(str).str.strip() 
+            
             df["pos"] = df["pos"].fillna("###").astype(str)
             df["lemma"] = df["lemma"].fillna("###").astype(str)
             df["_token_low"] = df["token"].str.lower()
@@ -438,9 +442,8 @@ with st.sidebar:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
     elif selected_corpus_name != "Select built-in corpus...":
-        # --- FIX: Corrected typo from BUTO_IN_CORPORA to BUILT_IN_CORPORA ---
+        # FIX: Corrected URL to point to raw content to avoid HTML parsing errors
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
-        # -------------------------------------------------------------------
         with st.spinner(f"Downloading {selected_corpus_name}..."):
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
@@ -895,6 +898,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 if i <= j < i + primary_target_len:
                     continue # Skip the node word itself
                 
+                token_index_in_corpus = j
                 token_lower = tokens_lower[j]
                 token_pos = df["pos"].iloc[j]
                 
@@ -966,6 +970,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
         for k, token in enumerate(full_line_tokens):
             token_index_in_corpus = kwic_start + k
+            # token_lower uses the cleaned token, token is already stripped on load
             token_lower = token.lower()
             token_pos = df["pos"].iloc[token_index_in_corpus]
             
@@ -1498,6 +1503,3 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     )
 
 st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text, adjusting analysis depth automatically.")
-
-
-
