@@ -302,16 +302,12 @@ with st.sidebar:
     if uploaded_file is not None:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
-        is_raw_mode = False # Assume uploaded file intended to be vertical first
     elif selected_corpus_name != "Select built-in corpus...":
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name]
         with st.spinner(f"Downloading {selected_corpus_name}..."):
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
-        is_raw_mode = False # Assume built-in files are intended to be vertical first
-    else:
-        is_raw_mode = False
-
+    
     if corpus_source is None:
         st.info("Please select a corpus or upload a file to proceed.")
         st.stop()
@@ -391,7 +387,7 @@ with col2:
     
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
     
-    # Set POS to '##' for display if raw text was loaded
+    # FIX: Use the reliable is_raw_mode flag to conditionally suppress POS tags.
     if is_raw_mode:
          freq_df_filtered['pos'] = '##'
 
@@ -587,7 +583,6 @@ if analyze_btn and target_input:
             with cols_full[1]:
                 st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq})**")
                 st.dataframe(full_mi, use_container_width=True, hide_index=True)
-
 
             # ---------- Download Buttons ----------
             st.markdown("---")
