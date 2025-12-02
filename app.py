@@ -202,8 +202,23 @@ def create_pyvis_graph(target_word, coll_df):
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'color': 'black'})
     
     # Define directional bias: large absolute X value forces initial position
-    LEFT_BIAS = -500 
-    RIGHT_BIAS = 500
+    # The bias depends on the dominant direction of the input DataFrame's content
+    if coll_df.empty:
+        LEFT_BIAS = -500 
+        RIGHT_BIAS = 500
+    else:
+        # Check the direction of the first node to set the bias. 
+        # If the input DF only contains 'L' nodes, they all get the same bias.
+        first_direction = coll_df['Direction'].iloc[0]
+        if first_direction == 'L':
+             LEFT_BIAS = -500 
+             RIGHT_BIAS = -500 # Force R nodes (if any) to the left side as well, but they shouldn't exist in a filtered DF
+        elif first_direction == 'R':
+             LEFT_BIAS = 500
+             RIGHT_BIAS = 500 # Force L nodes (if any) to the right side as well, but they shouldn't exist in a filtered DF
+        else: # Both/Mixed case (for safety)
+             LEFT_BIAS = -500 
+             RIGHT_BIAS = 500
 
     # 2. Add Collocate Nodes and Edges (Directionally placed)
     for index, row in coll_df.iterrows():
@@ -217,8 +232,8 @@ def create_pyvis_graph(target_word, coll_df):
         obs_l = row.get('Obs_L', 0)
         obs_r = row.get('Obs_R', 0)
         
-        # Determine initial X position based on dominant direction
-        x_position = LEFT_BIAS if direction == 'L' else RIGHT_BIAS
+        # Determine initial X position based on dominant direction, using the calculated bias
+        x_position = LEFT_BIAS if direction in ('L', 'B') else RIGHT_BIAS
 
         # Determine color and size
         pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
@@ -235,7 +250,7 @@ def create_pyvis_graph(target_word, coll_df):
         else:
             node_size = 25
             
-        # Tooltip now includes directional counts
+        # Tooltip includes directional counts
         tooltip_title = (
             f"POS: {row['POS']}\n"
             f"Obs: {observed} (Left: {obs_l}, Right: {obs_r})\n"
@@ -992,113 +1007,71 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     else:
         st.warning("No collocates found.")
         st.stop()
+        
+    # --- Prepare Directional DataFrames for Graphing (Top N) ---
 
-    # --- Apply max_collocates setting ---
-    network_df = stats_df_sorted.head(max_collocates).copy()
-
-    full_ll = stats_df_sorted.head(max_collocates).copy()
-    # Ensure all required directional columns exist for the UI table display
-    if 'Direction' not in full_ll.columns:
-        full_ll['Direction'] = 'B'
-        full_ll['Obs_L'] = 0
-        full_ll['Obs_R'] = 0
-
-    full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
+    # Left Collocates: Dominant Left or Equal (B), ranked by LL
+    left_directional_df = stats_df_sorted[stats_df_sorted['Direction'].isin(['L', 'B'])].head(max_collocates).copy()
     
-    full_mi_all = stats_df_filtered[stats_df_filtered["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
-    full_mi = full_mi_all.head(max_collocates).copy()
-    
-    if 'Direction' not in full_mi.columns:
-        full_mi['Direction'] = 'B'
-        full_mi['Obs_L'] = 0
-        full_mi['Obs_R'] = 0
+    # Right Collocates: Dominant Right or Equal (B), ranked by LL
+    right_directional_df = stats_df_sorted[stats_df_sorted['Direction'].isin(['R', 'B'])].head(max_collocates).copy()
 
-    full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
-    
-    # --- Collocation Network Graph ---
+    # --- LEFT COLLOCATE GRAPH ---
     st.markdown("---")
-    st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
+    st.subheader(f"Interactive Collocation Network: Left Collocates Only (Top {len(left_directional_df)} LL)")
     
-    # Display note if filters were applied
-    filter_list = [collocate_regex, pos_wildcard_regex, collocate_lemma]
-    filter_count = sum(1 for f in filter_list if f or (f is selected_pos_tags and selected_pos_tags))
+    if not left_directional_df.empty:
+        network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
+        components.html(network_html_left, height=450)
+        st.markdown(
+            """
+            **Left Collocates Graph Key:** Shows collocates that **precede** the target word (Direction 'L' or 'B'), placed on the left side.
+            """
+        )
+    else:
+        st.info("No Left-dominant collocates found that meet the frequency or filter criteria.")
+
+    # --- RIGHT COLLOCATE GRAPH ---
+    st.markdown("---")
+    st.subheader(f"Interactive Collocation Network: Right Collocates Only (Top {len(right_directional_df)} LL)")
     
-    if filter_count > 0:
-        st.info(f"Filters Applied: Showing collocates matching {filter_count} criteria.")
+    if not right_directional_df.empty:
+        network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
+        components.html(network_html_right, height=450)
+        st.markdown(
+            """
+            **Right Collocates Graph Key:** Shows collocates that **follow** the target word (Direction 'R' or 'B'), placed on the right side.
+            """
+        )
+    else:
+        st.info("No Right-dominant collocates found that meet the frequency or filter criteria.")
     
-    # Call create_pyvis_graph with updated directional data
-    network_html = create_pyvis_graph(
-        primary_target_mwu, 
-        network_df
-    )
-    
-    components.html(network_html, height=450)
-    
+    # --- Graph General Key ---
+    st.markdown("---")
     st.markdown(
         """
-        **Graph Key (POS Tags Restored):**
+        **General Graph Key:**
         * Central Node (Target): **Yellow**, fixed at the center.
         * Collocate Node Color: Noun (N) **Green**, Verb (V) **Blue**, Adjective (J) **Pink**, Adverb (R) **Yellow**. Others/Raw are **Gray**.
-        * **Directional Placement:** Nodes are placed on the **Left** (preceding) or **Right** (following) side of the target based on their **dominant frequency** (Observed L vs. R).
         * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation).
         * Hover over collocate nodes for details (POS, Total Observed Freq, Directional Counts, LL score).
         """
     )
     st.markdown("---")
     
-    # --- Conditional POS Table Display ---
-    if not is_raw_mode:
-        def category_df(prefixes):
-            mask = pd.Series(False, index=stats_df_filtered.index)
-            for pref in prefixes:
-                mask = mask | stats_df_filtered["POS"].str.startswith(pref, na=False)
-            sub = stats_df_filtered[mask].copy()
-            # Ensure directional columns exist for sub-Dfs
-            if 'Direction' not in sub.columns:
-                sub['Direction'] = 'B'
-                sub['Obs_L'] = 0
-                sub['Obs_R'] = 0
-                
-            # Use max_collocates for category tables as well
-            ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(max_collocates).copy()
-            ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
-            mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(max_collocates).copy()
-            mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
-            return ll_sub, mi_sub
-
-        ll_N, mi_N = category_df(("N",))
-        ll_V, mi_V = category_df(("V",))
-        ll_J, mi_J = category_df(("J",))
-        ll_R, mi_R = category_df(("R",))
-        
-        # Display up to 10 rows for visual clarity in the UI, even if max_collocates > 10
-        display_rows = min(10, max_collocates)
-
-        st.subheader("Log-Likelihood — Top 10 by POS (Includes Directional Counts)")
-        cols = st.columns(4, gap="small")
-        
-        with cols[0]:
-            st.markdown(f"**N (N*) — LL (Top {display_rows})**")
-            st.dataframe(ll_N.head(display_rows), use_container_width=True, hide_index=True)
-        with cols[1]:
-            st.markdown(f"**V (V*) — LL (Top {display_rows})**")
-            st.dataframe(ll_V.head(display_rows), use_container_width=True, hide_index=True)
-        with cols[2]:
-            st.markdown(f"**J (J*) — LL (Top {display_rows})**")
-            st.dataframe(ll_J.head(display_rows), use_container_width=True, hide_index=True)
-        with cols[3]:
-            st.markdown(f"**R (R*) — LL (Top {display_rows})**")
-            st.dataframe(ll_R.head(display_rows), use_container_width=True, hide_index=True)
-        
-        st.markdown("---")
-
-    else:
-        st.info("POS-specific collocation tables (N, V, J, R) are skipped in RAW/LINEAR mode.")
+    # --- Prepare Full Tables ---
+    network_df = stats_df_sorted.head(max_collocates).copy()
+    full_ll = stats_df_sorted.copy()
+    full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
     
+    full_mi_all = stats_df_filtered[stats_df_filtered["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
+    full_mi = full_mi_all.head(max_collocates).copy()
+    full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
+
     # ---------- Full Collocation Tables (All Tags) ----------
     display_rows = min(10, max_collocates)
-    st.subheader(f"Top {display_rows} Collocations (All Tags)")
+    st.subheader(f"Top {display_rows} Collocations (All Tags - Directional Detail)")
     
     cols_full = st.columns(2, gap="large")
     
@@ -1116,13 +1089,13 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Download logic for Collocation results... 
     st.download_button(
-        f"⬇ Download full LL results (xlsx) (Top {max_collocates} used in tables)", 
+        f"⬇ Download full LL results (xlsx)", 
         data=df_to_excel_bytes(stats_df_sorted), 
         file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full_filtered.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     st.download_button(
-        f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx) (Top {max_collocates} used in tables)", 
+        f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
         data=df_to_excel_bytes(full_mi_all), 
         file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}_filtered.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
