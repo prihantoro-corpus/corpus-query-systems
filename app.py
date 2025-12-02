@@ -154,11 +154,91 @@ def create_word_cloud(freq_data, is_tagged_mode):
     
     return fig
 
-@st.cache_data
-def create_pyvis_graph(target_word, coll_df):
+
+# --- NEW: Contextual Lookup Function ---
+def get_collocate_context(target_word, collocate_word, corpus_df, target_positions, coll_window, max_lines=5):
     """
-    Creates a Pyvis interactive network graph. 
-    Node colors are based on the first letter of the POS tag, if available.
+    Finds and formats up to `max_lines` concordance lines where the target and
+    collocate appear within the collocation window.
+    """
+    # Use lowercase versions for matching
+    target_lower = target_word.lower()
+    collocate_lower = collocate_word.lower()
+    
+    context_lines = []
+    
+    # Find all collocate instances (token, index_in_corpus) that were part of the analysis
+    collocate_instances = []
+    
+    # Iterate over every position of the target word
+    for i in target_positions:
+        
+        target_len = len(target_word.split())
+        
+        # Define the window boundaries in the corpus
+        start_index = max(0, i - coll_window)
+        end_index = min(len(corpus_df), i + target_len + coll_window) 
+        
+        # Iterate through the tokens in that window (excluding the target itself)
+        for j in range(start_index, end_index):
+            if i <= j < i + target_len:
+                continue # Skip the target word(s)
+            
+            # Check if the token at index j is the collocate we are looking for
+            if corpus_df["_token_low"].iloc[j] == collocate_lower:
+                
+                # --- Format the Context Line ---
+                
+                # Context tokens (for display, use tokens from the original DF for accurate case/punc)
+                # Display context window size can be fixed (e.g., 5 tokens around the event)
+                display_window = 10 
+                display_start = max(0, j - display_window)
+                display_end = min(len(corpus_df), j + display_window + 1)
+                
+                line_tokens = corpus_df["token"].iloc[display_start:display_end].tolist()
+                line_tokens_lower = [t.lower() for t in line_tokens]
+                
+                # Identify relative positions of target and collocate within line_tokens
+                # This part is tricky due to potential overlap. We search the line_tokens_lower for both.
+                
+                formatted_tokens = []
+                current_idx = display_start
+                
+                for k, token in enumerate(line_tokens):
+                    token_lower = token.lower()
+                    
+                    if current_idx == j:
+                        # This is the collocate
+                        formatted_tokens.append(f"[{token}]")
+                    elif current_idx == i:
+                        # This is the start of the node word (target)
+                        formatted_tokens.append(f"**{token}**")
+                    elif target_len > 1 and i < current_idx < i + target_len:
+                        # This is part of a multi-word target node
+                        formatted_tokens.append(f"**{token}**")
+                    else:
+                        formatted_tokens.append(token)
+                    
+                    current_idx += 1
+                
+                # Join the tokens to form the final line
+                formatted_line = " ".join(formatted_tokens)
+                
+                # Only add if we haven't reached the limit
+                if formatted_line not in context_lines:
+                    context_lines.append(formatted_line)
+                
+                if len(context_lines) >= max_lines:
+                    return context_lines
+
+    return context_lines
+
+
+@st.cache_data
+def create_pyvis_graph(target_word, coll_df, full_corpus_df, target_positions, coll_window):
+    """
+    Creates a Pyvis interactive network graph, embedding contextual concordance
+    lines into the collocate node tooltips.
     """
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
     
@@ -195,21 +275,36 @@ def create_pyvis_graph(target_word, coll_df):
     }}
     """)
     
+    # 1. Add Target Node 
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
+    # 2. Add Collocate Nodes and Edges
     for _, row in coll_df.iterrows():
         collocate = row['Collocate']
         ll_score = row['LL']
         observed = row['Observed']
-        
         pos_tag = row['POS']
+        
+        # --- Contextual Concordance Lookup ---
+        # Note: We pass the *full* corpus df and all target positions for accurate lookup
+        context_lines = get_collocate_context(target_word, collocate, full_corpus_df, target_positions, coll_window, max_lines=5)
+        
+        # Format the tooltip title (HTML required for line breaks and formatting)
+        tooltip_html = f"<b>POS:</b> {pos_tag}<br>"
+        tooltip_html += f"<b>Obs:</b> {observed}<br>"
+        tooltip_html += f"<b>LL:</b> {ll_score:.2f}<br>"
+        tooltip_html += "<hr>"
+        tooltip_html += "<b>Top 5 Contexts:</b><br>"
+        
+        if context_lines:
+            tooltip_html += "<br>".join(context_lines)
+        else:
+            tooltip_html += "Context not found or out of sample."
+        
+        # Determine color and size (same logic as before)
         pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
-        
-        if pos_tag.startswith('##'):
-            pos_code = '#'
-        elif pos_code not in ['N', 'V', 'J', 'R']:
-            pos_code = 'O'
-        
+        if pos_tag.startswith('##'): pos_code = '#'
+        elif pos_code not in ['N', 'V', 'J', 'R']: pos_code = 'O'
         color = POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
         
         if ll_range > 0:
@@ -218,9 +313,11 @@ def create_pyvis_graph(target_word, coll_df):
         else:
             node_size = 25
             
-        net.add_node(collocate, label=collocate, size=node_size, color=color, title=f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}")
+        # Add node with rich HTML title/tooltip
+        net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_html)
         net.add_edge(target_word, collocate, value=ll_score, width=5, title=f"LL: {ll_score:.2f}")
 
+    # --- Use a Temporary HTML File ---
     html_content = ""
     temp_path = None
     try:
@@ -859,7 +956,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     # Helper to convert pattern tokens to regex
     def token_to_regex(token):
         if token == '+':
-            # Obligatory token (one or more non-space character, followed by a space)
+            # Obligatory token (one or more non-space character)
             return r'[^ ]+' 
         elif token == '*' or token == '**':
             # Optional token (zero or more non-space characters)
@@ -904,44 +1001,50 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                         
                     # 2b. Prepare the pattern template for regex matching
                     
-                    # Split the rule by the target node marker '$'
-                    rule_parts_by_node = rule.split('$')
-                    if len(rule_parts_by_node) != 2: continue # Must contain exactly one $ for now
-                    pre_node_rule = rule_parts_by_node[0].strip()
-                    post_node_rule = rule_parts_by_node[1].strip()
+                    # Replace the node marker $ with the actual node word
+                    rule_with_node = rule.replace('$', primary_target_mwu)
+                    
+                    # Split the rule by the collocate slot
+                    rule_parts_by_collocate = rule_with_node.split(collocate_placeholder)
+                    if len(rule_parts_by_collocate) != 2: continue
+                    
+                    # The parts contain the remaining context segments that need matching
+                    pre_coll_context_rule = rule_parts_by_collocate[0].strip()
+                    post_coll_context_rule = rule_parts_by_collocate[1].strip()
+                    
                     
                     # --- Pre-Target Context Check (Collocate is to the left of the Target) ---
-                    if collocate_relative_index < target_relative_start and pre_node_rule.find(collocate_placeholder) != -1:
-                        # The rule is defined as: (context) [collocate] (context) $
+                    # Collocate is before the node (j < i)
+                    if collocate_relative_index < target_relative_start:
                         
-                        # The pattern only needs to match the tokens between start_index and i (target start)
+                        # The rule must contain the node ($) in the post-collocate context
+                        if primary_target_mwu not in post_coll_context_rule: continue
                         
-                        # 1. Split pre_node_rule at the collocate slot
-                        pre_coll_context, post_coll_context = pre_node_rule.split(collocate_placeholder, 1)
+                        # Context to match BEFORE collocate (j): pre_coll_context_rule
+                        pre_coll_tokens = [t.lower() for t in pre_coll_context_rule.split()]
                         
-                        pre_coll_tokens = [t.lower() for t in pre_coll_context.split()]
-                        post_coll_tokens = [t.lower() for t in post_coll_context.split()]
-                        
-                        # --- Check the tokens required BEFORE the collocate ---
+                        # Context to match AFTER collocate (j+1 to i): post_coll_context_rule (up to node)
+                        post_coll_tokens_up_to_node = [t.lower() for t in post_coll_context_rule.split(primary_target_mwu)[0].strip().split()]
+
+                        # 1. Match pre-collocate tokens
                         pre_context_length = len(pre_coll_tokens)
                         context_start_for_rule = j - pre_context_length
                         
                         if context_start_for_rule >= start_index:
                             match_context = tokens_lower[context_start_for_rule:j]
                             required_pattern = [token_to_regex(t) for t in pre_coll_tokens]
-                            
                             match_string = ' '.join(match_context)
                             pattern_string = '^' + ' '.join(required_pattern) + '$'
                             
                             if re.match(pattern_string, match_string, re.IGNORECASE):
-                                # --- Check the tokens required AFTER the collocate ---
-                                post_context_length = len(post_coll_tokens)
+                                
+                                # 2. Match post-collocate tokens (up to target)
+                                post_context_length = len(post_coll_tokens_up_to_node)
                                 context_end_for_rule = j + 1 + post_context_length
                                 
-                                if context_end_for_rule <= i: # Must end before the target
+                                if context_end_for_rule == i: # Must end exactly at the start of the target
                                     match_context = tokens_lower[j+1:context_end_for_rule]
-                                    required_pattern = [token_to_regex(t) for t in post_coll_tokens]
-                                    
+                                    required_pattern = [token_to_regex(t) for t in post_coll_tokens_up_to_node]
                                     match_string = ' '.join(match_context)
                                     pattern_string = '^' + ' '.join(required_pattern) + '$'
                                     
@@ -950,35 +1053,37 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                                         break
 
                     # --- Post-Target Context Check (Collocate is to the right of the Target) ---
-                    elif collocate_relative_index >= target_relative_end and post_node_rule.find(collocate_placeholder) != -1:
-                        # The rule is defined as: $ (context) [collocate] (context)
+                    # Collocate is after the node (j >= i + target_len)
+                    elif collocate_relative_index >= target_relative_end:
                         
-                        # 1. Split post_node_rule at the collocate slot
-                        pre_coll_context, post_coll_context = post_node_rule.split(collocate_placeholder, 1)
+                        # The rule must contain the node ($) in the pre-collocate context
+                        if primary_target_mwu not in pre_coll_context_rule: continue
                         
-                        pre_coll_tokens = [t.lower() for t in pre_coll_context.split()]
-                        post_coll_tokens = [t.lower() for t in post_coll_context.split()]
+                        # Context to match BEFORE collocate (i + target_len to j): pre_coll_context_rule (after node)
+                        pre_coll_tokens_after_node = [t.lower() for t in pre_coll_context_rule.split(primary_target_mwu)[1].strip().split()]
+                        
+                        # Context to match AFTER collocate (j+1 to end_index): post_coll_context_rule
+                        post_coll_tokens = [t.lower() for t in post_coll_context_rule.split()]
 
-                        # --- Check the tokens required BEFORE the collocate ---
-                        pre_context_length = len(pre_coll_tokens)
+                        # 1. Match pre-collocate tokens (after target)
+                        pre_context_length = len(pre_coll_tokens_after_node)
                         context_start_for_rule = j - pre_context_length
                         
-                        if context_start_for_rule >= i + primary_target_len: # Must start after the target
+                        if context_start_for_rule == i + primary_target_len: # Must start exactly at the end of the target
                             match_context = tokens_lower[context_start_for_rule:j]
-                            required_pattern = [token_to_regex(t) for t in pre_coll_tokens]
-                            
+                            required_pattern = [token_to_regex(t) for t in pre_coll_tokens_after_node]
                             match_string = ' '.join(match_context)
                             pattern_string = '^' + ' '.join(required_pattern) + '$'
                             
                             if re.match(pattern_string, match_string, re.IGNORECASE):
-                                # --- Check the tokens required AFTER the collocate ---
+                                
+                                # 2. Match post-collocate tokens (after collocate)
                                 post_context_length = len(post_coll_tokens)
                                 context_end_for_rule = j + 1 + post_context_length
                                 
-                                if context_end_for_rule <= end_index: # Must end before the window limit
+                                if context_end_for_rule <= end_index:
                                     match_context = tokens_lower[j+1:context_end_for_rule]
                                     required_pattern = [token_to_regex(t) for t in post_coll_tokens]
-                                    
                                     match_string = ' '.join(match_context)
                                     pattern_string = '^' + ' '.join(required_pattern) + '$'
                                     
@@ -1094,7 +1199,15 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     if filter_count > 0:
         st.info(f"Filters Applied: Showing collocates matching {filter_count} criteria.")
     
-    network_html = create_pyvis_graph(primary_target_mwu, network_df)
+    # *** KEY CHANGE: Pass required context data to the Pyvis function ***
+    network_html = create_pyvis_graph(
+        primary_target_mwu, 
+        network_df, 
+        full_corpus_df=df, 
+        target_positions=primary_target_positions, 
+        coll_window=coll_window
+    )
+    
     components.html(network_html, height=450)
     
     st.markdown(
@@ -1104,7 +1217,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         * Collocate Node Color: Noun (Prefix 'N') **Green**, Verb (Prefix 'V') **Blue**, Adjective (Prefix 'J') **Pink**, Adverb (Prefix 'R') **Yellow**. All other tags/raw text (`##`) are **Gray**.
         * Edge Thickness: **All Thick** (Uniform)
         * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation)
-        * Hover over nodes for details (POS, Observed Freq, LL score).
+        * **Hover over collocate nodes** to see detailed statistics and **Top 5 Contextual Examples** (Target word is **bold**, collocate is \[bracketed]).
         """
     )
     st.markdown("---")
