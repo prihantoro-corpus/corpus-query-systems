@@ -161,6 +161,7 @@ def create_coordinate_chart(chart_df):
     """
     Creates an Altair Coordinate Chart (Upside-Down T).
     Vertical (Y): LL Score. Horizontal (X): Signed Observed Frequency.
+    FIX: Ensure explicit encoding for all layers to avoid caching/layering conflicts.
     """
     
     # Max absolute value for a symmetric X-axis
@@ -168,6 +169,7 @@ def create_coordinate_chart(chart_df):
     max_y = chart_df['LL'].max() * 1.05
 
     # 1. Define Base Chart and Shared Tooltips
+    # Defining X and Y here makes it explicit for all subsequent layers.
     base = alt.Chart(chart_df).encode(
         y=alt.Y('LL', scale=alt.Scale(domain=[0, max_y]), title="Log-Likelihood (Strength)"),
         x=alt.X('Signed_Observed', 
@@ -193,7 +195,7 @@ def create_coordinate_chart(chart_df):
         )
     )
 
-    # 3. Text Labels (positioning adjusted for layering stability)
+    # 3. Text Labels (simplified encoding and positioning)
     labels = base.mark_text(
         fontSize=10,
     ).encode(
@@ -513,7 +515,6 @@ if analyze_btn and target_input:
             
             if not chart_df.empty:
                 chart_filename = create_coordinate_chart(chart_df)
-                # The chart visualization would be improved by showing an example of this unique chart.
                 st.altair_chart(alt.load(chart_filename), use_container_width=True)
                 st.caption("This chart displays the **collocation strength (LL)** vertically against the **total observed frequency** horizontally, signed by the dominant position (Left = Pink/Negative, Right = Blue/Positive).")
             else:
