@@ -202,23 +202,20 @@ def create_pyvis_graph(target_word, coll_df):
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'color': 'black'})
     
     # Define directional bias: large absolute X value forces initial position
-    # The bias depends on the dominant direction of the input DataFrame's content
-    if coll_df.empty:
-        LEFT_BIAS = -500 
-        RIGHT_BIAS = 500
-    else:
-        # Check the direction of the first node to set the bias. 
-        # If the input DF only contains 'L' nodes, they all get the same bias.
-        first_direction = coll_df['Direction'].iloc[0]
-        if first_direction == 'L':
-             LEFT_BIAS = -500 
-             RIGHT_BIAS = -500 # Force R nodes (if any) to the left side as well, but they shouldn't exist in a filtered DF
-        elif first_direction == 'R':
-             LEFT_BIAS = 500
-             RIGHT_BIAS = 500 # Force L nodes (if any) to the right side as well, but they shouldn't exist in a filtered DF
-        else: # Both/Mixed case (for safety)
-             LEFT_BIAS = -500 
-             RIGHT_BIAS = 500
+    # The bias depends on the direction of the nodes in the input DataFrame
+    
+    LEFT_BIAS = -500 
+    RIGHT_BIAS = 500
+
+    if not coll_df.empty:
+        # Determine if the graph is predominantly Left or Right for consistent positioning
+        all_directions = coll_df['Direction'].unique()
+        
+        if 'L' in all_directions and 'R' not in all_directions:
+             RIGHT_BIAS = -500 # If only Left nodes, bias them all to the left
+        elif 'R' in all_directions and 'L' not in all_directions:
+             LEFT_BIAS = 500   # If only Right nodes, bias them all to the right
+
 
     # 2. Add Collocate Nodes and Edges (Directionally placed)
     for index, row in coll_df.iterrows():
@@ -1017,37 +1014,43 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     right_directional_df = stats_df_sorted[stats_df_sorted['Direction'].isin(['R', 'B'])].head(max_collocates).copy()
 
 
-    # --- LEFT COLLOCATE GRAPH ---
+    # --- DISPLAY GRAPHS SIDE BY SIDE ---
     st.markdown("---")
-    st.subheader(f"Interactive Collocation Network: Left Collocates Only (Top {len(left_directional_df)} LL)")
+    st.subheader("Interactive Collocation Networks (Directional)")
     
-    if not left_directional_df.empty:
-        network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
-        components.html(network_html_left, height=450)
-        st.markdown(
-            """
-            **Left Collocates Graph Key:** Shows collocates that **precede** the target word (Direction 'L' or 'B'), placed on the left side.
-            """
-        )
-    else:
-        st.info("No Left-dominant collocates found that meet the frequency or filter criteria.")
+    col_left_graph, col_right_graph = st.columns(2)
 
-    # --- RIGHT COLLOCATE GRAPH ---
-    st.markdown("---")
-    st.subheader(f"Interactive Collocation Network: Right Collocates Only (Top {len(right_directional_df)} LL)")
+    with col_left_graph:
+        # --- LEFT COLLOCATE GRAPH ---
+        st.subheader(f"Left Collocates Only (Top {len(left_directional_df)} LL)")
+        
+        if not left_directional_df.empty:
+            network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
+            components.html(network_html_left, height=450)
+            st.markdown(
+                """
+                **Left Collocates Key:** Shows collocates that **precede** the target word (Direction 'L' or 'B'), placed on the left side.
+                """
+            )
+        else:
+            st.info("No Left-dominant collocates found that meet the frequency or filter criteria.")
+
+    with col_right_graph:
+        # --- RIGHT COLLOCATE GRAPH ---
+        st.subheader(f"Right Collocates Only (Top {len(right_directional_df)} LL)")
+        
+        if not right_directional_df.empty:
+            network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
+            components.html(network_html_right, height=450)
+            st.markdown(
+                """
+                **Right Collocates Key:** Shows collocates that **follow** the target word (Direction 'R' or 'B'), placed on the right side.
+                """
+            )
+        else:
+            st.info("No Right-dominant collocates found that meet the frequency or filter criteria.")
     
-    if not right_directional_df.empty:
-        network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
-        components.html(network_html_right, height=450)
-        st.markdown(
-            """
-            **Right Collocates Graph Key:** Shows collocates that **follow** the target word (Direction 'R' or 'B'), placed on the right side.
-            """
-        )
-    else:
-        st.info("No Right-dominant collocates found that meet the frequency or filter criteria.")
-    
-    # --- Graph General Key ---
+    # --- Graph General Key (Placed below the columns) ---
     st.markdown("---")
     st.markdown(
         """
