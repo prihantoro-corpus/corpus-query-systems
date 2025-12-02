@@ -5,5 +5,3 @@ ipywidgets
 openpyxl
 xlsxwriter
 pyvis
-nltk
-spacy
