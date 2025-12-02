@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import math
 from collections import Counter
-from io import BytesIO
+from io import BytesIO, StringIO # Added StringIO
 import tempfile 
 import os       
 import re       
@@ -142,7 +142,7 @@ def create_pyvis_graph(target_word, coll_df):
         # Get the POS tag and determine the color
         pos_tag = row['POS']
         
-        # Use the first letter of the tag if it's N, V, J, or R; otherwise use '#' or 'O'
+        # Determine color based on POS prefix
         pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
         
         if pos_tag.startswith('##'):
@@ -206,14 +206,23 @@ def load_corpus_file(file_source, sep=r"\s+"):
 
     # 1. Try to read as structured 3-column data (Vertical Corpus)
     try:
-        # Attempt 1: Tab Separator (for Europarl and typical tagged corpora)
         file_source.seek(0)
+        file_content_str = file_source.read().decode('utf-8')
+        
+        # Use StringIO to handle the string content for reliable pandas parsing
+        # Filter out potential comments/metadata lines before parsing
+        clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
+        clean_content = "\n".join(clean_lines)
+        
+        file_buffer_for_pandas = StringIO(clean_content)
+
+        # Attempt 1: Tab Separator (most common for tagged corpora)
         try:
-            df_attempt = pd.read_csv(file_source, sep='\t', header=None, engine="python", dtype=str)
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
         except Exception:
-            file_source.seek(0)
-            # Attempt 2: Default Separator (Whitespace) for other formats
-            df_attempt = pd.read_csv(file_source, sep=sep, header=None, engine="python", dtype=str)
+            file_buffer_for_pandas.seek(0) # Reset buffer
+            # Attempt 2: Default Separator (Whitespace)
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
             
         # Continue with structural check
         is_vertical = False
@@ -234,16 +243,18 @@ def load_corpus_file(file_source, sep=r"\s+"):
             df["_token_low"] = df["token"].str.lower()
             return df
             
-        file_source.seek(0)
-
     except Exception:
-         file_source.seek(0) 
-         pass # Proceed to raw text processing
+         # If structured reading fails entirely, proceed to raw text processing
+         pass
 
     # 2. Fallback: Treat as Raw Horizontal Text (Fast Regex Tokenizer + Nonsense Tags)
     try:
-        # --- PROCESS RAW/LINEAR FILE ---
-        raw_text = file_source.read().decode('utf-8')
+        # We already have file_content_str from the failed attempt, or need to re-read
+        if 'file_content_str' not in locals():
+            file_source.seek(0)
+            file_content_str = file_source.read().decode('utf-8')
+            
+        raw_text = file_content_str
         
         # Regex to split tokens based on space and punctuation, keeping punctuation as separate tokens
         tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
@@ -387,7 +398,7 @@ with col2:
     
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
     
-    # FIX: Use the reliable is_raw_mode flag to conditionally suppress POS tags.
+    # Only suppress POS tags if RAW mode was detected
     if is_raw_mode:
          freq_df_filtered['pos'] = '##'
 
