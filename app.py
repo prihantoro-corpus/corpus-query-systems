@@ -20,6 +20,17 @@ st.set_page_config(page_title="CORTEX - Corpus Explorer v13", layout="wide")
 # Initialize Session State for View Management
 if 'view' not in st.session_state:
     st.session_state['view'] = 'overview'
+    
+# Initialize Analysis Trigger States
+if 'last_target_input' not in st.session_state:
+    st.session_state['last_target_input'] = ''
+if 'last_pattern_collocate' not in st.session_state:
+    st.session_state['last_pattern_collocate'] = ''
+if 'trigger_analyze' not in st.session_state:
+    st.session_state['trigger_analyze'] = False
+if 'initial_load_complete' not in st.session_state:
+    st.session_state['initial_load_complete'] = False
+
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -52,7 +63,14 @@ def set_view(view_name):
 def reset_analysis():
     st.cache_data.clear()
     st.session_state['view'] = 'overview'
+    st.session_state['last_target_input'] = ''
+    st.session_state['last_pattern_collocate'] = ''
+    st.session_state['trigger_analyze'] = False
     
+# --- Analysis Trigger Callback ---
+def trigger_analysis_callback():
+    st.session_state['trigger_analyze'] = True
+
 # ---------------------------
 # Helpers: stats, IO utilities
 # ---------------------------
@@ -456,7 +474,17 @@ with st.sidebar:
         st.caption("The **Node Word** is set by the primary search input above.")
         
         pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.")
-        pattern_collocate = st.text_input("Collocate Word/Pattern (* for wildcard)", value="", key="pattern_collocate_input", help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly').")
+        
+        # --- Collocate Input with Auto-Analysis Trigger ---
+        # Note: Using 'on_change' callback is the standard way to trigger re-runs when a widget value changes.
+        pattern_collocate = st.text_input(
+            "Collocate Word/Pattern (* for wildcard)", 
+            value="", 
+            key="pattern_collocate_input", 
+            help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter to search.",
+            on_change=trigger_analysis_callback # Use callback to set the analysis flag
+        )
+        # ---------------------------------------------------
 
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
@@ -612,7 +640,13 @@ if st.session_state['view'] != 'overview':
     col_a, col_b = st.columns(2)
     with col_a:
         # Default search box, used unless pattern search fields are filled
-        typed_target = st.text_input("Type a primary token, MWU ('in the'), or wildcard ('in*')", value="")
+        # Use on_change to trigger analysis if the primary target is changed outside of the button press
+        typed_target = st.text_input(
+            "Type a primary token, MWU ('in the'), or wildcard ('in*')", 
+            value="", 
+            key="typed_target_input",
+            on_change=trigger_analysis_callback # Use callback to set the analysis flag
+        )
     with col_b:
         uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
 
@@ -625,7 +659,8 @@ if st.session_state['view'] != 'overview':
             target_list = uploaded_targets.read().decode('utf-8').splitlines()
             target_list = [t.strip() for t in target_list if t.strip()]
         if target_list:
-            selected_target = st.selectbox("Select target from uploaded list", options=target_list)
+            # Note: Selectbox change also triggers a full re-run implicitly
+            selected_target = st.selectbox("Select target from uploaded list", options=target_list, key="selected_target_input")
     
     # Determine the primary search input
     primary_input = (selected_target if selected_target else typed_target).strip()
@@ -646,7 +681,17 @@ if st.session_state['view'] != 'overview':
 
     if not target_input and not use_pattern_search:
         st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis. Then click Analyze.")
-    analyze_btn = st.button("🔎 Analyze")
+    
+    # Check if we should trigger analysis implicitly due to input change
+    # If the user pressed the "Analyze" button, analyze_btn is True.
+    # If the user changed primary_input OR pattern_collocate_input, trigger_analyze will be True via callbacks.
+    
+    # Reset button needed here, as we rely on implicit re-runs
+    analyze_btn_explicit = st.button("🔎 Analyze")
+    analyze_btn = analyze_btn_explicit or st.session_state['trigger_analyze']
+    
+    # Reset the implicit trigger flag after checking it
+    st.session_state['trigger_analyze'] = False
     
     st.markdown("---")
 
@@ -656,6 +701,24 @@ if st.session_state['view'] != 'overview':
 # -----------------------------------------------------
 if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
+    # --- Check for redundant analysis and early exit ---
+    # We only skip if the explicit button was NOT pressed AND the inputs haven't changed since the last successful analysis.
+    current_inputs = (target_input, st.session_state.get('pattern_collocate'), st.session_state.get('pattern_search_window'))
+    last_inputs = (st.session_state['last_target_input'], st.session_state['last_pattern_collocate'], st.session_state.get('last_pattern_search_window', 0))
+
+    if not analyze_btn_explicit and current_inputs == last_inputs:
+         # Skip analysis if triggered implicitly but inputs haven't changed
+         # Need to ensure we don't accidentally skip the first run if inputs happen to match initialization states.
+         if st.session_state.get('initial_load_complete'):
+             st.stop()
+    
+    # Store current inputs for next run comparison
+    st.session_state['last_target_input'] = target_input
+    st.session_state['last_pattern_collocate'] = st.session_state.get('pattern_collocate')
+    st.session_state['last_pattern_search_window'] = st.session_state.get('pattern_search_window')
+    st.session_state['initial_load_complete'] = True
+
+    # --- Start Analysis ---
     kwic_left = st.session_state.get('kwic_left', 7)
     kwic_right = st.session_state.get('kwic_right', 7)
     target = target_input.lower()
@@ -664,41 +727,30 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
     pattern_window = st.session_state.get('pattern_search_window', 0)
     
-    # Re-check if pattern search should be active
     is_pattern_search_active = use_pattern_search and pattern_collocate and pattern_window > 0
 
-    # --- MWU/WILDCARD RESOLUTION ---
-    
+    # --- MWU/WILDCARD RESOLUTION (Retained logic) ---
     primary_target_mwu = None
     primary_target_tokens = []
     primary_target_len = 0
     wildcard_freq_df = pd.DataFrame()
     
-    # Logic to resolve target to a specific MWU or token (if wildcard is used)
-    # ... (Standard MWU/Wildcard resolution as before, focusing on the target_input)
-    
+    # ... (MWU/Wildcard resolution logic here) ...
     if contains_wildcard:
-        
-        # Single-token wildcard (in*, *as, pi*e)
         if ' ' not in target:
             pattern = re.escape(target).replace(r'\*', '.*')
             wildcard_matches = [token for token in token_counts if re.fullmatch(pattern, token)]
-            
             match_counts = {token: token_counts[token] for token in wildcard_matches if token in token_counts}
             sorted_matches = sorted(match_counts.items(), key=lambda item: item[1], reverse=True)
-            
             wildcard_freq_list = []
             for term, count in sorted_matches:
                 rel_freq = (count / total_tokens) * 1_000_000
                 wildcard_freq_list.append({"Query Result": term, "Raw Frequency": count, "Relative Frequency": f"{rel_freq:.4f}"})
             wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
-            
-        # Multi-word wildcard (in *)
         else:
             target_pattern_parts = target.split(' ')
             num_parts = len(target_pattern_parts)
             mwu_matches = []
-            
             for i in range(len(tokens_lower) - num_parts + 1):
                 match = True
                 for k, part in enumerate(target_pattern_parts):
@@ -709,16 +761,13 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 if match:
                     mwu_string = " ".join(tokens_lower[i:i + num_parts])
                     mwu_matches.append(mwu_string)
-                    
             match_counts = Counter(mwu_matches)
-            
             wildcard_freq_list = []
             for term, count in match_counts.most_common():
                 rel_freq = (count / total_tokens) * 1_000_000
                 wildcard_freq_list.append({"Query Result": term, "Raw Frequency": count, "Relative Frequency": f"{rel_freq:.4f}"})
             wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
             
-        # Set primary target
         if not wildcard_freq_df.empty:
             primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
             primary_target_tokens = primary_target_mwu.split()
@@ -727,23 +776,18 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         else:
             st.warning(f"Target pattern '{target_input}' not found in corpus.")
             st.stop()
-            
-    # Literal Search
     else:
         primary_target_mwu = target
         primary_target_tokens = target.split()
         primary_target_len = len(primary_target_tokens)
         target_display = f"'{target_input}'"
-        
         literal_freq = 0
         for i in range(len(tokens_lower) - primary_target_len + 1):
              if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                  literal_freq += 1
-        
         if literal_freq == 0:
             st.warning(f"Target '{target_input}' not found in corpus.")
             st.stop()
-            
         rel_freq = (literal_freq / total_tokens) * 1_000_000
         wildcard_freq_df = pd.DataFrame([{"Query Result": primary_target_mwu, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
 
@@ -760,21 +804,24 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         for i in range(len(tokens_lower) - target_match_len + 1):
              if tokens_lower[i:i + target_match_len] == target_match:
                  all_target_positions.append(i)
-        
     else:
         for i in range(len(tokens_lower) - primary_target_len + 1):
             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                 all_target_positions.append(i)
 
-    # 2b. Apply pattern filtering if active
+    # 2b. Apply pattern filtering if active (FIXED)
     final_positions = []
     
     if is_pattern_search_active:
         
-        # --- Collocate Wildcard/Regex Handling ---
+        # Collocate Wildcard/Regex Handling
         collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
-        collocate_regex = re.compile(collocate_pattern_str)
-        # ---------------------------------------------
+        
+        try:
+             collocate_regex = re.compile(collocate_pattern_str)
+        except re.error as e:
+             st.error(f"Invalid Collocate Pattern/Regex: {e}")
+             st.stop()
         
         st.info(f"Pattern Search Active: Node='{primary_target_mwu}', Collocate Pattern='{pattern_collocate}' (Regex: `{collocate_pattern_str}`), Window=±{pattern_window} tokens.")
         
@@ -782,7 +829,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             start_index = max(0, i - pattern_window)
             end_index = min(len(tokens_lower), i + primary_target_len + pattern_window)
             
-            # Check context window for collocate
             found_collocate = False
             for j in range(start_index, end_index):
                 if i <= j < i + primary_target_len:
@@ -793,10 +839,9 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                     found_collocate = True
                     break
             
-            # --- FIX: Only append positions where collocate was found ---
+            # ONLY append positions where collocate was found
             if found_collocate:
                 final_positions.append(i)
-            # -------------------------------------------------------------
                 
         if not final_positions:
             st.warning(f"Pattern search found 0 instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within the window.")
@@ -880,7 +925,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     st.subheader("📚 Concordance Results")
     total_matches = len(final_positions)
     
-    # --- UPDATED: Success message reflects pattern search ---
+    # --- Success message reflects pattern search ---
     if is_pattern_search_active:
         st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within ±{current_kwic_left} tokens.")
     else:
@@ -901,6 +946,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         scrollable_height = KWIC_INITIAL_DISPLAY_HEIGHT * row_height
         
         # 1. Custom CSS for table appearance (Alignment and Font + SCROLLING CONTAINER)
+        # Note: If running this in a web server environment, the CSS needs to be injected carefully.
+        # This setup relies on Streamlit's markdown interpretation of injected HTML/CSS.
         kwic_table_style = f"""
              <style>
              .dataframe-container-scroll {{
