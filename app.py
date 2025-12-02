@@ -806,7 +806,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 structural_lemma_pattern = re.compile(f"^{lemma_pattern_str}$")
                 
         # Extract POS: _POS -> kept in original case for searching POS column
-        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", raw_target_input)
+        # FIX: Using a more permissive POS extraction regex
+        pos_match = re.search(r"\_([\w\*|]+)", raw_target_input)
         if pos_match:
             # POS input is taken directly without lowercasing
             pos_input = pos_match.group(1).strip()
@@ -1294,7 +1295,8 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                 structural_lemma_pattern = re.compile(f"^{lemma_pattern_str}$")
                 
         # Extract POS: _POS -> kept in original case for searching POS column
-        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", raw_target_input)
+        # FIX: Using a more permissive POS extraction regex
+        pos_match = re.search(r"\_([\w\*|]+)", raw_target_input)
         if pos_match:
             # POS input is taken directly without lowercasing
             pos_input = pos_match.group(1).strip()
