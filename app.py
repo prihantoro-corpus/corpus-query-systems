@@ -211,9 +211,9 @@ def create_pyvis_graph(target_word, coll_df):
         # Determine if the graph is predominantly Left or Right for consistent positioning
         all_directions = coll_df['Direction'].unique()
         
-        if 'L' in all_directions and 'R' not in all_directions:
+        if 'R' not in all_directions and 'L' in all_directions:
              RIGHT_BIAS = -500 # If only Left nodes, bias them all to the left
-        elif 'R' in all_directions and 'L' not in all_directions:
+        elif 'L' not in all_directions and 'R' in all_directions:
              LEFT_BIAS = 500   # If only Right nodes, bias them all to the right
 
 
@@ -445,6 +445,18 @@ with st.sidebar:
         st.session_state['kwic_left'] = kwic_left
         st.session_state['kwic_right'] = kwic_right
         
+        # --- NEW: Concordance Pattern Search Settings ---
+        st.markdown("---")
+        st.subheader("Pattern Search Filter")
+        
+        pattern_node_word = st.text_input("Node Word (for Pattern Search)", value="", key="pattern_node_word_input", help="The central word for the pattern (will be bolded in KWIC output).")
+        pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the node word.")
+        pattern_collocate = st.text_input("Collocate Word (for Pattern Search)", value="", key="pattern_collocate_input", help="The specific word required to be in the context window (will be **bolded** in KWIC).")
+
+        st.session_state['pattern_node_word'] = pattern_node_word
+        st.session_state['pattern_search_window'] = pattern_search_window
+        st.session_state['pattern_collocate'] = pattern_collocate
+        
     elif st.session_state['view'] == 'collocation':
         # Collocation Settings
         max_collocates = st.number_input("Max Collocates to Show (Network/Tables)", min_value=5, max_value=100, value=20, step=5, help="Maximum number of collocates displayed in the network graph and top tables.")
@@ -595,7 +607,8 @@ if st.session_state['view'] != 'overview':
     st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
     col_a, col_b = st.columns(2)
     with col_a:
-        typed_target = st.text_input("Type a token, MWU ('in the'), or wildcard ('in*')", value="")
+        # Default search box, used unless pattern search fields are filled
+        typed_target = st.text_input("Type a primary token, MWU ('in the'), or wildcard ('in*')", value="")
     with col_b:
         uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
 
@@ -609,11 +622,23 @@ if st.session_state['view'] != 'overview':
             target_list = [t.strip() for t in target_list if t.strip()]
         if target_list:
             selected_target = st.selectbox("Select target from uploaded list", options=target_list)
-    target_input = (selected_target if selected_target else typed_target).strip()
+    
+    # Determine the primary search input
+    primary_input = (selected_target if selected_target else typed_target).strip()
+    
+    # Check if we should use the Pattern Search parameters instead
+    use_pattern_search = False
+    if st.session_state['view'] == 'concordance':
+        if st.session_state.get('pattern_node_word') and st.session_state.get('pattern_collocate'):
+            primary_input = st.session_state['pattern_node_word'].strip()
+            if primary_input:
+                use_pattern_search = True
+    
+    target_input = primary_input
 
     contains_wildcard = '*' in target_input
 
-    if not target_input:
+    if not target_input and not use_pattern_search:
         st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis. Then click Analyze.")
     analyze_btn = st.button("🔎 Analyze")
     
@@ -629,12 +654,22 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     kwic_right = st.session_state.get('kwic_right', 7)
     target = target_input.lower()
     
+    # --- PATTERN SEARCH VARIABLES ---
+    pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
+    pattern_window = st.session_state.get('pattern_search_window', 0)
+    
+    # Re-check if pattern search should be active
+    is_pattern_search_active = use_pattern_search and pattern_collocate and pattern_window > 0
+
     # --- MWU/WILDCARD RESOLUTION ---
     
     primary_target_mwu = None
     primary_target_tokens = []
     primary_target_len = 0
     wildcard_freq_df = pd.DataFrame()
+    
+    # Logic to resolve target to a specific MWU or token (if wildcard is used)
+    # ... (Standard MWU/Wildcard resolution as before, focusing on the target_input)
     
     if contains_wildcard:
         
@@ -706,73 +741,156 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         rel_freq = (literal_freq / total_tokens) * 1_000_000
         wildcard_freq_df = pd.DataFrame([{"Query Result": primary_target_mwu, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
 
-    # 2. Concordance Generation (Sampling by Variation for Wildcards)
+
+    # --- 2. Concordance Generation (Pattern Search or Standard) ---
     
     kwic_rows = []
+    all_target_positions = []
     
+    # 2a. Find all instances of the target word (base positions)
+    # The logic here handles both wildcards and literals based on primary_target_mwu
     if contains_wildcard and not wildcard_freq_df.empty:
-        max_kwic_lines = 10
-        total_kwic_lines = 0
+        # For wildcard, we take positions of the top match
+        target_match = primary_target_mwu.split()
+        target_match_len = len(target_match)
+        for i in range(len(tokens_lower) - target_match_len + 1):
+             if tokens_lower[i:i + target_match_len] == target_match:
+                 all_target_positions.append(i)
         
-        # Iterate over the top query results (MWU variations)
-        for _, row in wildcard_freq_df.iterrows():
-            if total_kwic_lines >= max_kwic_lines:
-                break
-                
-            mwu = row["Query Result"]
-            mwu_tokens = mwu.split()
-            mwu_len = len(mwu_tokens)
-            
-            # Find all positions for this specific MWU variation
-            mwu_positions = []
-            for i in range(len(tokens_lower) - mwu_len + 1):
-                if tokens_lower[i:i + mwu_len] == mwu_tokens:
-                    mwu_positions.append(i)
-            
-            # Determine how many lines to take from this MWU (min of 1, lines remaining)
-            lines_to_take = min(1, max_kwic_lines - total_kwic_lines, len(mwu_positions))
-            
-            # Take a sample (the first 'lines_to_take' occurrences)
-            for i in mwu_positions[:lines_to_take]:
-                # i is the index of the first token of the MWU
-                left = tokens_lower[max(0, i - kwic_left):i]
-                right = tokens_lower[i + mwu_len:i + mwu_len + kwic_right]
-                
-                # Node is the sequence of original tokens
-                node_orig_tokens = df["token"].iloc[i:i + mwu_len].tolist()
-                node_orig = " ".join(node_orig_tokens)
-                
-                kwic_rows.append({"Left": " ".join(left), "Node": node_orig, "Right": " ".join(right)})
-                total_kwic_lines += 1
-                
     else:
-        # Literal search: standard position finding and sampling
-        positions = []
+        # For literal/non-wildcard search
         for i in range(len(tokens_lower) - primary_target_len + 1):
             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
-                positions.append(i)
+                all_target_positions.append(i)
+
+    # 2b. Apply pattern filtering if active
+    final_positions = []
+    
+    if is_pattern_search_active:
+        st.info(f"Pattern Search Active: Looking for '{pattern_collocate}' within ±{pattern_window} tokens of '{primary_target_mwu}'.")
+        collocate_pattern = re.compile(re.escape(pattern_collocate))
         
-        for i in positions[:10]:
-            left = tokens_lower[max(0, i - kwic_left):i]
-            right = tokens_lower[i + primary_target_len:i + primary_target_len + kwic_right]
+        for i in all_target_positions:
+            start_index = max(0, i - pattern_window)
+            end_index = min(len(tokens_lower), i + primary_target_len + pattern_window)
             
-            node_orig_tokens = df["token"].iloc[i:i + primary_target_len].tolist()
-            node_orig = " ".join(node_orig_tokens)
+            # Check context window for collocate
+            found_collocate = False
+            for j in range(start_index, end_index):
+                if i <= j < i + primary_target_len:
+                    continue # Skip the node word itself
+                
+                if collocate_pattern.fullmatch(tokens_lower[j]):
+                    found_collocate = True
+                    break
             
-            kwic_rows.append({"Left": " ".join(left), "Node": node_orig, "Right": " ".join(right)})
+            if found_collocate:
+                final_positions.append(i)
+                
+        if not final_positions:
+            st.warning(f"Pattern search found 0 instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within the window.")
+            st.stop()
+            
+    else:
+        # Standard search: all instances found earlier
+        final_positions = all_target_positions
+
+    # 2c. Format KWIC lines (applies to filtered or unfiltered positions)
+    
+    max_kwic_lines = 10
+    
+    for i in final_positions[:max_kwic_lines]:
+        
+        # Determine KWIC window based on user settings
+        kwic_start = max(0, i - kwic_left)
+        kwic_end = min(len(df), i + primary_target_len + kwic_right)
+        
+        full_line_tokens = df["token"].iloc[kwic_start:kwic_end].tolist()
+        
+        # --- KWIC Line Formatting ---
+        formatted_line = []
+        node_orig_tokens = []
+        
+        for k, token in enumerate(full_line_tokens):
+            token_index_in_corpus = kwic_start + k
+            token_lower = token.lower()
+            
+            # Check if token is the node word
+            is_node_word = (i <= token_index_in_corpus < i + primary_target_len)
+            
+            # Check if token is the collocate (must be outside the node word area)
+            is_collocate = False
+            if is_pattern_search_active and not is_node_word:
+                if token_lower == pattern_collocate:
+                    is_collocate = True
+            
+            if is_node_word:
+                # Node word should be in the Node column, not bolded in the context here
+                node_orig_tokens.append(token)
+                
+            elif is_collocate:
+                # Collocate must be bolded in the context columns
+                formatted_line.append(f"**{token}**")
+            else:
+                formatted_line.append(token)
+
+        # Split the formatted line back into Left and Right context based on KWIC window
+        node_start_rel = i - kwic_start
+        node_end_rel = node_start_rel + primary_target_len
+
+        left_context = formatted_line[:node_start_rel]
+        right_context = formatted_line[node_end_rel:]
+        
+        node_orig = " ".join(node_orig_tokens)
+        
+        kwic_rows.append({
+            "Left": " ".join(left_context), 
+            "Node": node_orig, 
+            "Right": " ".join(right_context)
+        })
     
     # --- KWIC Display ---
     st.subheader("📚 Concordance Results")
-    st.success(f"Found {wildcard_freq_df['Raw Frequency'].sum()} total occurrences matching '{target_input}'.")
+    total_matches = len(final_positions)
+    st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
     
     col_kwic, col_freq = st.columns([3, 2], gap="large")
 
     with col_kwic:
-        st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} (Sampled by Variation)")
+        st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} (Sampled)")
         
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        
+        # Custom styling to ensure KWIC is easily read
+        st.markdown(
+             """
+             <style>
+             .dataframe table {
+                width: 100%;
+                table-layout: fixed;
+                word-wrap: break-word;
+             }
+             .dataframe td:nth-child(2) { /* Left context */
+                text-align: right;
+                font-family: monospace;
+             }
+             .dataframe td:nth-child(3) { /* Node */
+                text-align: center;
+                font-weight: bold;
+                background-color: #FFFFCC; /* Light Yellow Highlight */
+                font-family: monospace;
+             }
+             .dataframe td:nth-child(4) { /* Right context */
+                text-align: left;
+                font-family: monospace;
+             }
+             </style>
+             """,
+             unsafe_allow_html=True
+         )
+        
         st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
 
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
