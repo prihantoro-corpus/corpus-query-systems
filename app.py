@@ -449,7 +449,7 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Pattern Search Filter")
         
-        st.caption("The Node Word is set by the primary search input above.")
+        st.caption("The **Node Word** is set by the primary search input above.")
         
         pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the Node Word.")
         pattern_collocate = st.text_input("Collocate Word/Pattern (* for wildcard)", value="", key="pattern_collocate_input", help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly').")
@@ -767,7 +767,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     if is_pattern_search_active:
         
-        # --- NEW: Collocate Wildcard/Regex Handling ---
+        # --- Collocate Wildcard/Regex Handling ---
         # Convert user input (e.g., '*ly') into a full regex pattern (e.g., '.*ly')
         collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
         collocate_regex = re.compile(collocate_pattern_str)
@@ -805,11 +805,21 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     max_kwic_lines = 10
     
+    # --- FIX: Synchronize KWIC Display Window with Pattern Window ---
+    current_kwic_left = kwic_left
+    current_kwic_right = kwic_right
+    
+    if is_pattern_search_active and pattern_window > 0:
+        # Override KWIC display to match the restrictive search window
+        current_kwic_left = pattern_window
+        current_kwic_right = pattern_window
+    # -----------------------------------------------------------------
+
     for i in final_positions[:max_kwic_lines]:
         
-        # Determine KWIC window based on user settings
-        kwic_start = max(0, i - kwic_left)
-        kwic_end = min(len(df), i + primary_target_len + kwic_right)
+        # Determine KWIC window based on user settings OR synchronized pattern window
+        kwic_start = max(0, i - current_kwic_left)
+        kwic_end = min(len(df), i + primary_target_len + current_kwic_right)
         
         full_line_tokens = df["token"].iloc[kwic_start:kwic_end].tolist()
         
