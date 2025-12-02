@@ -164,7 +164,7 @@ def create_pyvis_graph(target_word, coll_df):
         
         # Node size based on LL score (Collocate Bubble Size change)
         if ll_range > 0:
-            # Scale LL to node size range (e.g., 10 to 40)
+            # Scale LL to node size range (e.g., 15 to 40)
             normalized_ll = (ll_score - min_ll) / ll_range
             node_size = 15 + normalized_ll * 25 # Min size 15, Max size 40
         else:
@@ -298,15 +298,22 @@ unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
 
 # STTR per 1000
 def compute_sttr_tokens(tokens_list, chunk=1000):
+    """
+    Computes the Standardized Type-Token Ratio (STTR) by averaging TTR over fixed chunks.
+    CORRECTION: Removed final multiplication by 1000 to return a score between 0 and 1.
+    """
     if len(tokens_list) < chunk:
         # Avoid division by zero if list is empty after filtering
-        return (len(set(tokens_list)) / len(tokens_list)) * 1000 if len(tokens_list) > 0 else 0.0
+        # For a short list, return the TTR itself (which is between 0 and 1)
+        return (len(set(tokens_list)) / len(tokens_list)) if len(tokens_list) > 0 else 0.0
     ttrs = []
     for i in range(0, len(tokens_list), chunk):
         c = tokens_list[i:i+chunk]
         if not c: continue
         ttrs.append(len(set(c)) / len(c))
-    return (sum(ttrs)/len(ttrs))*1000 if ttrs else 0.0
+    
+    # Corrected return: returns the average TTR (STTR) which is a ratio between 0 and 1.
+    return (sum(ttrs)/len(ttrs)) if ttrs else 0.0
 
 sttr_score = compute_sttr_tokens(tokens_lower_filtered)
 
@@ -314,7 +321,9 @@ col1, col2 = st.columns([2,1])
 with col1:
     st.subheader("Corpus summary")
     info_df = pd.DataFrame({
-        "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, per 1000)"],
+        # Updated Metric description
+        "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, chunk=1000)"],
+        # Display the STTR value
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
     # Hide index
@@ -567,4 +576,3 @@ if analyze_btn and target_input:
                 st.dataframe(mi_R, use_container_width=True, hide_index=True)
 
 st.caption("Tip: Deploy this file to Streamlit Cloud or HuggingFace Spaces to share with others.")
-
