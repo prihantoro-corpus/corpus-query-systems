@@ -21,7 +21,6 @@ st.set_page_config(page_title="Corpus Explorer Version 12 Dec 25", layout="wide"
 # Built-in Corpus Configuration (Updated with user's GitHub files)
 # ---------------------------
 
-# NOTE: URLs are converted to Raw GitHub Content links to allow direct download.
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only.txt",
@@ -195,9 +194,18 @@ def load_corpus_file(file_source, sep=r"\s+"):
 
     # 1. Try to read as structured 3-column data (Vertical Corpus)
     try:
+        # --- FIX: Try Tab Separator First for common vertical corpora ---
         file_source.seek(0)
-        df_attempt = pd.read_csv(file_source, sep=sep, header=None, engine="python", dtype=str)
         
+        # Attempt 1: Tab Separator
+        try:
+            df_attempt = pd.read_csv(file_source, sep='\t', header=None, engine="python", dtype=str)
+        except Exception:
+            file_source.seek(0)
+            # Attempt 2: Default Separator (Whitespace)
+            df_attempt = pd.read_csv(file_source, sep=sep, header=None, engine="python", dtype=str)
+            
+        # Continue with structural check
         is_vertical = False
         if df_attempt.shape[1] >= 3:
             df_check = df_attempt.iloc[:, :3].copy()
@@ -218,7 +226,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 
     except Exception:
          file_source.seek(0) 
-         pass
+         pass # Proceed to raw text processing
 
     # 2. Fallback: Treat as Raw Horizontal Text (Fast Regex Tokenizer + Nonsense Tags)
     try:
