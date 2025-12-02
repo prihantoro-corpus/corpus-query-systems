@@ -1,9 +1,9 @@
 streamlit
 pandas
 numpy
-ipywidgets
-openpyxl
-xlsxwriter
 pyvis
 wordcloud
 matplotlib
+requests
+xlsxwriter
+openpyxl
