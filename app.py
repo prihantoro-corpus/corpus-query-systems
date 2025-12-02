@@ -448,9 +448,12 @@ with st.sidebar:
         st.session_state['kwic_right'] = kwic_right
         
     elif st.session_state['view'] == 'collocation':
+        # New customizable setting
+        max_collocates = st.number_input("Max Collocates to Show (Network/Tables)", min_value=5, max_value=100, value=20, step=5, help="Maximum number of collocates displayed in the network graph and top tables.")
         coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=5, step=1, help="Window used for collocation counting (default ±5).")
-        st.write("MI minimum observed frequency (for MI tables).")
-        mi_min_freq = st.number_input("MI min observed freq", min_value=1, max_value=100, value=1, step=1)
+        mi_min_freq = st.number_input("MI minimum observed freq", min_value=1, max_value=100, value=1, step=1)
+        
+        st.session_state['max_collocates'] = max_collocates
         st.session_state['coll_window'] = coll_window
         st.session_state['mi_min_freq'] = mi_min_freq
 
@@ -492,9 +495,6 @@ if is_raw_mode:
 else:
     app_mode = f"Analyzing Corpus: {corpus_name} (TAGGED MODE)"
 st.header(app_mode)
-
-# The navigation bar is now in the sidebar, so we clear the space here.
-st.markdown("---")
 
 # -----------------------------------------------------
 # MODULE: CORPUS OVERVIEW
@@ -760,6 +760,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     coll_window = st.session_state.get('coll_window', 5)
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
+    max_collocates = st.session_state.get('max_collocates', 20) # Get the new max collocates setting
     target = target_input.lower()
 
     # --- MWU/WILDCARD RESOLUTION (Focus on single primary target) ---
@@ -885,13 +886,15 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         st.stop()
         
     stats_df_sorted = stats_df.sort_values("LL", ascending=False)
-    network_df = stats_df_sorted.head(20).copy()
+    
+    # --- Apply max_collocates setting ---
+    network_df = stats_df_sorted.head(max_collocates).copy()
 
-    full_ll = stats_df_sorted.head(10).copy()
+    full_ll = stats_df_sorted.head(max_collocates).copy()
     full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
     
     full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
-    full_mi = full_mi_all.head(10).copy()
+    full_mi = full_mi_all.head(max_collocates).copy()
     full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
     
@@ -921,9 +924,10 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             for pref in prefixes:
                 mask = mask | stats_df["POS"].str.startswith(pref, na=False)
             sub = stats_df[mask].copy()
-            ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
+            # Use max_collocates for category tables as well
+            ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(max_collocates).copy()
             ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
-            mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(10).copy()
+            mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(max_collocates).copy()
             mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
             return ll_sub, mi_sub
 
@@ -932,21 +936,24 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         ll_J, mi_J = category_df(("J",))
         ll_R, mi_R = category_df(("R",))
         
+        # Display up to 10 rows for visual clarity in the UI, even if max_collocates > 10
+        display_rows = min(10, max_collocates)
+
         st.subheader("Log-Likelihood — Top 10 by POS")
         cols = st.columns(4, gap="small")
         
         with cols[0]:
-            st.markdown("**N (N*) — LL**")
-            st.dataframe(ll_N, use_container_width=True, hide_index=True)
+            st.markdown(f"**N (N*) — LL (Top {display_rows})**")
+            st.dataframe(ll_N.head(display_rows), use_container_width=True, hide_index=True)
         with cols[1]:
-            st.markdown("**V (V*) — LL**")
-            st.dataframe(ll_V, use_container_width=True, hide_index=True)
+            st.markdown(f"**V (V*) — LL (Top {display_rows})**")
+            st.dataframe(ll_V.head(display_rows), use_container_width=True, hide_index=True)
         with cols[2]:
-            st.markdown("**J (J*) — LL**")
-            st.dataframe(ll_J, use_container_width=True, hide_index=True)
+            st.markdown(f"**J (J*) — LL (Top {display_rows})**")
+            st.dataframe(ll_J.head(display_rows), use_container_width=True, hide_index=True)
         with cols[3]:
-            st.markdown("**R (R*) — LL**")
-            st.dataframe(ll_R, use_container_width=True, hide_index=True)
+            st.markdown(f"**R (R*) — LL (Top {display_rows})**")
+            st.dataframe(ll_R.head(display_rows), use_container_width=True, hide_index=True)
         
         st.markdown("---")
 
@@ -954,17 +961,18 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         st.info("POS-specific collocation tables (N, V, J, R) are skipped in RAW/LINEAR mode.")
     
     # ---------- Full Collocation Tables (All Tags) ----------
-    st.subheader("Top 10 Collocations (All Tags)")
+    display_rows = min(10, max_collocates)
+    st.subheader(f"Top {display_rows} Collocations (All Tags)")
     
     cols_full = st.columns(2, gap="large")
     
     with cols_full[0]:
-        st.markdown("**Log-Likelihood (LL)**")
-        st.dataframe(full_ll, use_container_width=True, hide_index=True)
+        st.markdown(f"**Log-Likelihood (LL) (Top {display_rows})**")
+        st.dataframe(full_ll.head(display_rows), use_container_width=True, hide_index=True)
     
     with cols_full[1]:
-        st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq})**")
-        st.dataframe(full_mi, use_container_width=True, hide_index=True)
+        st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq}, Top {display_rows})**")
+        st.dataframe(full_mi.head(display_rows), use_container_width=True, hide_index=True)
 
     # ---------- Download Buttons ----------
     st.markdown("---")
@@ -972,13 +980,13 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Download logic for Collocation results... 
     st.download_button(
-        "⬇ Download full LL results (xlsx)", 
+        f"⬇ Download full LL results (xlsx) (Top {max_collocates} used in tables)", 
         data=df_to_excel_bytes(stats_df_sorted), 
         file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     st.download_button(
-        f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
+        f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx) (Top {max_collocates} used in tables)", 
         data=df_to_excel_bytes(full_mi_all), 
         file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
