@@ -47,8 +47,8 @@ POS_COLOR_MAP = {
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
     st.session_state['view'] = view_name
-    st.rerun()
-
+    # Don't rerun immediately here, rely on Streamlit's implicit rerun on button click
+    
 def reset_analysis():
     # Clear the entire Streamlit cache to force re-reading and re-analysis
     st.cache_data.clear()
@@ -418,9 +418,28 @@ with st.sidebar:
         st.info("Please select a corpus or upload a file to proceed.")
         st.stop()
         
-    # --- MODULE SETTINGS (DYNAMIC) ---
-    st.subheader("2. Settings")
+    st.markdown("---")
+    
+    # --- NEW: PERSISTENT NAVIGATION (TOOLS) ---
+    st.subheader("TOOLS")
+    
+    # Navigation buttons for Overview
+    is_active_o = st.session_state['view'] == 'overview'
+    st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
+    
+    # Navigation buttons for Concordance
+    is_active_c = st.session_state['view'] == 'concordance'
+    st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
 
+    # Navigation buttons for Collocation
+    is_active_l = st.session_state['view'] == 'collocation'
+    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
+
+    st.markdown("---")
+    
+    # --- MODULE SETTINGS (DYNAMIC) ---
+    st.subheader("Tool Settings")
+    
     if st.session_state['view'] == 'concordance':
         st.write("KWIC Context (Display)")
         kwic_left = st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=7, step=1, help="Number of tokens shown to the left of the node word.")
@@ -474,46 +493,7 @@ else:
     app_mode = f"Analyzing Corpus: {corpus_name} (TAGGED MODE)"
 st.header(app_mode)
 
-
-# --- NEW: PERSISTENT NAVIGATION BAR (MOVED TO MAIN BODY WITH STYLING HACK) ---
-# NOTE: While the sidebar is truly persistent, placing the controls in this fixed header area 
-# will make them appear at the top of the main body, as requested, giving a cleaner look.
-# If they disappear upon extreme scrolling, the solution is limited by Streamlit's architecture.
-st.markdown("""
-    <style>
-    .module-nav-container {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        padding-bottom: 10px;
-    }
-    .stButton>button {
-        width: 100%;
-        margin: 0;
-    }
-    </style>
-    <div class="module-nav-container">
-""", unsafe_allow_html=True)
-
-col_nav_overview, col_nav_concordance, col_nav_collocation = st.columns(3)
-
-with col_nav_overview:
-    is_active = st.session_state['view'] == 'overview'
-    label = "📌 Overview" if is_active else "📖 Overview"
-    if st.button(label, key='nav_overview', type="primary" if is_active else "secondary"):
-        set_view('overview')
-with col_nav_concordance:
-    is_active = st.session_state['view'] == 'concordance'
-    label = "📌 Concordance" if is_active else "📚 Concordance"
-    if st.button(label, key='nav_concordance', type="primary" if is_active else "secondary"):
-        set_view('concordance')
-with col_nav_collocation:
-    is_active = st.session_state['view'] == 'collocation'
-    label = "📌 Collocation" if is_active else "🔗 Collocation"
-    if st.button(label, key='nav_collocation', type="primary" if is_active else "secondary"):
-        set_view('collocation')
-
-st.markdown("</div>", unsafe_allow_html=True)
+# The navigation bar is now in the sidebar, so we clear the space here.
 st.markdown("---")
 
 # -----------------------------------------------------
