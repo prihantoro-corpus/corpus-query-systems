@@ -160,6 +160,7 @@ def create_pyvis_graph(target_word, coll_df):
     """
     Creates a Pyvis interactive network graph. 
     Node colors are based on the first letter of the POS tag, if available.
+    Nodes are positioned left/right based on dominant direction.
     """
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
     
@@ -196,18 +197,31 @@ def create_pyvis_graph(target_word, coll_df):
     }}
     """)
     
-    # 1. Add Target Node 
-    net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
+    # 1. Add Target Node (Central)
+    # Target node is placed centrally (fixed x, y for stability)
+    net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'color': 'black'})
     
-    # 2. Add Collocate Nodes and Edges (Reverted to basic tooltip)
-    for _, row in coll_df.iterrows():
+    # Define directional bias: large absolute X value forces initial position
+    LEFT_BIAS = -500 
+    RIGHT_BIAS = 500
+
+    # 2. Add Collocate Nodes and Edges (Directionally placed)
+    for index, row in coll_df.iterrows():
         collocate = row['Collocate']
         ll_score = row['LL']
         observed = row['Observed']
-        
         pos_tag = row['POS']
-        pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
         
+        # New directional data for placement and tooltip
+        direction = row.get('Direction', 'R') 
+        obs_l = row.get('Obs_L', 0)
+        obs_r = row.get('Obs_R', 0)
+        
+        # Determine initial X position based on dominant direction
+        x_position = LEFT_BIAS if direction == 'L' else RIGHT_BIAS
+
+        # Determine color and size
+        pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
         if pos_tag.startswith('##'):
             pos_code = '#'
         elif pos_code not in ['N', 'V', 'J', 'R']:
@@ -221,10 +235,16 @@ def create_pyvis_graph(target_word, coll_df):
         else:
             node_size = 25
             
-        # Reverted tooltip to standard stats only
-        tooltip_title = f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}"
+        # Tooltip now includes directional counts
+        tooltip_title = (
+            f"POS: {row['POS']}\n"
+            f"Obs: {observed} (Left: {obs_l}, Right: {obs_r})\n"
+            f"LL: {ll_score:.2f}\n"
+            f"Dominant Direction: {direction}"
+        )
 
-        net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_title)
+        # Add node with forced x position (fixed=False allows physics to arrange it nearby)
+        net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_title, x=x_position)
         net.add_edge(target_word, collocate, value=ll_score, width=5, title=f"LL: {ll_score:.2f}")
 
     # --- Use a Temporary HTML File ---
@@ -772,7 +792,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
     max_collocates = st.session_state.get('max_collocates', 20) 
     
-    # Get Filter Settings (Contextual pattern logic entirely removed)
+    # Get Filter Settings (Standard filters retained)
     collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
     pos_wildcard_regex = st.session_state.get('pos_wildcard_regex', '').strip()
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
@@ -843,9 +863,10 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader("🔗 Collocation Analysis Results")
     st.success(f"Analyzing target {target_display}. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
 
-    # --- COLLOCATION COUNTING (REVERTED to standard window counting) ---
+    # --- COLLOCATION COUNTING (UPDATED FOR DIRECTION) ---
     
-    collocates_counter = Counter()
+    # collocate_directional_counts: stores { (w, p, l, direction): count }
+    collocate_directional_counts = Counter() 
     
     for i in primary_target_positions:
         start_index = max(0, i - coll_window)
@@ -859,26 +880,56 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             p = df["pos"].iloc[j]
             l = df["lemma"].iloc[j].lower() if "lemma" in df.columns else "##"
             
-            key = (w, p, l)
-            collocates_counter[key] += 1
+            # Determine Direction
+            if j < i:
+                direction = 'L' # Left collocate
+            else:
+                direction = 'R' # Right collocate
+            
+            key = (w, p, l, direction)
+            collocate_directional_counts[key] += 1
     
-    # --- RECALCULATE STATS BASED on all standard counts ---
+    # --- Aggregate Counts and Determine Dominant Direction ---
     
+    # raw_stats_data: { (w, p, l): {'L': count, 'R': count, 'Total': count, 'w': w, 'p': p, 'l': l} }
+    raw_stats_data = {} 
+    
+    for (w, p, l, direction), observed_dir in collocate_directional_counts.items():
+        key_tuple = (w, p, l)
+        
+        if key_tuple not in raw_stats_data:
+            raw_stats_data[key_tuple] = {'L': 0, 'R': 0, 'Total': 0, 'w': w, 'p': p, 'l': l}
+            
+        raw_stats_data[key_tuple][direction] += observed_dir
+        raw_stats_data[key_tuple]['Total'] += observed_dir
+
     stats_list = []
     token_counts_unfiltered = Counter(tokens_lower) 
-    
-    for (w, p, l), observed in collocates_counter.items():
+
+    for key_tuple, data in raw_stats_data.items():
+        w, p, l = key_tuple
+        observed = data['Total']
+        
+        # Determine Dominant Direction
+        if data['R'] > data['L']:
+            dominant_direction = 'R'
+        elif data['L'] > data['R']:
+            dominant_direction = 'L'
+        else:
+            dominant_direction = 'B' # Both/Equal
+        
         total_freq = token_counts_unfiltered.get(w, 0)
         
-        # Use the standard observed count (k11)
+        # Calculate LL/MI based on total observed frequency
         k11 = observed
-        k12 = freq - k11 # Total target hits minus this collocate's hits
-        k21 = total_freq - k11 # Total collocate hits minus this collocate's hits
+        k12 = freq - k11
+        k21 = total_freq - k11
         k22 = total_tokens - (k11 + k12 + k21)
         
         ll = compute_ll(k11, k12, k21, k22)
         mi = compute_mi(k11, freq, total_freq, total_tokens)
         sig = significance_from_ll(ll)
+        
         stats_list.append({
             "Collocate": w,
             "POS": p,
@@ -887,7 +938,10 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             "Total_Freq": total_freq,
             "LL": round(ll,6),
             "MI": round(mi,6),
-            "Significance": sig
+            "Significance": sig,
+            "Direction": dominant_direction, 
+            "Obs_L": data['L'],             
+            "Obs_R": data['R']              
         })
 
     stats_df = pd.DataFrame(stats_list)
@@ -943,10 +997,22 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     network_df = stats_df_sorted.head(max_collocates).copy()
 
     full_ll = stats_df_sorted.head(max_collocates).copy()
+    # Ensure all required directional columns exist for the UI table display
+    if 'Direction' not in full_ll.columns:
+        full_ll['Direction'] = 'B'
+        full_ll['Obs_L'] = 0
+        full_ll['Obs_R'] = 0
+
     full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
     
     full_mi_all = stats_df_filtered[stats_df_filtered["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
     full_mi = full_mi_all.head(max_collocates).copy()
+    
+    if 'Direction' not in full_mi.columns:
+        full_mi['Direction'] = 'B'
+        full_mi['Obs_L'] = 0
+        full_mi['Obs_R'] = 0
+
     full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
     
@@ -961,7 +1027,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     if filter_count > 0:
         st.info(f"Filters Applied: Showing collocates matching {filter_count} criteria.")
     
-    # Revert: Call create_pyvis_graph without context args
+    # Call create_pyvis_graph with updated directional data
     network_html = create_pyvis_graph(
         primary_target_mwu, 
         network_df
@@ -972,11 +1038,11 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.markdown(
         """
         **Graph Key (POS Tags Restored):**
-        * Central Node (Target): **Yellow**
-        * Collocate Node Color: Noun (Prefix 'N') **Green**, Verb (Prefix 'V') **Blue**, Adjective (Prefix 'J') **Pink**, Adverb (Prefix 'R') **Yellow**. All other tags/raw text (`##`) are **Gray**.
-        * Edge Thickness: **All Thick** (Uniform)
-        * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation)
-        * Hover over collocate nodes for details (POS, Observed Freq, LL score).
+        * Central Node (Target): **Yellow**, fixed at the center.
+        * Collocate Node Color: Noun (N) **Green**, Verb (V) **Blue**, Adjective (J) **Pink**, Adverb (R) **Yellow**. Others/Raw are **Gray**.
+        * **Directional Placement:** Nodes are placed on the **Left** (preceding) or **Right** (following) side of the target based on their **dominant frequency** (Observed L vs. R).
+        * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation).
+        * Hover over collocate nodes for details (POS, Total Observed Freq, Directional Counts, LL score).
         """
     )
     st.markdown("---")
@@ -988,6 +1054,12 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             for pref in prefixes:
                 mask = mask | stats_df_filtered["POS"].str.startswith(pref, na=False)
             sub = stats_df_filtered[mask].copy()
+            # Ensure directional columns exist for sub-Dfs
+            if 'Direction' not in sub.columns:
+                sub['Direction'] = 'B'
+                sub['Obs_L'] = 0
+                sub['Obs_R'] = 0
+                
             # Use max_collocates for category tables as well
             ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(max_collocates).copy()
             ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
@@ -1003,7 +1075,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         # Display up to 10 rows for visual clarity in the UI, even if max_collocates > 10
         display_rows = min(10, max_collocates)
 
-        st.subheader("Log-Likelihood — Top 10 by POS")
+        st.subheader("Log-Likelihood — Top 10 by POS (Includes Directional Counts)")
         cols = st.columns(4, gap="small")
         
         with cols[0]:
