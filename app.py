@@ -155,33 +155,32 @@ def create_word_cloud(freq_data, is_tagged_mode):
     return fig
 
 
-# --- NEW: Contextual Lookup Function ---
+# --- NEW: Contextual Lookup Function (FIXED) ---
 def get_collocate_context(target_word, collocate_word, corpus_df, target_positions, coll_window, max_lines=5):
     """
     Finds and formats up to `max_lines` concordance lines where the target and
-    collocate appear within the collocation window.
+    collocate appear within the collocation window, ensuring the target node is bolded
+    in all instances within the context.
     """
     # Use lowercase versions for matching
-    target_lower = target_word.lower()
     collocate_lower = collocate_word.lower()
     
     context_lines = []
     
-    # Find all collocate instances (token, index_in_corpus) that were part of the analysis
-    collocate_instances = []
+    # Target may be a MWU (e.g., 'in the voice')
+    target_word_tokens = target_word.split()
+    target_word_len = len(target_word_tokens)
     
     # Iterate over every position of the target word
     for i in target_positions:
         
-        target_len = len(target_word.split())
-        
-        # Define the window boundaries in the corpus
+        # Define the collocation window boundaries in the corpus
         start_index = max(0, i - coll_window)
-        end_index = min(len(corpus_df), i + target_len + coll_window) 
+        end_index = min(len(corpus_df), i + target_word_len + coll_window) 
         
         # Iterate through the tokens in that window (excluding the target itself)
         for j in range(start_index, end_index):
-            if i <= j < i + target_len:
+            if i <= j < i + target_word_len:
                 continue # Skip the target word(s)
             
             # Check if the token at index j is the collocate we are looking for
@@ -189,42 +188,60 @@ def get_collocate_context(target_word, collocate_word, corpus_df, target_positio
                 
                 # --- Format the Context Line ---
                 
-                # Context tokens (for display, use tokens from the original DF for accurate case/punc)
-                # Display context window size can be fixed (e.g., 5 tokens around the event)
-                display_window = 10 
-                display_start = max(0, j - display_window)
-                display_end = min(len(corpus_df), j + display_window + 1)
+                # Use a fixed display context window size (e.g., 5 tokens on each side of the event, total 10)
+                display_window = 5 
+                
+                # Determine the bounds that encompass the target, collocate, and context
+                
+                # Option 1: Base the display window on the entire area between the collocate and the target
+                
+                # Find the center of the event (between target and collocate)
+                center_pos = (i + j) // 2
+                
+                display_start = max(0, center_pos - display_window)
+                display_end = min(len(corpus_df), center_pos + display_window + 1)
+                
+                # Ensure the target and collocate are not cut off
+                display_start = min(display_start, i, j) 
+                display_end = max(display_end, i + target_word_len, j + 1)
+                
+                # Clamp boundaries back to corpus limits
+                display_start = max(0, display_start - 3)
+                display_end = min(len(corpus_df), display_end + 3) # Expand slightly to show more context
                 
                 line_tokens = corpus_df["token"].iloc[display_start:display_end].tolist()
-                line_tokens_lower = [t.lower() for t in line_tokens]
                 
-                # Identify relative positions of target and collocate within line_tokens
-                # This part is tricky due to potential overlap. We search the line_tokens_lower for both.
-                
+                # A helper list to track all target node positions within the context window
+                target_hits_in_window = []
+                for t_pos in target_positions:
+                    if display_start <= t_pos < display_end:
+                        target_hits_in_window.append(t_pos)
+
                 formatted_tokens = []
-                current_idx = display_start
                 
                 for k, token in enumerate(line_tokens):
-                    token_lower = token.lower()
+                    token_index_in_corpus = display_start + k
                     
-                    if current_idx == j:
-                        # This is the collocate
+                    is_collocate = (token_index_in_corpus == j)
+                    is_target_node = False
+                    
+                    # Check if the current token is part of the target node(s) found in this context
+                    for hit_start_index in target_hits_in_window:
+                        if hit_start_index <= token_index_in_corpus < hit_start_index + target_word_len:
+                            is_target_node = True
+                            break
+                    
+                    if is_collocate:
                         formatted_tokens.append(f"[{token}]")
-                    elif current_idx == i:
-                        # This is the start of the node word (target)
-                        formatted_tokens.append(f"**{token}**")
-                    elif target_len > 1 and i < current_idx < i + target_len:
-                        # This is part of a multi-word target node
+                    elif is_target_node:
                         formatted_tokens.append(f"**{token}**")
                     else:
                         formatted_tokens.append(token)
-                    
-                    current_idx += 1
                 
                 # Join the tokens to form the final line
                 formatted_line = " ".join(formatted_tokens)
                 
-                # Only add if we haven't reached the limit
+                # Only add if we haven't reached the limit and haven't added this exact line before
                 if formatted_line not in context_lines:
                     context_lines.append(formatted_line)
                 
@@ -286,7 +303,6 @@ def create_pyvis_graph(target_word, coll_df, full_corpus_df, target_positions, c
         pos_tag = row['POS']
         
         # --- Contextual Concordance Lookup ---
-        # Note: We pass the *full* corpus df and all target positions for accurate lookup
         context_lines = get_collocate_context(target_word, collocate, full_corpus_df, target_positions, coll_window, max_lines=5)
         
         # Format the tooltip title (HTML required for line breaks and formatting)
@@ -297,6 +313,7 @@ def create_pyvis_graph(target_word, coll_df, full_corpus_df, target_positions, c
         tooltip_html += "<b>Top 5 Contexts:</b><br>"
         
         if context_lines:
+            # Use <br> to force line breaks in the HTML tooltip
             tooltip_html += "<br>".join(context_lines)
         else:
             tooltip_html += "Context not found or out of sample."
@@ -946,7 +963,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     st.subheader("🔗 Collocation Analysis Results")
     st.success(f"Analyzing target {target_display}. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
 
-    # --- COLLOCATION COUNTING AND CONTEXTUAL FILTERING (UPDATED FOR $, +, *, []) ---
+    # --- COLLOCATION COUNTING AND CONTEXTUAL FILTERING ---
     
     context_filtered_collocates = Counter()
     
