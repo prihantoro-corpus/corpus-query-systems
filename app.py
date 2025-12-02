@@ -30,6 +30,8 @@ if 'trigger_analyze' not in st.session_state:
     st.session_state['trigger_analyze'] = False
 if 'initial_load_complete' not in st.session_state:
     st.session_state['initial_load_complete'] = False
+if 'last_pattern_search_window' not in st.session_state:
+    st.session_state['last_pattern_search_window'] = 0
 
 
 # --- CONSTANTS ---
@@ -66,10 +68,13 @@ def reset_analysis():
     st.session_state['last_target_input'] = ''
     st.session_state['last_pattern_collocate'] = ''
     st.session_state['trigger_analyze'] = False
+    st.session_state['initial_load_complete'] = False
     
 # --- Analysis Trigger Callback ---
 def trigger_analysis_callback():
-    st.session_state['trigger_analyze'] = True
+    # Only trigger if the input value is non-empty, otherwise it triggers on clearing the input
+    if st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('typed_target_input', '').strip():
+        st.session_state['trigger_analyze'] = True
 
 # ---------------------------
 # Helpers: stats, IO utilities
@@ -361,7 +366,8 @@ def load_corpus_file(file_source, sep=r"\s+"):
             df["_token_low"] = df["token"].str.lower()
             return df
             
-    except Exception:
+    except Exception as e:
+        # Fallback to raw text parsing attempt if structured parsing fails
          pass
 
     try:
@@ -385,7 +391,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         return df
         
     except Exception as raw_e:
-        st.error(f"Error processing corpus data: {raw_e}")
+        # Final failure point
         return None 
 
 
@@ -473,18 +479,23 @@ with st.sidebar:
         
         st.caption("The **Node Word** is set by the primary search input above.")
         
-        pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.")
+        # Check if window is changed separately (implicitly triggers re-run)
+        pattern_search_window = st.number_input(
+            "Search Window (tokens, each side)", 
+            min_value=1, max_value=10, value=5, step=1, 
+            key="pattern_search_window_input", 
+            help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.",
+            on_change=trigger_analysis_callback # Trigger analysis if window changes
+        )
         
-        # --- Collocate Input with Auto-Analysis Trigger ---
-        # Note: Using 'on_change' callback is the standard way to trigger re-runs when a widget value changes.
+        # Collocate Input with Auto-Analysis Trigger
         pattern_collocate = st.text_input(
             "Collocate Word/Pattern (* for wildcard)", 
             value="", 
             key="pattern_collocate_input", 
-            help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter to search.",
-            on_change=trigger_analysis_callback # Use callback to set the analysis flag
+            help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
+            on_change=trigger_analysis_callback # Use callback to set the analysis flag when value changes/Enter is pressed
         )
-        # ---------------------------------------------------
 
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
@@ -549,9 +560,11 @@ with st.sidebar:
 # load corpus (cached) for main body access
 df = load_corpus_file(corpus_source)
 
+# --- NEW: Check for initial load failure and display better message ---
 if df is None:
-    st.error("Corpus failed to load. Please check the file format or download source.")
+    st.error("Corpus failed to load. **Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
     st.stop()
+# ---------------------------------------------------------------------
     
 # --- CORPUS STATS CALCULATION (SHARED) ---
 # df is guaranteed to be non-None here
@@ -640,12 +653,11 @@ if st.session_state['view'] != 'overview':
     col_a, col_b = st.columns(2)
     with col_a:
         # Default search box, used unless pattern search fields are filled
-        # Use on_change to trigger analysis if the primary target is changed outside of the button press
         typed_target = st.text_input(
             "Type a primary token, MWU ('in the'), or wildcard ('in*')", 
             value="", 
             key="typed_target_input",
-            on_change=trigger_analysis_callback # Use callback to set the analysis flag
+            on_change=trigger_analysis_callback # Trigger analysis if primary input changes
         )
     with col_b:
         uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
@@ -659,8 +671,12 @@ if st.session_state['view'] != 'overview':
             target_list = uploaded_targets.read().decode('utf-8').splitlines()
             target_list = [t.strip() for t in target_list if t.strip()]
         if target_list:
-            # Note: Selectbox change also triggers a full re-run implicitly
-            selected_target = st.selectbox("Select target from uploaded list", options=target_list, key="selected_target_input")
+            selected_target = st.selectbox(
+                "Select target from uploaded list", 
+                options=target_list, 
+                key="selected_target_input",
+                on_change=trigger_analysis_callback # Trigger analysis if selection changes
+            )
     
     # Determine the primary search input
     primary_input = (selected_target if selected_target else typed_target).strip()
@@ -668,11 +684,9 @@ if st.session_state['view'] != 'overview':
     # Check if we should use the Pattern Search parameters instead
     use_pattern_search = False
     if st.session_state['view'] == 'concordance':
-        # Check if the primary input is filled AND the collocate box is filled
         if primary_input and st.session_state.get('pattern_collocate'):
             pattern_collocate_val = st.session_state['pattern_collocate'].strip()
             if pattern_collocate_val:
-                # Primary input acts as the Node Word
                 use_pattern_search = True
     
     target_input = primary_input
@@ -680,14 +694,12 @@ if st.session_state['view'] != 'overview':
     contains_wildcard = '*' in target_input
 
     if not target_input and not use_pattern_search:
-        st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis. Then click Analyze.")
+        st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis.")
     
-    # Check if we should trigger analysis implicitly due to input change
-    # If the user pressed the "Analyze" button, analyze_btn is True.
-    # If the user changed primary_input OR pattern_collocate_input, trigger_analyze will be True via callbacks.
-    
-    # Reset button needed here, as we rely on implicit re-runs
+    # Explicit Analyze Button
     analyze_btn_explicit = st.button("🔎 Analyze")
+    
+    # --- Auto-Analysis Trigger Logic ---
     analyze_btn = analyze_btn_explicit or st.session_state['trigger_analyze']
     
     # Reset the implicit trigger flag after checking it
@@ -702,22 +714,22 @@ if st.session_state['view'] != 'overview':
 if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- Check for redundant analysis and early exit ---
-    # We only skip if the explicit button was NOT pressed AND the inputs haven't changed since the last successful analysis.
-    current_inputs = (target_input, st.session_state.get('pattern_collocate'), st.session_state.get('pattern_search_window'))
-    last_inputs = (st.session_state['last_target_input'], st.session_state['last_pattern_collocate'], st.session_state.get('last_pattern_search_window', 0))
+    current_inputs = (target_input, st.session_state.get('pattern_collocate_input'), st.session_state.get('pattern_search_window_input'))
+    last_inputs = (st.session_state['last_target_input'], st.session_state['last_pattern_collocate'], st.session_state['last_pattern_search_window'])
 
+    # Skip analysis if triggered implicitly (not by explicit button press) AND inputs haven't changed.
+    # We allow the first run to proceed regardless of input matching initial state.
     if not analyze_btn_explicit and current_inputs == last_inputs:
-         # Skip analysis if triggered implicitly but inputs haven't changed
-         # Need to ensure we don't accidentally skip the first run if inputs happen to match initialization states.
          if st.session_state.get('initial_load_complete'):
+             # st.write("Skipping redundant implicit analysis.") # Debug
              st.stop()
     
     # Store current inputs for next run comparison
     st.session_state['last_target_input'] = target_input
-    st.session_state['last_pattern_collocate'] = st.session_state.get('pattern_collocate')
-    st.session_state['last_pattern_search_window'] = st.session_state.get('pattern_search_window')
+    st.session_state['last_pattern_collocate'] = st.session_state.get('pattern_collocate_input')
+    st.session_state['last_pattern_search_window'] = st.session_state.get('pattern_search_window_input')
     st.session_state['initial_load_complete'] = True
-
+    
     # --- Start Analysis ---
     kwic_left = st.session_state.get('kwic_left', 7)
     kwic_right = st.session_state.get('kwic_right', 7)
@@ -735,7 +747,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     primary_target_len = 0
     wildcard_freq_df = pd.DataFrame()
     
-    # ... (MWU/Wildcard resolution logic here) ...
+    # Logic to resolve target to a specific MWU or token (if wildcard is used)
     if contains_wildcard:
         if ' ' not in target:
             pattern = re.escape(target).replace(r'\*', '.*')
@@ -809,14 +821,13 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                 all_target_positions.append(i)
 
-    # 2b. Apply pattern filtering if active (FIXED)
+    # 2b. Apply pattern filtering if active (FIXED logic to ensure collocate presence)
     final_positions = []
     
     if is_pattern_search_active:
         
         # Collocate Wildcard/Regex Handling
         collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
-        
         try:
              collocate_regex = re.compile(collocate_pattern_str)
         except re.error as e:
@@ -946,8 +957,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         scrollable_height = KWIC_INITIAL_DISPLAY_HEIGHT * row_height
         
         # 1. Custom CSS for table appearance (Alignment and Font + SCROLLING CONTAINER)
-        # Note: If running this in a web server environment, the CSS needs to be injected carefully.
-        # This setup relies on Streamlit's markdown interpretation of injected HTML/CSS.
         kwic_table_style = f"""
              <style>
              .dataframe-container-scroll {{
