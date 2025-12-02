@@ -630,8 +630,9 @@ if st.session_state['view'] != 'overview':
     use_pattern_search = False
     if st.session_state['view'] == 'concordance':
         if st.session_state.get('pattern_node_word') and st.session_state.get('pattern_collocate'):
-            primary_input = st.session_state['pattern_node_word'].strip()
-            if primary_input:
+            pattern_node_word_val = st.session_state['pattern_node_word'].strip()
+            if pattern_node_word_val:
+                primary_input = pattern_node_word_val
                 use_pattern_search = True
     
     target_input = primary_input
@@ -748,9 +749,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     all_target_positions = []
     
     # 2a. Find all instances of the target word (base positions)
-    # The logic here handles both wildcards and literals based on primary_target_mwu
     if contains_wildcard and not wildcard_freq_df.empty:
-        # For wildcard, we take positions of the top match
         target_match = primary_target_mwu.split()
         target_match_len = len(target_match)
         for i in range(len(tokens_lower) - target_match_len + 1):
@@ -758,7 +757,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                  all_target_positions.append(i)
         
     else:
-        # For literal/non-wildcard search
         for i in range(len(tokens_lower) - primary_target_len + 1):
             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                 all_target_positions.append(i)
@@ -807,7 +805,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         
         full_line_tokens = df["token"].iloc[kwic_start:kwic_end].tolist()
         
-        # --- KWIC Line Formatting ---
+        # --- KWIC Line Formatting (HTML Insertion) ---
         formatted_line = []
         node_orig_tokens = []
         
@@ -815,22 +813,21 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             token_index_in_corpus = kwic_start + k
             token_lower = token.lower()
             
-            # Check if token is the node word
             is_node_word = (i <= token_index_in_corpus < i + primary_target_len)
             
-            # Check if token is the collocate (must be outside the node word area)
             is_collocate = False
             if is_pattern_search_active and not is_node_word:
                 if token_lower == pattern_collocate:
                     is_collocate = True
             
             if is_node_word:
-                # Node word should be in the Node column, not bolded in the context here
+                # Node word remains unformatted in the context columns (but collected for the Node column)
                 node_orig_tokens.append(token)
                 
             elif is_collocate:
-                # Collocate must be bolded in the context columns
-                formatted_line.append(f"**{token}**")
+                # Collocate must be BOLDED and YELLOW HIGHLIGHTED
+                html_token = f"<b><span style='background-color: yellow;'>{token}</span></b>"
+                formatted_line.append(html_token)
             else:
                 formatted_line.append(token)
 
@@ -863,36 +860,52 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         kwic_preview = kwic_df.copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         
-        # Custom styling to ensure KWIC is easily read
-        st.markdown(
-             """
+        # 1. Custom CSS for table appearance (Alignment and Font)
+        kwic_table_style = """
              <style>
+             .dataframe {
+                 font-family: monospace;
+             }
              .dataframe table {
                 width: 100%;
                 table-layout: fixed;
                 word-wrap: break-word;
              }
+             .dataframe th {
+                font-weight: bold;
+                text-align: center;
+             }
              .dataframe td:nth-child(2) { /* Left context */
                 text-align: right;
-                font-family: monospace;
              }
              .dataframe td:nth-child(3) { /* Node */
                 text-align: center;
                 font-weight: bold;
-                background-color: #FFFFCC; /* Light Yellow Highlight */
-                font-family: monospace;
+                background-color: #f0f0f0; /* Light Gray Highlight for Node */
+                color: black;
              }
              .dataframe td:nth-child(4) { /* Right context */
                 text-align: left;
-                font-family: monospace;
+             }
+             /* Remove indexing column width constraint */
+             .dataframe thead th:first-child { 
+                 width: 30px; 
              }
              </style>
-             """,
-             unsafe_allow_html=True
-         )
+        """
+        st.markdown(kwic_table_style, unsafe_allow_html=True)
         
-        st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
+        # 2. Render the DataFrame as HTML, preventing Pandas from escaping the HTML injected in the cells
+        st.markdown(
+            kwic_preview.to_html(
+                escape=False,
+                classes=['dataframe', 'kwic-table'],
+                index=False
+            ), 
+            unsafe_allow_html=True
+        )
 
+        st.caption("Note: Pattern search collocates are bolded and highlighted yellow.")
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     with col_freq:
