@@ -32,7 +32,7 @@ if 'initial_load_complete' not in st.session_state:
     st.session_state['initial_load_complete'] = False
 if 'last_pattern_search_window' not in st.session_state:
     st.session_state['last_pattern_search_window'] = 0
-if 'collocate_pos_regex' not in st.session_state: # NEW: Collocate POS Regex State
+if 'collocate_pos_regex' not in st.session_state: 
     st.session_state['collocate_pos_regex'] = ''
 
 
@@ -436,7 +436,9 @@ with st.sidebar:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
     elif selected_corpus_name != "Select built-in corpus...":
-        corpus_url = BUTO_IN_CORPORA[selected_corpus_name]
+        # --- FIX: Corrected typo from BUTO_IN_CORPORA to BUILT_IN_CORPORA ---
+        corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
+        # -------------------------------------------------------------------
         with st.spinner(f"Downloading {selected_corpus_name}..."):
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
@@ -522,7 +524,7 @@ with st.sidebar:
         # --- POS Filters (Requires Tagged Corpus) ---
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
             
-            # 2a. POS Tag Wildcard Filter (NEW)
+            # 2a. POS Tag Pattern Filter 
             collocate_pos_regex_input = st.text_input(
                 "Filter by POS Tag Pattern (Wildcard/Concatenation)", 
                 value="", 
@@ -547,7 +549,7 @@ with st.sidebar:
         else:
             st.info("POS filtering requires a tagged corpus.")
             st.session_state['collocate_pos_regex'] = None
-            st.session_state['pos_wildcard_regex'] = None # This old wildcard is deprecated/unused now, but clear it for safety
+            st.session_state['pos_wildcard_regex'] = None 
             st.session_state['selected_pos_tags'] = None
 
         # 3. Lemma Filter (Requires Lemmatized Corpus)
@@ -832,7 +834,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
                 all_target_positions.append(i)
 
-    # 2b. Apply pattern filtering if active (FIXED logic to ensure collocate presence)
+    # 2b. Apply pattern filtering if active 
     final_positions = []
     collocate_count_in_context = 0
     
@@ -951,9 +953,12 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     results_panel_data = []
     
     if is_pattern_search_active:
-        # Calculate expected frequency (total frequency of the collocate pattern in the whole corpus)
-        collocate_pattern_total_freq = sum(1 for token in tokens_lower if collocate_regex.fullmatch(token))
         
+        # Recalculate collocate regex safely outside the loop if needed for expected freq
+        collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
+        collocate_regex = re.compile(collocate_pattern_str)
+        collocate_pattern_total_freq = sum(1 for token in tokens_lower if collocate_regex.fullmatch(token))
+
         # 1. Node Word Frequency
         results_panel_data.append({
             "Metric": "Node Word Frequency",
@@ -1271,20 +1276,21 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                 
         # 2a. POS Pattern Filter (NEW IMPLEMENTATION)
         if collocate_pos_regex_input and not is_raw_mode:
-            # Convert user input like 'V*|NN*' into full regex: '^V.*|^NN.*$'
+            # Convert user input like 'V*|NN*' into full regex: 'V.*|NN.*'
             pos_patterns = [p.strip() for p in collocate_pos_regex_input.split('|') if p.strip()]
             
-            # Escape regex characters except '|' and replace '*' with '.*'
             full_pos_regex_list = []
             for pattern in pos_patterns:
+                # Ensure '|' is handled by split, then escape except for '*', replace '*' with '.*'
                 escaped_pattern = re.escape(pattern).replace(r'\*', '.*')
                 full_pos_regex_list.append(escaped_pattern)
             
             if full_pos_regex_list:
-                # Use alternation for multiple patterns
-                full_pos_regex = "|".join(f"^{p}$" for p in full_pos_regex_list)
+                # Use alternation for multiple patterns, ensuring anchor for full match on the tag: ^(V.*|NN.*)$
+                full_pos_regex = "^(" + "|".join(full_pos_regex_list) + ")$"
                 
                 try:
+                    # Filtered df based on POS tag matching the user's pattern
                     filtered_df = filtered_df[filtered_df['POS'].str.contains(full_pos_regex, case=True, na=False, regex=True)]
                 except re.error:
                     st.error(f"Invalid POS pattern/regex: '{collocate_pos_regex_input}'")
