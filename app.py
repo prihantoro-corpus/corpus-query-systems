@@ -10,8 +10,8 @@ import tempfile
 import os       
 import re       
 import requests 
-import matplotlib.pyplot as plt # NEW: Import for plotting
-from wordcloud import WordCloud # NEW: Import for word cloud generation
+import matplotlib.pyplot as plt 
+from wordcloud import WordCloud 
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
@@ -84,7 +84,7 @@ def df_to_excel_bytes(df):
     buf.seek(0)
     return buf.getvalue()
 
-# --- NEW: Word Cloud Function ---
+# --- Word Cloud Function ---
 @st.cache_data
 def create_word_cloud(token_list):
     """Generates a word cloud from a list of filtered tokens."""
@@ -338,7 +338,7 @@ with st.sidebar:
     
     st.subheader("1. Choose Corpus Source")
     
-    # NEW: Added callback to reset cache when built-in corpus selection changes
+    # Added callback to reset cache when built-in corpus selection changes
     selected_corpus_name = st.selectbox(
         "Select a pre-loaded corpus:", 
         options=list(BUILT_IN_CORPORA.keys()),
@@ -346,7 +346,7 @@ with st.sidebar:
         on_change=reset_analysis
     )
     
-    # NEW: Added callback to reset cache when file is uploaded
+    # Added callback to reset cache when file is uploaded
     uploaded_file = st.file_uploader(
         "OR Upload your own corpus file", 
         type=["txt","csv"],
@@ -446,7 +446,7 @@ with col1:
     })
     st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
-    # --- NEW: Word Cloud Display ---
+    # --- Word Cloud Display ---
     st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
     if tokens_lower_filtered:
         wordcloud_fig = create_word_cloud(tokens_lower_filtered)
@@ -494,6 +494,11 @@ if uploaded_targets is not None:
     if target_list:
         selected_target = st.selectbox("Select target from uploaded list", options=target_list)
 target_input = (selected_target if selected_target else typed_target).strip()
+
+# --- MWU PROCESSING ---
+target_tokens = target_input.lower().split()
+target_len = len(target_tokens)
+
 if not target_input:
     st.info("Type a token or upload a target list and choose one. Then click Analyze.")
 analyze_btn = st.button("🔎 Analyze")
@@ -503,10 +508,21 @@ analyze_btn = st.button("🔎 Analyze")
 # ---------------------------
 if analyze_btn and target_input:
     target = target_input.lower()
-    positions = [i for i, t in enumerate(tokens_lower) if t == target]
+    
+    # --- FIND MWU POSITIONS ---
+    positions = []
+    if target_len == 1:
+        # Single word: standard token match
+        positions = [i for i, t in enumerate(tokens_lower) if t == target]
+    else:
+        # Multi-word unit (MWU): sequence match
+        for i in range(len(tokens_lower) - target_len + 1):
+            if tokens_lower[i:i + target_len] == target_tokens:
+                positions.append(i)
+
     freq = len(positions)
     if freq == 0:
-        st.warning(f"Token '{target_input}' not found in corpus.")
+        st.warning(f"Target '{target_input}' not found in corpus.")
     else:
         st.success(f"Found {freq} occurrences of '{target_input}' (case-insensitive).")
         rel_freq = (freq / total_tokens) * 1_000_000
@@ -516,25 +532,34 @@ if analyze_btn and target_input:
         st.subheader(f"Concordance (KWIC) — top 10 ({kwic_left} left & {kwic_right} right)")
         kwic_rows = []
         for i in positions:
+            # i is the index of the first token of the MWU
             left = tokens_lower[max(0, i - kwic_left):i]
-            right = tokens_lower[i + 1:i + 1 + kwic_right]
-            node_orig = df["token"].iloc[i]
+            # right context starts after the last token of the MWU (i + target_len)
+            right = tokens_lower[i + target_len:i + target_len + kwic_right]
+            
+            # Node is the sequence of original tokens
+            node_orig_tokens = df["token"].iloc[i:i + target_len].tolist()
+            node_orig = " ".join(node_orig_tokens)
+            
             kwic_rows.append({"Left": " ".join(left), "Node": node_orig, "Right": " ".join(right)})
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.head(10).copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
 
-        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        # ---------- COLLATION: compute stats ----------
+        # ---------- COLLATION: compute stats (MWU Collocation) ----------
         coll_pairs = []
         for i in positions:
             start = max(0, i - coll_window)
-            end = min(total_tokens, i + coll_window + 1)
+            end = min(total_tokens, i + target_len + coll_window) # Window extends from end of MWU
+            
             for j in range(start, end):
-                if j == i:
+                # Skip tokens that are part of the target MWU itself
+                if i <= j < i + target_len:
                     continue
+                
                 coll_pairs.append((tokens_lower[j], df["pos"].iloc[j]))
 
         coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos"])
@@ -669,7 +694,7 @@ if analyze_btn and target_input:
                 }
                 for i, (cat, df_tab) in enumerate(ll_mapping.items()):
                     bname = f"LL {cat} top10"
-                    ll_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target}_LL_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    ll_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target.replace(' ', '_')}_LL_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
                 st.markdown("**MI Top 10 Downloads (POS-Filtered)**")
                 mi_dl_cols = st.columns(5)
@@ -678,20 +703,20 @@ if analyze_btn and target_input:
                 }
                 for i, (cat, df_tab) in enumerate(mi_mapping.items()):
                     bname = f"MI {cat} top10"
-                    mi_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target}_MI_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    mi_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target.replace(' ', '_')}_MI_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 st.markdown("---")
             
             # Full Results Download
             st.download_button(
                 "⬇ Download full LL results (xlsx)", 
                 data=df_to_excel_bytes(stats_df_sorted), 
-                file_name=f"{target}_LL_full.xlsx", 
+                file_name=f"{target.replace(' ', '_')}_LL_full.xlsx", 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             st.download_button(
                 f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
                 data=df_to_excel_bytes(full_mi_all), 
-                file_name=f"{target}_MI_full_obsge{mi_min_freq}.xlsx", 
+                file_name=f"{target.replace(' ', '_')}_MI_full_obsge{mi_min_freq}.xlsx", 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
