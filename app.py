@@ -970,7 +970,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
         for k, token in enumerate(full_line_tokens):
             token_index_in_corpus = kwic_start + k
-            # token_lower uses the cleaned token, token is already stripped on load
             token_lower = token.lower()
             token_pos = df["pos"].iloc[token_index_in_corpus]
             
@@ -993,6 +992,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             if is_node_word:
                 # Node word remains unformatted in the context columns (but collected for the Node column)
                 node_orig_tokens.append(token)
+                # FIX: Add a placeholder to formatted_line to maintain index alignment for slicing
+                formatted_line.append("") 
                 
             elif is_collocate_match:
                 # Collocate must be BOLDED and BRIGHT YELLOW HIGHLIGHTED
@@ -1005,6 +1006,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         node_start_rel = i - kwic_start
         node_end_rel = node_start_rel + primary_target_len
 
+        # Slicing now works correctly because the placeholder maintains the indices
         left_context = formatted_line[:node_start_rel]
         right_context = formatted_line[node_end_rel:]
         
