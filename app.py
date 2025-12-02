@@ -449,11 +449,12 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Pattern Search Filter")
         
-        pattern_node_word = st.text_input("Node Word (for Pattern Search)", value="", key="pattern_node_word_input", help="The central word for the pattern (will be highlighted in KWIC output).")
-        pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the node word.")
-        pattern_collocate = st.text_input("Collocate Word (for Pattern Search)", value="", key="pattern_collocate_input", help="The specific word required to be in the context window (will be **bolded and highlighted** in KWIC).")
+        # REMOVED: pattern_node_word input
+        
+        pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the Node Word.")
+        pattern_collocate = st.text_input("Collocate Word (for Pattern Search)", value="", key="pattern_collocate_input", help="The specific word required to be in the context window (will be **bolded and highlighted**).")
 
-        st.session_state['pattern_node_word'] = pattern_node_word
+        # Removed setting of 'pattern_node_word' to session state
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
         
@@ -629,10 +630,11 @@ if st.session_state['view'] != 'overview':
     # Check if we should use the Pattern Search parameters instead
     use_pattern_search = False
     if st.session_state['view'] == 'concordance':
-        if st.session_state.get('pattern_node_word') and st.session_state.get('pattern_collocate'):
-            pattern_node_word_val = st.session_state['pattern_node_word'].strip()
-            if pattern_node_word_val:
-                primary_input = pattern_node_word_val
+        # Check if the primary input is filled AND the collocate box is filled
+        if primary_input and st.session_state.get('pattern_collocate'):
+            pattern_collocate_val = st.session_state['pattern_collocate'].strip()
+            if pattern_collocate_val:
+                # Primary input acts as the Node Word
                 use_pattern_search = True
     
     target_input = primary_input
@@ -765,7 +767,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     final_positions = []
     
     if is_pattern_search_active:
-        st.info(f"Pattern Search Active: Looking for '{pattern_collocate}' within ±{pattern_window} tokens of '{primary_target_mwu}'.")
+        st.info(f"Pattern Search Active: Node='{primary_target_mwu}', Collocate='{pattern_collocate}' within ±{pattern_window} tokens.")
         collocate_pattern = re.compile(re.escape(pattern_collocate))
         
         for i in all_target_positions:
@@ -825,7 +827,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 node_orig_tokens.append(token)
                 
             elif is_collocate:
-                # Collocate must be BOLDED and BRIGHT YELLOW HIGHLIGHTED (black text on yellow bg for contrast)
+                # Collocate must be BOLDED and BRIGHT YELLOW HIGHLIGHTED
                 html_token = f"<b><span style='color: black; background-color: #FFEA00;'>{token}</span></b>"
                 formatted_line.append(html_token)
             else:
@@ -861,12 +863,12 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         
         # 1. Custom CSS for table appearance (Alignment and Font)
-        # Setting general text color to white for better dark mode readability
+        # Updated CSS for better dark mode readability (white text for context)
         kwic_table_style = """
              <style>
              .dataframe {
                  font-family: monospace;
-                 color: white; /* Ensure context text is white/light */
+                 color: white; /* Default text color for context */
              }
              .dataframe table {
                 width: 100%;
@@ -879,6 +881,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
              }
              .dataframe td:nth-child(2) { /* Left context */
                 text-align: right;
+                color: white; /* Explicitly set context text color */
              }
              .dataframe td:nth-child(3) { /* Node */
                 text-align: center;
@@ -888,6 +891,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
              }
              .dataframe td:nth-child(4) { /* Right context */
                 text-align: left;
+                color: white; /* Explicitly set context text color */
              }
              /* Remove indexing column width constraint */
              .dataframe thead th:first-child { 
