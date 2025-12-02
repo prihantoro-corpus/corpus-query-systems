@@ -449,9 +449,9 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Pattern Search Filter")
         
-        pattern_node_word = st.text_input("Node Word (for Pattern Search)", value="", key="pattern_node_word_input", help="The central word for the pattern (will be bolded in KWIC output).")
+        pattern_node_word = st.text_input("Node Word (for Pattern Search)", value="", key="pattern_node_word_input", help="The central word for the pattern (will be highlighted in KWIC output).")
         pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the node word.")
-        pattern_collocate = st.text_input("Collocate Word (for Pattern Search)", value="", key="pattern_collocate_input", help="The specific word required to be in the context window (will be **bolded** in KWIC).")
+        pattern_collocate = st.text_input("Collocate Word (for Pattern Search)", value="", key="pattern_collocate_input", help="The specific word required to be in the context window (will be **bolded and highlighted** in KWIC).")
 
         st.session_state['pattern_node_word'] = pattern_node_word
         st.session_state['pattern_search_window'] = pattern_search_window
@@ -825,8 +825,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 node_orig_tokens.append(token)
                 
             elif is_collocate:
-                # Collocate must be BOLDED and YELLOW HIGHLIGHTED
-                html_token = f"<b><span style='background-color: yellow;'>{token}</span></b>"
+                # Collocate must be BOLDED and BRIGHT YELLOW HIGHLIGHTED (black text on yellow bg for contrast)
+                html_token = f"<b><span style='color: black; background-color: #FFEA00;'>{token}</span></b>"
                 formatted_line.append(html_token)
             else:
                 formatted_line.append(token)
@@ -861,10 +861,12 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         
         # 1. Custom CSS for table appearance (Alignment and Font)
+        # Setting general text color to white for better dark mode readability
         kwic_table_style = """
              <style>
              .dataframe {
                  font-family: monospace;
+                 color: white; /* Ensure context text is white/light */
              }
              .dataframe table {
                 width: 100%;
@@ -905,7 +907,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             unsafe_allow_html=True
         )
 
-        st.caption("Note: Pattern search collocates are bolded and highlighted yellow.")
+        st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow** for maximum visibility.")
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     with col_freq:
