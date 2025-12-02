@@ -687,8 +687,9 @@ if st.session_state['view'] != 'overview':
     col_a, col_b = st.columns(2)
     with col_a:
         # Default search box, used unless pattern search fields are filled
+        # Note: This is now the entry point for structural queries like [love]_VVG
         typed_target = st.text_input(
-            "Type a primary token, MWU ('in the'), or wildcard ('in*')", 
+            "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
             value="", 
             key="typed_target_input",
             on_change=trigger_analysis_callback # Trigger analysis if primary input changes
@@ -774,87 +775,146 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     is_pattern_search_active = use_pattern_search and (pattern_collocate or pattern_collocate_pos) and pattern_window > 0
 
-    # --- MWU/WILDCARD RESOLUTION (Retained logic) ---
+    # --- MWU/WILDCARD/STRUCTURAL RESOLUTION ---
     primary_target_mwu = None
     primary_target_tokens = []
     primary_target_len = 0
     wildcard_freq_df = pd.DataFrame()
+    all_target_positions = []
+    literal_freq = 0
+    is_structural_search = False
     
-    # Logic to resolve target to a specific MWU or token (if wildcard is used)
-    if contains_wildcard:
-        if ' ' not in target:
-            pattern = re.escape(target).replace(r'\*', '.*')
-            wildcard_matches = [token for token in token_counts if re.fullmatch(pattern, token)]
-            match_counts = {token: token_counts[token] for token in wildcard_matches if token in token_counts}
-            sorted_matches = sorted(match_counts.items(), key=lambda item: item[1], reverse=True)
-            wildcard_freq_list = []
-            for term, count in sorted_matches:
-                rel_freq = (count / total_tokens) * 1_000_000
-                wildcard_freq_list.append({"Query Result": term, "Raw Frequency": count, "Relative Frequency": f"{rel_freq:.4f}"})
-            wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
-        else:
-            target_pattern_parts = target.split(' ')
-            num_parts = len(target_pattern_parts)
-            mwu_matches = []
-            for i in range(len(tokens_lower) - num_parts + 1):
-                match = True
-                for k, part in enumerate(target_pattern_parts):
-                    part_pattern = re.escape(part).replace(r'\*', '.*')
-                    if not re.fullmatch(part_pattern, tokens_lower[i + k]):
-                        match = False
-                        break
-                if match:
-                    mwu_string = " ".join(tokens_lower[i:i + num_parts])
-                    mwu_matches.append(mwu_string)
-            match_counts = Counter(mwu_matches)
-            wildcard_freq_list = []
-            for term, count in match_counts.most_common():
-                rel_freq = (count / total_tokens) * 1_000_000
-                wildcard_freq_list.append({"Query Result": term, "Raw Frequency": count, "Relative Frequency": f"{rel_freq:.4f}"})
-            wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
+    # 1. NEW: Structural Search Parsing and Execution (Priority 1 if tagged)
+    if not is_raw_mode and ('[' in target_input or '_' in target_input):
+        
+        # --- Structural Search Parsing ---
+        structural_lemma_pattern = None
+        structural_pos_pattern = None
+        
+        # Extract Lemma: [lemma]
+        lemma_match = re.search(r"\[(.*?)\]", target_input)
+        if lemma_match:
+            lemma_input = lemma_match.group(1).strip().lower()
+            if lemma_input:
+                # Convert wildcard to regex: [love*] -> ^love.*$
+                lemma_pattern_str = re.escape(lemma_input).replace(r'\*', '.*')
+                structural_lemma_pattern = re.compile(f"^{lemma_pattern_str}$")
+                
+        # Extract POS: _POS
+        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", target_input)
+        if pos_match:
+            pos_input = pos_match.group(1).strip()
+            if pos_input:
+                # Convert wildcard/concatenation to regex: _V*|NN -> ^(V.*|NN)$
+                pos_patterns = [p.strip() for p in pos_input.split('|') if p.strip()]
+                full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
+                if full_pos_regex_list:
+                    structural_pos_pattern = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
+
+        if structural_lemma_pattern or structural_pos_pattern:
+            is_structural_search = True
             
-        if not wildcard_freq_df.empty:
-            primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
-            primary_target_tokens = primary_target_mwu.split()
-            primary_target_len = len(primary_target_tokens)
-            target_display = f"'{target_input}' (Most Frequent Match: '{primary_target_mwu}')"
+            # --- Structural Search Execution ---
+            match_series = pd.Series(True, index=df.index)
+            
+            if structural_lemma_pattern:
+                match_series &= df['lemma'].str.lower().apply(lambda x: bool(structural_lemma_pattern.fullmatch(x)))
+                
+            if structural_pos_pattern:
+                match_series &= df['pos'].apply(lambda x: bool(structural_pos_pattern.fullmatch(x)))
+                
+            all_target_positions = match_series[match_series].index.tolist()
+            
+            # Structural search always matches single tokens (primary_target_len = 1)
+            primary_target_len = 1
+            primary_target_mwu = target_input
+            target_display = f"Structural Pattern '{target_input}'"
+            literal_freq = len(all_target_positions)
+            
+            if not all_target_positions:
+                st.warning(f"Structural target '{target_input}' not found in corpus.")
+                st.stop()
+                
+            rel_freq = (literal_freq / total_tokens) * 1_000_000
+            wildcard_freq_df = pd.DataFrame([{"Query Result": primary_target_mwu, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
+
+
+    # 2. OLD LOGIC: Word/MWU/Wildcard Search Execution (Priority 2 if not structural)
+    if not is_structural_search:
+        
+        # Logic to resolve target to a specific MWU or token (if wildcard is used)
+        if contains_wildcard:
+            if ' ' not in target:
+                pattern = re.escape(target).replace(r'\*', '.*')
+                wildcard_matches = [token for token in token_counts if re.fullmatch(pattern, token)]
+                match_counts = {token: token_counts[token] for token in wildcard_matches if token in token_counts}
+                sorted_matches = sorted(match_counts.items(), key=lambda item: item[1], reverse=True)
+                wildcard_freq_list = []
+                for term, count in sorted_matches:
+                    rel_freq = (count / total_tokens) * 1_000_000
+                    wildcard_freq_list.append({"Query Result": term, "Raw Frequency": count, "Relative Frequency": f"{rel_freq:.4f}"})
+                wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
+            else:
+                target_pattern_parts = target.split(' ')
+                num_parts = len(target_pattern_parts)
+                mwu_matches = []
+                for i in range(len(tokens_lower) - num_parts + 1):
+                    match = True
+                    for k, part in enumerate(target_pattern_parts):
+                        part_pattern = re.escape(part).replace(r'\*', '.*')
+                        if not re.fullmatch(part_pattern, tokens_lower[i + k]):
+                            match = False
+                            break
+                    if match:
+                        mwu_string = " ".join(tokens_lower[i:i + num_parts])
+                        mwu_matches.append(mwu_string)
+                match_counts = Counter(mwu_matches)
+                wildcard_freq_list = []
+                for term, count in match_counts.most_common():
+                    rel_freq = (count / total_tokens) * 1_000_000
+                    wildcard_freq_list.append({"Query Result": term, "Raw Frequency": count, "Relative Frequency": f"{rel_freq:.4f}"})
+                wildcard_freq_df = pd.DataFrame(wildcard_freq_list)
+                
+            if not wildcard_freq_df.empty:
+                primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
+                primary_target_tokens = primary_target_mwu.split()
+                primary_target_len = len(primary_target_tokens)
+                target_display = f"'{target_input}' (Most Frequent Match: '{primary_target_mwu}')"
+            else:
+                st.warning(f"Target pattern '{target_input}' not found in corpus.")
+                st.stop()
         else:
-            st.warning(f"Target pattern '{target_input}' not found in corpus.")
-            st.stop()
-    else:
-        primary_target_mwu = target
-        primary_target_tokens = target.split()
-        primary_target_len = len(primary_target_tokens)
-        target_display = f"'{target_input}'"
-        literal_freq = 0
-        for i in range(len(tokens_lower) - primary_target_len + 1):
-             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
-                 literal_freq += 1
-        if literal_freq == 0:
-            st.warning(f"Target '{target_input}' not found in corpus.")
-            st.stop()
-        rel_freq = (literal_freq / total_tokens) * 1_000_000
-        wildcard_freq_df = pd.DataFrame([{"Query Result": primary_target_mwu, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
+            primary_target_mwu = target
+            primary_target_tokens = target.split()
+            primary_target_len = len(primary_target_tokens)
+            target_display = f"'{target_input}'"
+            literal_freq = 0
+            for i in range(len(tokens_lower) - primary_target_len + 1):
+                 if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
+                     literal_freq += 1
+            if literal_freq == 0:
+                st.warning(f"Target '{target_input}' not found in corpus.")
+                st.stop()
+            rel_freq = (literal_freq / total_tokens) * 1_000_000
+            wildcard_freq_df = pd.DataFrame([{"Query Result": primary_target_mwu, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
 
-
+        # --- Find Positions for Word/MWU Search ---
+        if contains_wildcard and not wildcard_freq_df.empty:
+            target_match = primary_target_mwu.split()
+            target_match_len = len(target_match)
+            for i in range(len(tokens_lower) - target_match_len + 1):
+                 if tokens_lower[i:i + target_match_len] == target_match:
+                     all_target_positions.append(i)
+            
+        else:
+            for i in range(len(tokens_lower) - primary_target_len + 1):
+                if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
+                    all_target_positions.append(i)
+    
     # --- 2. Concordance Generation (Pattern Search or Standard) ---
     
     kwic_rows = []
-    all_target_positions = []
     
-    # 2a. Find all instances of the target word (base positions)
-    if contains_wildcard and not wildcard_freq_df.empty:
-        target_match = primary_target_mwu.split()
-        target_match_len = len(target_match)
-        for i in range(len(tokens_lower) - target_match_len + 1):
-             if tokens_lower[i:i + target_match_len] == target_match:
-                 all_target_positions.append(i)
-        
-    else:
-        for i in range(len(tokens_lower) - primary_target_len + 1):
-            if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
-                all_target_positions.append(i)
-
     # 2b. Apply pattern filtering if active 
     final_positions = []
     collocate_count_in_context = 0
@@ -1043,11 +1103,12 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                  collocate_pattern_total_freq = sum(1 for pos in df["pos"] if full_pos_regex.fullmatch(pos))
                  expected_metric = "Collocate POS Pattern"
                  
-        # 1. Node Word Frequency
+        # 1. Node Word/Pattern Frequency
         results_panel_data.append({
-            "Metric": "Node Word Frequency",
-            "Value": primary_target_mwu,
-            "Frequency": literal_freq if not contains_wildcard else wildcard_freq_df.iloc[0]["Raw Frequency"]
+            "Metric": "Node Word/Pattern Frequency",
+            # Use the input string for the value if it's a structural search, otherwise the found token/mwu.
+            "Value": target_input if is_structural_search else primary_target_mwu,
+            "Frequency": literal_freq
         })
         # 2. Observed Collocate Frequency (The actual target count in the co-occurrence window)
         results_panel_data.append({
@@ -1077,6 +1138,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     # --- Success message reflects pattern search ---
     if is_pattern_search_active:
         st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with the specified criteria within ±{current_kwic_left} tokens.")
+    elif is_structural_search:
+        st.success(f"Structural search successful! Found **{total_matches}** occurrences matching '{target_input}'.")
     else:
         st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
     # -----------------------------------------------------
@@ -1161,8 +1224,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             
             st.caption(f"The total corpus frequency of the collocate pattern is listed above.")
         else:
-            if contains_wildcard:
-                st.subheader(f"Wildcard Results: '{target_input}' (Top 10)")
+            if contains_wildcard or is_structural_search:
+                st.subheader(f"Search Results: '{target_input}' (Top 10)")
             else:
                 st.subheader(f"Target Frequency")
                 
@@ -1198,65 +1261,120 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
     
     target = target_input.lower()
-
-    # --- MWU/WILDCARD RESOLUTION (Focus on single primary target) ---
-    primary_target_mwu = None
-    primary_target_tokens = []
-    primary_target_len = 0
     
-    if contains_wildcard:
-        wildcard_matches = []
-        if ' ' not in target:
-            pattern = re.escape(target).replace(r'\*', '.*')
-            wildcard_matches = [token for token in token_counts if re.fullmatch(pattern, token)]
-            match_counts = {token: token_counts[token] for token in wildcard_matches if token in token_counts}
-            sorted_matches = sorted(match_counts.items(), key=lambda item: item[1], reverse=True)
-            if sorted_matches:
-                primary_target_mwu = sorted_matches[0][0]
-                freq = sorted_matches[0][1]
-                primary_target_tokens = [primary_target_mwu]
-                primary_target_len = 1
+    # --- Structural Search Parsing and Execution for Collocation Node ---
+    is_structural_search_coll = False
+    all_target_positions = []
+    
+    if not is_raw_mode and ('[' in target_input or '_' in target_input):
+        
+        # --- Structural Search Parsing ---
+        structural_lemma_pattern = None
+        structural_pos_pattern = None
+        
+        # Extract Lemma: [lemma]
+        lemma_match = re.search(r"\[(.*?)\]", target_input)
+        if lemma_match:
+            lemma_input = lemma_match.group(1).strip().lower()
+            if lemma_input:
+                lemma_pattern_str = re.escape(lemma_input).replace(r'\*', '.*')
+                structural_lemma_pattern = re.compile(f"^{lemma_pattern_str}$")
+                
+        # Extract POS: _POS
+        pos_match = re.search(r"\_(\w+\*?\|?\w*?)", target_input)
+        if pos_match:
+            pos_input = pos_match.group(1).strip()
+            if pos_input:
+                pos_patterns = [p.strip() for p in pos_input.split('|') if p.strip()]
+                full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
+                if full_pos_regex_list:
+                    structural_pos_pattern = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
+
+        if structural_lemma_pattern or structural_pos_pattern:
+            is_structural_search_coll = True
+            
+            # --- Structural Search Execution ---
+            match_series = pd.Series(True, index=df.index)
+            
+            if structural_lemma_pattern:
+                match_series &= df['lemma'].str.lower().apply(lambda x: bool(structural_lemma_pattern.fullmatch(x)))
+                
+            if structural_pos_pattern:
+                match_series &= df['pos'].apply(lambda x: bool(structural_pos_pattern.fullmatch(x)))
+                
+            all_target_positions = match_series[match_series].index.tolist()
+            
+            # Structural search always matches single tokens
+            primary_target_len = 1
+            primary_target_mwu = target_input
+            target_display = f"Structural Pattern '{target_input}'"
+            freq = len(all_target_positions)
+            
+            if not all_target_positions:
+                st.warning(f"Structural target '{target_input}' not found in corpus.")
+                st.stop()
+            
+    # --- MWU/WILDCARD RESOLUTION (Focus on single primary target - fallback/traditional) ---
+    if not is_structural_search_coll:
+        primary_target_mwu = None
+        primary_target_tokens = []
+        primary_target_len = 0
+        
+        if contains_wildcard:
+            wildcard_matches = []
+            if ' ' not in target:
+                pattern = re.escape(target).replace(r'\*', '.*')
+                wildcard_matches = [token for token in token_counts if re.fullmatch(pattern, token)]
+                match_counts = {token: token_counts[token] for token in wildcard_matches if token in token_counts}
+                sorted_matches = sorted(match_counts.items(), key=lambda item: item[1], reverse=True)
+                if sorted_matches:
+                    primary_target_mwu = sorted_matches[0][0]
+                    freq = sorted_matches[0][1]
+                    primary_target_tokens = [primary_target_mwu]
+                    primary_target_len = 1
+            else:
+                target_pattern_parts = target.split(' ')
+                num_parts = len(target_pattern_parts)
+                mwu_matches = []
+                for i in range(len(tokens_lower) - num_parts + 1):
+                    match = True
+                    for k, part in enumerate(target_pattern_parts):
+                        part_pattern = re.escape(part).replace(r'\*', '.*')
+                        if not re.fullmatch(part_pattern, tokens_lower[i + k]):
+                            match = False
+                            break
+                    if match:
+                        mwu_matches.append(" ".join(tokens_lower[i:i + num_parts]))
+                match_counts = Counter(mwu_matches)
+                if match_counts:
+                    primary_target_mwu, freq = match_counts.most_common(1)[0]
+                    primary_target_tokens = primary_target_mwu.split()
+                    primary_target_len = len(primary_target_tokens)
+            if not primary_target_mwu:
+                st.warning(f"Target pattern '{target_input}' not found in corpus.")
+                st.stop()
+            target_display = f"'{target_input}' (Analysis on Most Frequent Match: '{primary_target_mwu}')"
         else:
-            target_pattern_parts = target.split(' ')
-            num_parts = len(target_pattern_parts)
-            mwu_matches = []
-            for i in range(len(tokens_lower) - num_parts + 1):
-                match = True
-                for k, part in enumerate(target_pattern_parts):
-                    part_pattern = re.escape(part).replace(r'\*', '.*')
-                    if not re.fullmatch(part_pattern, tokens_lower[i + k]):
-                        match = False
-                        break
-                if match:
-                    mwu_matches.append(" ".join(tokens_lower[i:i + num_parts]))
-            match_counts = Counter(mwu_matches)
-            if match_counts:
-                primary_target_mwu, freq = match_counts.most_common(1)[0]
-                primary_target_tokens = primary_target_mwu.split()
-                primary_target_len = len(primary_target_tokens)
-        if not primary_target_mwu:
-            st.warning(f"Target pattern '{target_input}' not found in corpus.")
-            st.stop()
-        target_display = f"'{target_input}' (Analysis on Most Frequent Match: '{primary_target_mwu}')"
-    else:
-        primary_target_mwu = target
-        primary_target_tokens = target.split()
-        primary_target_len = len(primary_target_tokens)
-        target_display = f"'{target_input}'"
-        literal_freq = 0
+            primary_target_mwu = target
+            primary_target_tokens = target.split()
+            primary_target_len = len(primary_target_tokens)
+            target_display = f"'{target_input}'"
+            literal_freq = 0
+            for i in range(len(tokens_lower) - primary_target_len + 1):
+                 if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
+                     literal_freq += 1
+            if literal_freq == 0:
+                st.warning(f"Target '{target_input}' not found in corpus.")
+                st.stop()
+            freq = literal_freq
+        
+        # Find positions for non-structural search
         for i in range(len(tokens_lower) - primary_target_len + 1):
-             if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
-                 literal_freq += 1
-        if literal_freq == 0:
-            st.warning(f"Target '{target_input}' not found in corpus.")
-            st.stop()
-        freq = literal_freq
-    
-    primary_target_positions = []
-    for i in range(len(tokens_lower) - primary_target_len + 1):
-        if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
-            primary_target_positions.append(i)
+            if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
+                all_target_positions.append(i)
 
+    # Use found positions to proceed with collocation
+    primary_target_positions = all_target_positions 
     primary_rel_freq = (freq / total_tokens) * 1_000_000
     
     st.subheader("🔗 Collocation Analysis Results")
