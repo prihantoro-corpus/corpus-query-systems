@@ -337,6 +337,9 @@ def load_corpus_file(file_source, sep=r"\s+"):
 
         try:
             file_content_str = file_bytes.decode('utf-8')
+            # FIX: Robust cleaning to handle various newline/whitespace issues in vertical files
+            file_content_str = re.sub(r'(\s+\n|\n\s+)', '\n', file_content_str)
+            
         except UnicodeDecodeError:
             try:
                 file_content_str = file_bytes.decode('iso-8859-1')
@@ -947,7 +950,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 
                 token_index_in_corpus = j
                 token_lower = tokens_lower[j]
-                token_pos = df["pos"].iloc[j]
+                token_pos = df["pos"].iloc[token_index_in_corpus]
                 
                 # Check 1: Word/Pattern Match (Required if provided)
                 word_matches = (collocate_word_regex is None) or collocate_word_regex.fullmatch(token_lower)
@@ -1234,7 +1237,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 # -----------------------------------------------------
 # MODULE: COLLOCATION LOGIC
 # -----------------------------------------------------
-if st.session_session_state['view'] == 'collocation' and analyze_btn and target_input:
+# FIX: Corrected typo from st.session_session_state to st.session_state
+if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Get Collocation Settings
     coll_window = st.session_state.get('coll_window', 5)
