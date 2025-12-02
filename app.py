@@ -12,7 +12,7 @@ import re
 import requests 
 import matplotlib.pyplot as plt 
 from wordcloud import WordCloud 
-from matplotlib.colors import to_rgb, rgb2hex # Import for color handling
+from matplotlib.colors import to_rgb, rgb2hex 
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
@@ -100,11 +100,16 @@ def df_to_excel_bytes(df):
 def create_word_cloud(freq_data, is_tagged_mode):
     """Generates a word cloud from frequency data with conditional POS coloring."""
     
+    # Filter out multi-word units for visualization stability
+    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
+    if single_word_freq_data.empty:
+        return None
+
     # Convert frequency data to a dictionary for WordCloud
-    word_freq_dict = freq_data.set_index('token')['frequency'].to_dict()
+    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
     
     # Map from word to its POS tag (used by the custom color function)
-    word_to_pos = freq_data.set_index('token')['pos'].to_dict()
+    word_to_pos = single_word_freq_data.set_index('token')['pos'].to_dict()
     
     # Define stopwords (must be in lowercase)
     stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
@@ -113,7 +118,7 @@ def create_word_cloud(freq_data, is_tagged_mode):
         width=800,
         height=400,
         background_color='black',
-        colormap='viridis', # Will be ignored if custom color_func is used, or will provide generic color
+        colormap='viridis', 
         stopwords=stopwords,
         min_font_size=10
     )
@@ -516,7 +521,7 @@ st.markdown("---")
 st.subheader("Target word input")
 col_a, col_b = st.columns(2)
 with col_a:
-    typed_target = st.text_input("Type a token (case-insensitive)", value="")
+    typed_target = st.text_input("Type a token (case-insensitive) or use wildcard (*)", value="")
 with col_b:
     uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
 
@@ -532,12 +537,11 @@ if uploaded_targets is not None:
         selected_target = st.selectbox("Select target from uploaded list", options=target_list)
 target_input = (selected_target if selected_target else typed_target).strip()
 
-# --- MWU PROCESSING ---
-target_tokens = target_input.lower().split()
-target_len = len(target_tokens)
+# --- MWU/WILDCARD PROCESSING ---
+contains_wildcard = '*' in target_input
 
 if not target_input:
-    st.info("Type a token or upload a target list and choose one. Then click Analyze.")
+    st.info("Type a token (e.g., 'house'), an MWU (e.g., 'in the'), or a wildcard pattern (e.g., 'in*', '*as'). Then click Analyze.")
 analyze_btn = st.button("🔎 Analyze")
 
 # ---------------------------
@@ -546,36 +550,158 @@ analyze_btn = st.button("🔎 Analyze")
 if analyze_btn and target_input:
     target = target_input.lower()
     
-    # --- FIND MWU POSITIONS ---
-    positions = []
-    if target_len == 1:
-        # Single word: standard token match
-        positions = [i for i, t in enumerate(tokens_lower) if t == target]
+    # 1. MWU/Wildcard detection and position finding
+    
+    # Case A: Wildcard Search
+    if contains_wildcard:
+        # Build the regex pattern, replacing '*' with '.*'
+        pattern = re.escape(target).replace(r'\*', '.*')
+        
+        wildcard_matches = []
+        
+        # Determine if it's a single token match or a multi-word sequence match
+        if ' ' not in target:
+            # Single-token wildcard (in*, *as, pi*e)
+            for token in token_counts:
+                if re.fullmatch(pattern, token):
+                    wildcard_matches.append(token)
+            
+            # Since we need to calculate frequency for *all* matches, we re-use the target_tokens mechanism
+            # For collocation, we treat each match as a separate target word for now, 
+            # and search only for the single word MWU
+            # We will use the *most frequent* match as the representative for KWIC/Collocation if needed
+            
+            # For single-token wildcard, positions will be calculated for the most frequent match later if MWU is 1.
+            target_tokens = [wildcard_matches[0]] if wildcard_matches else []
+            target_len = 1
+            
+        else:
+            # Multi-word wildcard (in *) - only space as a separator
+            
+            # Split the target by space, handling the pattern parts
+            target_pattern_parts = target.split(' ')
+            
+            # Iterate through the entire corpus list to find matching sequences
+            for i in range(len(tokens_lower) - len(target_pattern_parts) + 1):
+                match = True
+                current_match_tokens = []
+                for k, part in enumerate(target_pattern_parts):
+                    part_pattern = re.escape(part).replace(r'\*', '.*')
+                    current_token = tokens_lower[i + k]
+                    
+                    if not re.fullmatch(part_pattern, current_token):
+                        match = False
+                        break
+                    current_match_tokens.append(current_token)
+                
+                if match:
+                    # Store the MWU string and its starting position
+                    mwu_string = " ".join(current_match_tokens)
+                    wildcard_matches.append(mwu_string)
+                    # We only care about the first one for the KWIC/Collocation target for now
+                    if not target_tokens:
+                        target_tokens = current_match_tokens 
+                        target_len = len(target_tokens)
+                        
+            # If target_tokens still empty, set a dummy length
+            if not target_tokens:
+                 target_len = len(target_pattern_parts) # Use the length of the pattern parts
+            
+            # For multi-word wildcard, the wildcard_matches array already contains the MWU results
+            
+    # Case B: Literal Search (Single or MWU)
     else:
-        # Multi-word unit (MWU): sequence match
+        target_tokens = target.split()
+        target_len = len(target_tokens)
+        wildcard_matches = [target] # Treat the literal MWU as the result
+
+    # 2. Compile Wildcard Frequency Table
+    wildcard_freq_list = []
+    
+    # Count frequency of each unique match found
+    if contains_wildcard:
+        match_counts = Counter(wildcard_matches)
+    else:
+        # For literal search, the frequency is calculated by counting positions later, but we need the token_counts for relative freq.
+        # This branch ensures the frequency table is generated correctly for single words/MWUs even if MWU fails
+        match_counts = Counter()
+        
+        # Simple frequency calculation for literal MWU
+        literal_freq = 0
+        
+        # Re-use the multi-word search logic to count frequency accurately
         for i in range(len(tokens_lower) - target_len + 1):
-            if tokens_lower[i:i + target_len] == target_tokens:
-                positions.append(i)
+             if tokens_lower[i:i + target_len] == target_tokens:
+                 literal_freq += 1
+        match_counts[target] = literal_freq
+        
+    
+    for term, count in match_counts.items():
+        if count > 0:
+            rel_freq = (count / total_tokens) * 1_000_000
+            wildcard_freq_list.append({
+                "Query Result": term,
+                "Raw Frequency": count,
+                "Relative Frequency": f"{rel_freq:.2f}"
+            })
 
-    freq = len(positions)
-    if freq == 0:
+    wildcard_freq_df = pd.DataFrame(wildcard_freq_list).sort_values("Raw Frequency", ascending=False)
+    
+    # 3. Find positions (Only for the first or literal target to generate KWIC/Collocation)
+    
+    if not target_tokens:
         st.warning(f"Target '{target_input}' not found in corpus.")
+        st.stop()
+        
+    # Re-calculate positions for the *most frequent* match if wildcard, or the *literal* target
+    # We use the literal target for the primary analysis context (KWIC/Collocation)
+    positions = []
+    
+    # Determine the token sequence to use for KWIC/Collocation (the literal target or the top wildcard match)
+    if contains_wildcard and not wildcard_freq_df.empty:
+        # Use the most frequent match as the MWU for the primary analysis
+        primary_target_mwu = wildcard_freq_df.iloc[0]["Query Result"]
+        primary_target_tokens = primary_target_mwu.split()
+        primary_target_len = len(primary_target_tokens)
+        
+        target_display = f"'{target_input}' (Most Frequent Match: '{primary_target_mwu}')"
     else:
-        st.success(f"Found {freq} occurrences of '{target_input}' (case-insensitive).")
-        rel_freq = (freq / total_tokens) * 1_000_000
-        st.write(f"Relative frequency: **{rel_freq:.2f}** per million")
+        # Use the literal MWU
+        primary_target_mwu = target
+        primary_target_tokens = target_tokens
+        primary_target_len = target_len
+        target_display = f"'{target_input}'"
 
+    # Find positions for the primary target
+    for i in range(len(tokens_lower) - primary_target_len + 1):
+        if tokens_lower[i:i + primary_target_len] == primary_target_tokens:
+            positions.append(i)
+            
+    freq = len(positions)
+    
+    # 4. Display Results
+    
+    st.success(f"Found {freq} occurrences of the primary target {target_display} (case-insensitive).")
+    rel_freq = (freq / total_tokens) * 1_000_000
+    st.write(f"Relative frequency: **{rel_freq:.2f}** per million")
+
+    # --- Concordance and Wildcard Frequency Tables ---
+    st.markdown("---")
+    
+    col_kwic, col_freq = st.columns([3, 2], gap="large")
+
+    with col_kwic:
         # ---------- CONCORDANCE: KWIC ----------
         st.subheader(f"Concordance (KWIC) — top 10 ({kwic_left} left & {kwic_right} right)")
         kwic_rows = []
         for i in positions:
             # i is the index of the first token of the MWU
             left = tokens_lower[max(0, i - kwic_left):i]
-            # right context starts after the last token of the MWU (i + target_len)
-            right = tokens_lower[i + target_len:i + target_len + kwic_right]
+            # right context starts after the last token of the MWU (i + primary_target_len)
+            right = tokens_lower[i + primary_target_len:i + primary_target_len + kwic_right]
             
             # Node is the sequence of original tokens
-            node_orig_tokens = df["token"].iloc[i:i + target_len].tolist()
+            node_orig_tokens = df["token"].iloc[i:i + primary_target_len].tolist()
             node_orig = " ".join(node_orig_tokens)
             
             kwic_rows.append({"Left": " ".join(left), "Node": node_orig, "Right": " ".join(right)})
@@ -584,177 +710,200 @@ if analyze_btn and target_input:
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
 
-        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{primary_target_mwu.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        # ---------- COLLATION: compute stats (MWU Collocation) ----------
-        coll_pairs = []
-        for i in positions:
-            start = max(0, i - coll_window)
-            end = min(total_tokens, i + target_len + coll_window) # Window extends from end of MWU
-            
-            for j in range(start, end):
-                # Skip tokens that are part of the target MWU itself
-                if i <= j < i + target_len:
-                    continue
-                
-                coll_pairs.append((tokens_lower[j], df["pos"].iloc[j]))
-
-        coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos"])
-        coll_counts = coll_df.groupby(["collocate","pos"]).size().reset_index(name="Observed")
-
-        stats_list = []
-        token_counts_unfiltered = Counter(tokens_lower) 
-        
-        for _, row in coll_counts.iterrows():
-            w = row["collocate"]
-            p = row["pos"]
-            observed = int(row["Observed"])
-            total_freq = token_counts_unfiltered.get(w, 0)
-            k11 = observed
-            k12 = freq - k11
-            k21 = total_freq - k11
-            k22 = total_tokens - (k11 + k12 + k21)
-            ll = compute_ll(k11, k12, k21, k22)
-            mi = compute_mi(k11, freq, total_freq, total_tokens)
-            sig = significance_from_ll(ll)
-            stats_list.append({
-                "Collocate": w,
-                "POS": p,
-                "Observed": observed,
-                "Total_Freq": total_freq,
-                "LL": round(ll,6),
-                "MI": round(mi,6),
-                "Significance": sig
-            })
-
-        stats_df = pd.DataFrame(stats_list)
-        if stats_df.empty:
-            st.warning("No collocates found.")
+    with col_freq:
+        # ---------- WILDCARD FREQUENCY TABLE ----------
+        if contains_wildcard:
+            st.subheader(f"Wildcard Results: '{target_input}' (Top 10)")
         else:
-            stats_df_sorted = stats_df.sort_values("LL", ascending=False)
-            network_df = stats_df_sorted.head(20).copy()
-
-            # full LL top10
-            full_ll = stats_df_sorted.head(10).copy()
-            full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
+            st.subheader(f"Target Frequency")
             
-            # full MI (apply MI min freq)
-            full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
-            full_mi = full_mi_all.head(10).copy()
-            full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
+        freq_results_preview = wildcard_freq_df.head(10).copy()
+        
+        st.dataframe(freq_results_preview, use_container_width=True, hide_index=True)
+        
+        # Add download button for the full frequency list
+        st.download_button(
+            "⬇ Download full result frequency (xlsx)", 
+            data=df_to_excel_bytes(wildcard_freq_df), 
+            file_name=f"{target.replace(' ', '_')}_wildcard_frequency_full.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+    st.markdown("---")
 
+    # 5. Collocation Calculation (Uses the primary target MWU found above)
+    
+    # ---------- COLLATION: compute stats (MWU Collocation) ----------
+    coll_pairs = []
+    for i in positions:
+        start = max(0, i - coll_window)
+        end = min(total_tokens, i + primary_target_len + coll_window) # Window extends from end of MWU
+        
+        for j in range(start, end):
+            # Skip tokens that are part of the target MWU itself
+            if i <= j < i + primary_target_len:
+                continue
             
-            # --- Collocation Network Graph ---
+            coll_pairs.append((tokens_lower[j], df["pos"].iloc[j]))
+
+    coll_df = pd.DataFrame(coll_pairs, columns=["collocate", "pos"])
+    coll_counts = coll_df.groupby(["collocate","pos"]).size().reset_index(name="Observed")
+
+    stats_list = []
+    token_counts_unfiltered = Counter(tokens_lower) 
+    
+    for _, row in coll_counts.iterrows():
+        w = row["collocate"]
+        p = row["pos"]
+        observed = int(row["Observed"])
+        total_freq = token_counts_unfiltered.get(w, 0)
+        k11 = observed
+        k12 = freq - k11
+        k21 = total_freq - k11
+        k22 = total_tokens - (k11 + k12 + k21)
+        ll = compute_ll(k11, k12, k21, k22)
+        mi = compute_mi(k11, freq, total_freq, total_tokens)
+        sig = significance_from_ll(ll)
+        stats_list.append({
+            "Collocate": w,
+            "POS": p,
+            "Observed": observed,
+            "Total_Freq": total_freq,
+            "LL": round(ll,6),
+            "MI": round(mi,6),
+            "Significance": sig
+        })
+
+    stats_df = pd.DataFrame(stats_list)
+    if stats_df.empty:
+        st.warning("No collocates found.")
+    else:
+        stats_df_sorted = stats_df.sort_values("LL", ascending=False)
+        network_df = stats_df_sorted.head(20).copy()
+
+        # full LL top10
+        full_ll = stats_df_sorted.head(10).copy()
+        full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
+        
+        # full MI (apply MI min freq)
+        full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
+        full_mi = full_mi_all.head(10).copy()
+        full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
+
+        
+        # --- Collocation Network Graph ---
+        st.markdown("---")
+        st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
+        
+        network_html = create_pyvis_graph(primary_target_mwu, network_df)
+        components.html(network_html, height=450)
+        
+        st.markdown(
+            """
+            **Graph Key (POS Tags Restored):**
+            * Central Node (Target): **Yellow**
+            * Collocate Node Color: Noun (Prefix 'N') **Green**, Verb (Prefix 'V') **Blue**, Adjective (Prefix 'J') **Pink**, Adverb (Prefix 'R') **Yellow**. All other tags/raw text (`##`) are **Gray**.
+            * Edge Thickness: **All Thick** (Uniform)
+            * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation)
+            * Hover over nodes for details (POS, Observed Freq, LL score).
+            """
+        )
+        st.markdown("---")
+        
+        # --- Conditional POS Table Display ---
+        if not is_raw_mode:
+            # --- Category Tables Restoration (Only for Tagged Files) ---
+            def category_df(prefixes):
+                mask = pd.Series(False, index=stats_df.index)
+                for pref in prefixes:
+                    # Check if POS starts with the prefix (case-insensitive)
+                    mask = mask | stats_df["POS"].str.startswith(pref, na=False)
+                sub = stats_df[mask].copy()
+                ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
+                ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
+                mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(10).copy()
+                mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
+                return ll_sub, mi_sub
+
+            # Assuming standard tag prefixes (e.g., N, V, J, R, but will match Europarl tags like NN, VVP, JJ, etc.)
+            ll_N, mi_N = category_df(("N",))    # Noun
+            ll_V, mi_V = category_df(("V",))    # Verb
+            ll_J, mi_J = category_df(("J",))    # Adjective
+            ll_R, mi_R = category_df(("R",))    # Adverb
+            
+            st.subheader("Log-Likelihood — Top 10 by POS")
+            cols = st.columns(4, gap="small")
+            
+            with cols[0]:
+                st.markdown("**N (N*) — LL**")
+                st.dataframe(ll_N, use_container_width=True, hide_index=True)
+            with cols[1]:
+                st.markdown("**V (V*) — LL**")
+                st.dataframe(ll_V, use_container_width=True, hide_index=True)
+            with cols[2]:
+                st.markdown("**J (J*) — LL**")
+                st.dataframe(ll_J, use_container_width=True, hide_index=True)
+            with cols[3]:
+                st.markdown("**R (R*) — LL**")
+                st.dataframe(ll_R, use_container_width=True, hide_index=True)
+            
+            st.markdown("---") # Separate POS tables from full tables
+
+        else:
+            st.info("POS-specific collocation tables (N, V, J, R) are skipped in RAW/LINEAR mode.")
+        
+        # ---------- Full Collocation Tables (All Tags) ----------
+        st.subheader("Top 10 Collocations (All Tags)")
+        
+        cols_full = st.columns(2, gap="large")
+        
+        with cols_full[0]:
+            st.markdown("**Log-Likelihood (LL)**")
+            st.dataframe(full_ll, use_container_width=True, hide_index=True)
+        
+        with cols_full[1]:
+            st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq})**")
+            st.dataframe(full_mi, use_container_width=True, hide_index=True)
+
+        # ---------- Download Buttons ----------
+        st.markdown("---")
+        st.subheader("Download Full Results")
+        
+        if not is_raw_mode:
+            # Download categories re-added
+            st.markdown("**LL Top 10 Downloads (POS-Filtered)**")
+            ll_dl_cols = st.columns(5)
+            ll_mapping = {
+                "Full": full_ll, "N": ll_N, "V": ll_V, "J": ll_J, "R": ll_R
+            }
+            for i, (cat, df_tab) in enumerate(ll_mapping.items()):
+                bname = f"LL {cat} top10"
+                ll_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+            st.markdown("**MI Top 10 Downloads (POS-Filtered)**")
+            mi_dl_cols = st.columns(5)
+            mi_mapping = {
+                "Full": full_mi, "N": mi_N, "V": mi_V, "J": mi_J, "R": mi_R
+            }
+            for i, (cat, df_tab) in enumerate(mi_mapping.items()):
+                bname = f"MI {cat} top10"
+                mi_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             st.markdown("---")
-            st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
-            
-            network_html = create_pyvis_graph(target_input, network_df)
-            components.html(network_html, height=450)
-            
-            st.markdown(
-                """
-                **Graph Key (POS Tags Restored):**
-                * Central Node (Target): **Yellow**
-                * Collocate Node Color: Noun (Prefix 'N') **Green**, Verb (Prefix 'V') **Blue**, Adjective (Prefix 'J') **Pink**, Adverb (Prefix 'R') **Yellow**. All other tags/raw text (`##`) are **Gray**.
-                * Edge Thickness: **All Thick** (Uniform)
-                * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation)
-                * Hover over nodes for details (POS, Observed Freq, LL score).
-                """
-            )
-            st.markdown("---")
-            
-            # --- Conditional POS Table Display ---
-            if not is_raw_mode:
-                # --- Category Tables Restoration (Only for Tagged Files) ---
-                def category_df(prefixes):
-                    mask = pd.Series(False, index=stats_df.index)
-                    for pref in prefixes:
-                        # Check if POS starts with the prefix (case-insensitive)
-                        mask = mask | stats_df["POS"].str.startswith(pref, na=False)
-                    sub = stats_df[mask].copy()
-                    ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
-                    ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
-                    mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(10).copy()
-                    mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
-                    return ll_sub, mi_sub
-
-                # Assuming standard tag prefixes (e.g., N, V, J, R, but will match Europarl tags like NN, VVP, JJ, etc.)
-                ll_N, mi_N = category_df(("N",))    # Noun
-                ll_V, mi_V = category_df(("V",))    # Verb
-                ll_J, mi_J = category_df(("J",))    # Adjective
-                ll_R, mi_R = category_df(("R",))    # Adverb
-                
-                st.subheader("Log-Likelihood — Top 10 by POS")
-                cols = st.columns(4, gap="small")
-                
-                with cols[0]:
-                    st.markdown("**N (N*) — LL**")
-                    st.dataframe(ll_N, use_container_width=True, hide_index=True)
-                with cols[1]:
-                    st.markdown("**V (V*) — LL**")
-                    st.dataframe(ll_V, use_container_width=True, hide_index=True)
-                with cols[2]:
-                    st.markdown("**J (J*) — LL**")
-                    st.dataframe(ll_J, use_container_width=True, hide_index=True)
-                with cols[3]:
-                    st.markdown("**R (R*) — LL**")
-                    st.dataframe(ll_R, use_container_width=True, hide_index=True)
-                
-                st.markdown("---") # Separate POS tables from full tables
-
-            else:
-                st.info("POS-specific collocation tables (N, V, J, R) are skipped in RAW/LINEAR mode.")
-            
-            # ---------- Full Collocation Tables (All Tags) ----------
-            st.subheader("Top 10 Collocations (All Tags)")
-            
-            cols_full = st.columns(2, gap="large")
-            
-            with cols_full[0]:
-                st.markdown("**Log-Likelihood (LL)**")
-                st.dataframe(full_ll, use_container_width=True, hide_index=True)
-            
-            with cols_full[1]:
-                st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq})**")
-                st.dataframe(full_mi, use_container_width=True, hide_index=True)
-
-            # ---------- Download Buttons ----------
-            st.markdown("---")
-            st.subheader("Download Full Results")
-            
-            if not is_raw_mode:
-                # Download categories re-added
-                st.markdown("**LL Top 10 Downloads (POS-Filtered)**")
-                ll_dl_cols = st.columns(5)
-                ll_mapping = {
-                    "Full": full_ll, "N": ll_N, "V": ll_V, "J": ll_J, "R": ll_R
-                }
-                for i, (cat, df_tab) in enumerate(ll_mapping.items()):
-                    bname = f"LL {cat} top10"
-                    ll_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target.replace(' ', '_')}_LL_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-                st.markdown("**MI Top 10 Downloads (POS-Filtered)**")
-                mi_dl_cols = st.columns(5)
-                mi_mapping = {
-                    "Full": full_mi, "N": mi_N, "V": mi_V, "J": mi_J, "R": mi_R
-                }
-                for i, (cat, df_tab) in enumerate(mi_mapping.items()):
-                    bname = f"MI {cat} top10"
-                    mi_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target.replace(' ', '_')}_MI_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                st.markdown("---")
-            
-            # Full Results Download
-            st.download_button(
-                "⬇ Download full LL results (xlsx)", 
-                data=df_to_excel_bytes(stats_df_sorted), 
-                file_name=f"{target.replace(' ', '_')}_LL_full.xlsx", 
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            st.download_button(
-                f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
-                data=df_to_excel_bytes(full_mi_all), 
-                file_name=f"{target.replace(' ', '_')}_MI_full_obsge{mi_min_freq}.xlsx", 
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        
+        # Full Results Download
+        st.download_button(
+            "⬇ Download full LL results (xlsx)", 
+            data=df_to_excel_bytes(stats_df_sorted), 
+            file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        st.download_button(
+            f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
+            data=df_to_excel_bytes(full_mi_all), 
+            file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text, adjusting analysis depth automatically.")
