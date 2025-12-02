@@ -460,12 +460,12 @@ with st.sidebar:
         st.subheader("Contextual Pattern Filter")
         st.warning("This filter is computationally intensive and may slow down analysis.")
         
-        # 4. User-Defined Contextual Pattern Filter
+        # 4. User-Defined Contextual Pattern Filter - Set to empty string by default
         contextual_pattern = st.text_area(
             "User-Defined Pattern Filter", 
-            value="[] + * $ * + []", 
+            value="", # <-- Set to empty string
             height=100,
-            help="Enter one pattern per line. `[]` or `[word]` = collocate slot. `$` = Target Node. `*` = Optional token (0 or more). `+` = Obligatory token (1 or more)."
+            help="Enter one pattern per line. `[]` or `[word]` = collocate slot. `$` = Target Node. `*` = Optional token (0 or more). `+` = Obligatory token (1 or more). Example: `[] + * $ * + []`"
         )
         st.session_state['contextual_pattern'] = contextual_pattern
 
@@ -896,7 +896,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                     if not collocate_slot_match: continue # Must contain a collocate slot
                     
                     expected_collocate = collocate_slot_match.group(1).strip().lower()
-                    collocate_placeholder = re.escape(collocate_slot_match.group(0))
+                    collocate_placeholder = collocate_slot_match.group(0)
                     
                     # 2a. Check if the actual collocate matches the specific word in the slot
                     if expected_collocate and expected_collocate != w:
@@ -904,81 +904,89 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                         
                     # 2b. Prepare the pattern template for regex matching
                     
-                    # Split the rule at the collocate slot
-                    rule_parts = rule.split(collocate_slot_match.group(0))
-                    pre_collocate_rule = rule_parts[0].strip()
-                    post_collocate_rule = rule_parts[1].strip()
-                    
-                    # Split by '$' (Target Node) to get the final context to check
-                    pre_target_pattern_tokens = []
-                    post_target_pattern_tokens = []
+                    # Split the rule by the target node marker '$'
+                    rule_parts_by_node = rule.split('$')
+                    if len(rule_parts_by_node) != 2: continue # Must contain exactly one $ for now
+                    pre_node_rule = rule_parts_by_node[0].strip()
+                    post_node_rule = rule_parts_by_node[1].strip()
                     
                     # --- Pre-Target Context Check (Collocate is to the left of the Target) ---
-                    if collocate_relative_index < target_relative_start and '$' in post_collocate_rule:
-                        # Context to check: tokens from collocate position 'j' backward to start_index
+                    if collocate_relative_index < target_relative_start and pre_node_rule.find(collocate_placeholder) != -1:
+                        # The rule is defined as: (context) [collocate] (context) $
                         
-                        # The pattern must be PRE-COLLOCATE and POST-TARGET in the rule
+                        # The pattern only needs to match the tokens between start_index and i (target start)
                         
-                        # 1. Parse tokens BEFORE collocate slot
-                        pre_collocate_tokens = [t.lower() for t in pre_collocate_rule.split()]
+                        # 1. Split pre_node_rule at the collocate slot
+                        pre_coll_context, post_coll_context = pre_node_rule.split(collocate_placeholder, 1)
                         
-                        # 2. Parse tokens AFTER target node ($)
-                        post_target_tokens = [t.lower() for t in post_collocate_rule.split('$')[1].strip().split()]
+                        pre_coll_tokens = [t.lower() for t in pre_coll_context.split()]
+                        post_coll_tokens = [t.lower() for t in post_coll_context.split()]
                         
-                        # Check if the context BEFORE collocate matches the pre-collocate rule
-                        
-                        # Context: [token_before_rule_start, ..., token_j-1, token_j (collocate)]
-                        pre_context_length = len(pre_collocate_tokens)
+                        # --- Check the tokens required BEFORE the collocate ---
+                        pre_context_length = len(pre_coll_tokens)
                         context_start_for_rule = j - pre_context_length
                         
                         if context_start_for_rule >= start_index:
                             match_context = tokens_lower[context_start_for_rule:j]
+                            required_pattern = [token_to_regex(t) for t in pre_coll_tokens]
                             
-                            required_pattern = [token_to_regex(t) for t in pre_collocate_tokens]
+                            match_string = ' '.join(match_context)
+                            pattern_string = '^' + ' '.join(required_pattern) + '$'
                             
-                            match_string = ' '.join(match_context + [w])
-                            pattern_string = '^' + ' '.join(required_pattern) + ' ' + re.escape(w) + '$'
-                            
-                            try:
-                                if re.match(pattern_string, match_string, re.IGNORECASE):
-                                    is_context_match = True
-                                    break
-                            except Exception:
-                                continue
+                            if re.match(pattern_string, match_string, re.IGNORECASE):
+                                # --- Check the tokens required AFTER the collocate ---
+                                post_context_length = len(post_coll_tokens)
+                                context_end_for_rule = j + 1 + post_context_length
+                                
+                                if context_end_for_rule <= i: # Must end before the target
+                                    match_context = tokens_lower[j+1:context_end_for_rule]
+                                    required_pattern = [token_to_regex(t) for t in post_coll_tokens]
+                                    
+                                    match_string = ' '.join(match_context)
+                                    pattern_string = '^' + ' '.join(required_pattern) + '$'
+                                    
+                                    if re.match(pattern_string, match_string, re.IGNORECASE):
+                                        is_context_match = True
+                                        break
 
                     # --- Post-Target Context Check (Collocate is to the right of the Target) ---
-                    elif collocate_relative_index >= target_relative_end and '$' in pre_collocate_rule:
-                        # Context to check: tokens from collocate position 'j' forward to end_index
+                    elif collocate_relative_index >= target_relative_end and post_node_rule.find(collocate_placeholder) != -1:
+                        # The rule is defined as: $ (context) [collocate] (context)
                         
-                        # The pattern must be POST-COLLOCATE and PRE-TARGET in the rule
+                        # 1. Split post_node_rule at the collocate slot
+                        pre_coll_context, post_coll_context = post_node_rule.split(collocate_placeholder, 1)
                         
-                        # 1. Parse tokens AFTER collocate slot
-                        post_collocate_tokens = [t.lower() for t in post_collocate_rule.split()]
-                        
-                        # 2. Parse tokens BEFORE target node ($)
-                        pre_target_tokens = [t.lower() for t in pre_collocate_rule.split('$')[0].strip().split()]
+                        pre_coll_tokens = [t.lower() for t in pre_coll_context.split()]
+                        post_coll_tokens = [t.lower() for t in post_coll_context.split()]
 
-                        # Check if the context AFTER collocate matches the post-collocate rule
+                        # --- Check the tokens required BEFORE the collocate ---
+                        pre_context_length = len(pre_coll_tokens)
+                        context_start_for_rule = j - pre_context_length
                         
-                        # Context: [token_j (collocate), token_j+1, ..., token_end_index-1]
-                        post_context_length = len(post_collocate_tokens)
-                        context_end_for_rule = j + 1 + post_context_length
-                        
-                        if context_end_for_rule <= end_index:
-                            match_context = tokens_lower[j+1:context_end_for_rule]
+                        if context_start_for_rule >= i + primary_target_len: # Must start after the target
+                            match_context = tokens_lower[context_start_for_rule:j]
+                            required_pattern = [token_to_regex(t) for t in pre_coll_tokens]
                             
-                            required_pattern = [token_to_regex(t) for t in post_collocate_tokens]
+                            match_string = ' '.join(match_context)
+                            pattern_string = '^' + ' '.join(required_pattern) + '$'
                             
-                            match_string = ' '.join([w] + match_context)
-                            pattern_string = '^' + re.escape(w) + ' ' + ' '.join(required_pattern) + '$'
-                            
-                            try:
-                                if re.match(pattern_string, match_string, re.IGNORECASE):
-                                    is_context_match = True
-                                    break
-                            except Exception:
-                                continue
+                            if re.match(pattern_string, match_string, re.IGNORECASE):
+                                # --- Check the tokens required AFTER the collocate ---
+                                post_context_length = len(post_coll_tokens)
+                                context_end_for_rule = j + 1 + post_context_length
                                 
+                                if context_end_for_rule <= end_index: # Must end before the window limit
+                                    match_context = tokens_lower[j+1:context_end_for_rule]
+                                    required_pattern = [token_to_regex(t) for t in post_coll_tokens]
+                                    
+                                    match_string = ' '.join(match_context)
+                                    pattern_string = '^' + ' '.join(required_pattern) + '$'
+                                    
+                                    if re.match(pattern_string, match_string, re.IGNORECASE):
+                                        is_context_match = True
+                                        break
+
+
             # 3. IF CONTEXT MATCHES (OR NO PATTERN IS SET), RECORD THE INSTANCE
             if is_context_match:
                 key = (w, p, l)
