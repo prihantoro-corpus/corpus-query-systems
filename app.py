@@ -362,6 +362,7 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # Determine the corpus source
     if uploaded_file is not None:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
@@ -371,10 +372,8 @@ with st.sidebar:
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
     
-    if corpus_source is None:
-        st.info("Please select a corpus or upload a file to proceed.")
-        st.stop()
-        
+    # NOTE: We do NOT st.stop() here. We let the main body handle the load failure.
+    
     st.markdown("---")
     
     # --- PERSISTENT NAVIGATION (TOOLS) ---
@@ -393,6 +392,16 @@ with st.sidebar:
     
     # --- MODULE SETTINGS (DYNAMIC) ---
     st.subheader("Tool Settings")
+    
+    # load corpus inside sidebar to get df for filtering logic
+    df_sidebar = load_corpus_file(corpus_source)
+    
+    if df_sidebar is not None and len(df_sidebar) > 0:
+        # Recalculate is_raw_mode safely here for filtering logic access
+        count_of_raw_tags = df_sidebar['pos'].str.contains('##', na=False).sum()
+        is_raw_mode_sidebar = (count_of_raw_tags / len(df_sidebar)) > 0.99
+    else:
+        is_raw_mode_sidebar = True
     
     if st.session_state['view'] == 'concordance':
         st.write("KWIC Context (Display)")
@@ -419,8 +428,8 @@ with st.sidebar:
         st.session_state['collocate_regex'] = collocate_regex
         
         # 2. POS Filter (Dynamic)
-        if 'pos' in df.columns and not is_raw_mode:
-            all_pos_tags = sorted([tag for tag in df['pos'].unique() if tag != '##'])
+        if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
+            all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###']) # Include ### check for safety
             
             if all_pos_tags:
                 selected_pos_tags = st.multiselect(
@@ -438,7 +447,7 @@ with st.sidebar:
             st.session_state['selected_pos_tags'] = None
 
         # 3. Lemma Filter
-        if 'lemma' in df.columns and not is_raw_mode:
+        if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
             collocate_lemma = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value="", help="Enter the base form (e.g., 'approach'). Uses wildcard/regex logic on the lemma.")
             st.session_state['collocate_lemma'] = collocate_lemma
         else:
@@ -451,7 +460,7 @@ with st.sidebar:
     st.info("Deploy this app on Streamlit Cloud or HuggingFace Spaces for free sharing.")
 
 
-# load corpus (cached)
+# load corpus (cached) for main body access
 df = load_corpus_file(corpus_source)
 
 if df is None:
@@ -459,6 +468,7 @@ if df is None:
     st.stop()
     
 # --- CORPUS STATS CALCULATION (SHARED) ---
+# df is guaranteed to be non-None here
 if 'pos' in df.columns and len(df) > 0:
     count_of_raw_tags = df['pos'].str.contains('##', na=False).sum()
     is_raw_mode = (count_of_raw_tags / len(df)) > 0.99
@@ -892,14 +902,13 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         if collocate_regex:
             # Prepare pattern: replace * with .*
             pattern = re.escape(collocate_regex).replace(r'\*', '.*').replace(r'\|', '|').replace(r'\.', '.')
-            # The search must be case-insensitive, so we rely on the lowercase 'Collocate' column.
-            # However, the input 'w' in stats_list is already lowercased (token_lower[j]).
+            
             try:
-                # Use str.contains to allow the regular expressions to work properly
+                # Use str.fullmatch for full regex matching
                 filtered_df = filtered_df[filtered_df['Collocate'].str.fullmatch(pattern, case=True, na=False)]
             except re.error:
                 st.error(f"Invalid regular expression for Word/Regex filter: '{collocate_regex}'")
-                filtered_df = pd.DataFrame() # Clear results if regex is bad
+                filtered_df = pd.DataFrame() 
 
         # 2. POS Filter
         if selected_pos_tags and not is_raw_mode:
