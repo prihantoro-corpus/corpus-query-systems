@@ -48,7 +48,7 @@ KWIC_INITIAL_DISPLAY_HEIGHT = 10 # Approximate lines for initial view
 
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
-    "Europarl 1M Only": "https://github.com/prihantoro-corpus/corpus-query-systems/blob/main/europarl_en-1M-only.txt",
+    "Europarl 1M Only": "https://github.com/prihantoro-corpus/corpus-query-systems/blob/main/europarl_en-1M-only%20v2.txt",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
 
@@ -1498,5 +1498,6 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     )
 
 st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text, adjusting analysis depth automatically.")
+
 
 
