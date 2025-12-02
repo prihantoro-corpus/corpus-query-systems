@@ -451,7 +451,7 @@ with st.sidebar:
         
         st.caption("The **Node Word** is set by the primary search input above.")
         
-        pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the Node Word.")
+        pattern_search_window = st.number_input("Search Window (tokens, each side)", min_value=1, max_value=10, value=5, step=1, key="pattern_search_window_input", help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.")
         pattern_collocate = st.text_input("Collocate Word/Pattern (* for wildcard)", value="", key="pattern_collocate_input", help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly').")
 
         st.session_state['pattern_search_window'] = pattern_search_window
@@ -768,7 +768,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     if is_pattern_search_active:
         
         # --- Collocate Wildcard/Regex Handling ---
-        # Convert user input (e.g., '*ly') into a full regex pattern (e.g., '.*ly')
         collocate_pattern_str = re.escape(pattern_collocate).replace(r'\*', '.*')
         collocate_regex = re.compile(collocate_pattern_str)
         # ---------------------------------------------
@@ -805,7 +804,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     max_kwic_lines = 10
     
-    # --- FIX: Synchronize KWIC Display Window with Pattern Window ---
+    # --- Synchronize KWIC Display Window with Pattern Window (FIX) ---
     current_kwic_left = kwic_left
     current_kwic_right = kwic_right
     
@@ -873,8 +872,14 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     # --- KWIC Display ---
     st.subheader("📚 Concordance Results")
     total_matches = len(final_positions)
-    st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
     
+    # --- UPDATED: Success message reflects pattern search ---
+    if is_pattern_search_active:
+        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}'.")
+    else:
+        st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
+    # -----------------------------------------------------
+
     col_kwic, col_freq = st.columns([3, 2], gap="large")
 
     with col_kwic:
