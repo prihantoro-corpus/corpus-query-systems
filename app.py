@@ -21,6 +21,10 @@ st.set_page_config(page_title="CORTEX - Corpus Explorer v13", layout="wide")
 if 'view' not in st.session_state:
     st.session_state['view'] = 'overview'
 
+# --- CONSTANTS ---
+KWIC_MAX_DISPLAY_LINES = 100
+KWIC_INITIAL_DISPLAY_HEIGHT = 10 # Approximate lines for initial view
+
 # ---------------------------
 # Built-in Corpus Configuration
 # ---------------------------
@@ -789,8 +793,10 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                     found_collocate = True
                     break
             
+            # --- FIX: Only append positions where collocate was found ---
             if found_collocate:
                 final_positions.append(i)
+            # -------------------------------------------------------------
                 
         if not final_positions:
             st.warning(f"Pattern search found 0 instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within the window.")
@@ -802,7 +808,8 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
     # 2c. Format KWIC lines (applies to filtered or unfiltered positions)
     
-    max_kwic_lines = 10
+    # --- Maximum lines to display in the scrollable table ---
+    max_kwic_display = min(len(final_positions), KWIC_MAX_DISPLAY_LINES)
     
     # --- Synchronize KWIC Display Window with Pattern Window (FIX) ---
     current_kwic_left = kwic_left
@@ -814,7 +821,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         current_kwic_right = pattern_window
     # -----------------------------------------------------------------
 
-    for i in final_positions[:max_kwic_lines]:
+    for i in final_positions[:max_kwic_display]: # Use max_kwic_display here
         
         # Determine KWIC window based on user settings OR synchronized pattern window
         kwic_start = max(0, i - current_kwic_left)
@@ -875,7 +882,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- UPDATED: Success message reflects pattern search ---
     if is_pattern_search_active:
-        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}'.")
+        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{primary_target_mwu}' co-occurring with '{pattern_collocate}' within ±{current_kwic_left} tokens.")
     else:
         st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
     # -----------------------------------------------------
@@ -883,59 +890,71 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     col_kwic, col_freq = st.columns([3, 2], gap="large")
 
     with col_kwic:
-        st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} (Sampled)")
+        st.subheader(f"Concordance (KWIC) — top {max_kwic_display} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
         
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         
-        # 1. Custom CSS for table appearance (Alignment and Font)
-        kwic_table_style = """
+        # Calculate approximate height for 10 visible lines
+        row_height = 30 # approximate height of a single row in pixels
+        scrollable_height = KWIC_INITIAL_DISPLAY_HEIGHT * row_height
+        
+        # 1. Custom CSS for table appearance (Alignment and Font + SCROLLING CONTAINER)
+        kwic_table_style = f"""
              <style>
-             .dataframe {
+             .dataframe-container-scroll {{
+                 height: {scrollable_height}px; /* Fixed height for scrollable view */
+                 overflow-y: auto;
+                 margin-bottom: 1rem;
+             }}
+             .dataframe {{
                  font-family: monospace;
                  color: white; /* Default text color for context */
-             }
-             .dataframe table {
+                 width: 100%;
+             }}
+             .dataframe table {{
                 width: 100%;
                 table-layout: fixed;
                 word-wrap: break-word;
-             }
-             .dataframe th {
+             }}
+             .dataframe th {{
                 font-weight: bold;
                 text-align: center;
-             }
-             .dataframe td:nth-child(2) { /* Left context */
+             }}
+             .dataframe td:nth-child(2) {{ /* Left context */
                 text-align: right;
                 color: white; /* Explicitly set context text color */
-             }
-             .dataframe td:nth-child(3) { /* Node */
+             }}
+             .dataframe td:nth-child(3) {{ /* Node */
                 text-align: center;
                 font-weight: bold;
                 background-color: #f0f0f0; /* Light Gray Highlight for Node */
                 color: black;
-             }
-             .dataframe td:nth-child(4) { /* Right context */
+             }}
+             .dataframe td:nth-child(4) {{ /* Right context */
                 text-align: left;
                 color: white; /* Explicitly set context text color */
-             }
+             }}
              /* Remove indexing column width constraint */
-             .dataframe thead th:first-child { 
+             .dataframe thead th:first-child {{ 
                  width: 30px; 
-             }
+             }}
              </style>
         """
         st.markdown(kwic_table_style, unsafe_allow_html=True)
         
-        # 2. Render the DataFrame as HTML, preventing Pandas from escaping the HTML injected in the cells
-        st.markdown(
-            kwic_preview.to_html(
-                escape=False,
-                classes=['dataframe', 'kwic-table'],
-                index=False
-            ), 
-            unsafe_allow_html=True
+        # 2. Render the DataFrame inside a custom scrollable HTML container
+        html_table = kwic_preview.to_html(
+            escape=False,
+            classes=['dataframe'],
+            index=False
         )
+        
+        # Wrap the table in a scrollable div
+        scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
+
+        st.markdown(scrollable_html, unsafe_allow_html=True)
 
         st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow** for maximum visibility.")
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
