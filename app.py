@@ -160,8 +160,7 @@ def create_pyvis_graph(target_word, coll_df):
 def create_coordinate_chart(chart_df):
     """
     Creates an Altair Coordinate Chart (Upside-Down T).
-    Vertical (Y): LL Score. Horizontal (X): Signed Observed Frequency.
-    FIX: Ensure explicit encoding for all layers to avoid caching/layering conflicts.
+    FIX: Ensure explicit X-encoding in the labels layer.
     """
     
     # Max absolute value for a symmetric X-axis
@@ -169,7 +168,6 @@ def create_coordinate_chart(chart_df):
     max_y = chart_df['LL'].max() * 1.05
 
     # 1. Define Base Chart and Shared Tooltips
-    # Defining X and Y here makes it explicit for all subsequent layers.
     base = alt.Chart(chart_df).encode(
         y=alt.Y('LL', scale=alt.Scale(domain=[0, max_y]), title="Log-Likelihood (Strength)"),
         x=alt.X('Signed_Observed', 
@@ -195,10 +193,12 @@ def create_coordinate_chart(chart_df):
         )
     )
 
-    # 3. Text Labels (simplified encoding and positioning)
+    # 3. Text Labels (Explicit X-encoding for stability)
     labels = base.mark_text(
         fontSize=10,
     ).encode(
+        # CRITICAL FIX: Explicitly encoding X here prevents caching conflict
+        x=alt.X('Signed_Observed'), 
         text=alt.Text('Collocate'),
         color=alt.condition(
             alt.datum.Signed_Observed < 0,
