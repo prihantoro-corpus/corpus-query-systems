@@ -167,8 +167,12 @@ def create_coordinate_chart(chart_df):
     max_x = chart_df['Signed_Observed'].abs().max() + 1
     max_y = chart_df['LL'].max() * 1.05
 
+    # 1. Define Base Chart and Shared Tooltips
     base = alt.Chart(chart_df).encode(
         y=alt.Y('LL', scale=alt.Scale(domain=[0, max_y]), title="Log-Likelihood (Strength)"),
+        x=alt.X('Signed_Observed', 
+                scale=alt.Scale(domain=[-max_x, max_x]), 
+                title="Observed Frequency (Left = Negative | Right = Positive)"),
         tooltip=[
             alt.Tooltip('Collocate', title="Collocate"),
             alt.Tooltip('LL', title="LL Score", format=".2f"),
@@ -180,11 +184,8 @@ def create_coordinate_chart(chart_df):
         title="Collocation Strength vs. Positional Observed Frequency"
     )
 
-    # 1. Scatter Points
+    # 2. Scatter Points
     points = base.mark_circle(size=60).encode(
-        x=alt.X('Signed_Observed', 
-                scale=alt.Scale(domain=[-max_x, max_x]), 
-                title="Observed Frequency (Left = Negative | Right = Positive)"),
         color=alt.condition(
             alt.datum.Signed_Observed < 0,
             alt.value("#FF33B5"),  # Pink for Left Side
@@ -192,28 +193,23 @@ def create_coordinate_chart(chart_df):
         )
     )
 
-    # 2. Text Labels (offset slightly from points)
+    # 3. Text Labels (positioning adjusted for layering stability)
     labels = base.mark_text(
-        align='left', 
-        dx=5, 
-        dy=0,
         fontSize=10,
-        baseline='middle'
     ).encode(
-        x=alt.X('Signed_Observed'),
         text=alt.Text('Collocate'),
         color=alt.condition(
             alt.datum.Signed_Observed < 0,
             alt.value("#FF33B5"),
             alt.value("#3366FF")
         ),
-        # Adjust position slightly based on sign
-        dx=alt.condition(alt.datum.Signed_Observed < 0, alt.value(-5), alt.value(5)),
-        align=alt.condition(alt.datum.Signed_Observed < 0, alt.value('right'), alt.value('left'))
+        # Positioning: Use conditional alignment and offset to place the label next to the dot.
+        align=alt.condition(alt.datum.Signed_Observed < 0, alt.value('right'), alt.value('left')),
+        dx=alt.condition(alt.datum.Signed_Observed < 0, alt.value(-8), alt.value(8))
     )
     
-    # 3. Center Line (Upside-down T base)
-    center_line = alt.Chart(pd.DataFrame({'x': [0]})).mark_rule(color='gray', strokeDash=[3, 3]).encode(x='x')
+    # 4. Center Line (Upside-down T base)
+    center_line = alt.Chart(pd.DataFrame({'x': [0], 'y': [0]})).mark_rule(color='gray', strokeDash=[3, 3]).encode(x='x')
 
     chart = (points + labels + center_line).interactive()
     
@@ -453,13 +449,10 @@ if analyze_btn and target_input:
         
         # Calculate Total Observed and Signed Observed Frequency
         coll_counts_pivot['Observed'] = coll_counts_pivot['Observed_Left'] + coll_counts_pivot['Observed_Right']
-        coll_counts_pivot['Signed_Observed'] = coll_counts_pivot.apply(
-            lambda row: row['Observed_Right'] - row['Observed_Left'], axis=1
-        )
-        # We need the magnitude to be the total observed frequency, signed by the dominant side.
-        # This gives us the desired 'Upside Down T' effect where X is symmetric magnitude, but signed.
+        
         coll_counts_pivot['Dominant_Side'] = np.where(coll_counts_pivot['Observed_Left'] > coll_counts_pivot['Observed_Right'], 
                                                       'Left', 'Right')
+        # Use total observed magnitude, signed by the dominant side
         coll_counts_pivot['Signed_Observed'] = np.where(coll_counts_pivot['Dominant_Side'] == 'Left', 
                                                        -coll_counts_pivot['Observed'], 
                                                        coll_counts_pivot['Observed'])
@@ -503,8 +496,7 @@ if analyze_btn and target_input:
             stats_df_sorted = stats_df.sort_values("LL", ascending=False)
             network_df = stats_df_sorted.head(20).copy()
             
-            # Dataframe for the coordinate chart (only collocates with LL > 0)
-            chart_df = stats_df_sorted[stats_df_sorted['LL'] > 0].head(50).copy() # Cap at 50 for readability
+            chart_df = stats_df_sorted[stats_df_sorted['LL'] > 0].head(50).copy()
 
             # full LL top10
             full_ll = stats_df_sorted.head(10).copy()
@@ -521,6 +513,7 @@ if analyze_btn and target_input:
             
             if not chart_df.empty:
                 chart_filename = create_coordinate_chart(chart_df)
+                # The chart visualization would be improved by showing an example of this unique chart.
                 st.altair_chart(alt.load(chart_filename), use_container_width=True)
                 st.caption("This chart displays the **collocation strength (LL)** vertically against the **total observed frequency** horizontally, signed by the dominant position (Left = Pink/Negative, Right = Blue/Positive).")
             else:
@@ -564,7 +557,6 @@ if analyze_btn and target_input:
             st.markdown("---")
             st.subheader("Download Full Results")
             
-            # Select only the relevant columns for the final download, including L/R counts
             cols_to_download = [
                 "Collocate", "POS", "Observed", "Observed_Left", 
                 "Observed_Right", "LL", "MI", "Significance"
