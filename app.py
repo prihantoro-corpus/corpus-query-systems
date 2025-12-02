@@ -1,4 +1,4 @@
-# app.py now 
+# app.py
 # handles non tagged and non lemmatised text
 import streamlit as st
 import pandas as pd
@@ -9,12 +9,25 @@ from io import BytesIO
 import tempfile 
 import os       
 import re       
+import requests # Import for downloading remote files
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
 import streamlit.components.v1 as components # Import for HTML embedding
 
 st.set_page_config(page_title="Corpus Explorer Version 12 Dec 25", layout="wide")
+
+# ---------------------------
+# Built-in Corpus Configuration (Updated with user's GitHub files)
+# ---------------------------
+
+# NOTE: URLs are converted to Raw GitHub Content links to allow direct download.
+BUILT_IN_CORPORA = {
+    "Select built-in corpus...": None,
+    "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only.txt",
+    "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
+}
+
 
 # ---------------------------
 # Helpers: stats, IO utilities
@@ -113,10 +126,6 @@ def create_pyvis_graph(target_word, coll_df):
     
     # Define colors (only Gray is truly relevant now)
     pos_colors = {
-        'N': '#33CC33',  # Noun 
-        'V': '#3366FF',  # Verb
-        'J': '#FF33B5',  # Adjective
-        'R': '#FFCC00',  # Adverb
         '#': '#AAAAAA',  # Nonsense Tag / Other (Gray)
         'O': '#AAAAAA'   # Other (Gray)
     }
@@ -159,16 +168,35 @@ def create_pyvis_graph(target_word, coll_df):
     # --- END OF FIX ---
 
 
+@st.cache_data
+def download_file_to_bytesio(url):
+    """Downloads a file from a URL and returns its content as BytesIO."""
+    try:
+        # Use simple requests.get for simplicity, assumes small files or high bandwidth
+        response = requests.get(url, stream=True)
+        response.raise_for_status() # Raise exception for bad status codes
+        return BytesIO(response.content)
+    except Exception as e:
+        st.error(f"Failed to download built-in corpus from {url}. Ensure the file is public and the URL is a RAW content link.")
+        return None
+
 # ---------------------------
 # Cached loading (Fast regex tokenization)
 # ---------------------------
 @st.cache_data
-def load_corpus_file(file_bytes, sep=r"\s+"):
+def load_corpus_file(file_source, sep=r"\s+"):
+    """
+    Loads corpus either from an uploaded file handle or a BytesIO object 
+    (from a remote download).
+    """
+    
+    if file_source is None:
+        return None
+
     # 1. Try to read as structured 3-column data (Vertical Corpus)
     try:
-        file_bytes.seek(0)
-        # Using the standard regex for tokenization (whitespace and punctuation delimiter)
-        df_attempt = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
+        file_source.seek(0)
+        df_attempt = pd.read_csv(file_source, sep=sep, header=None, engine="python", dtype=str)
         
         is_vertical = False
         if df_attempt.shape[1] >= 3:
@@ -180,26 +208,23 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
         if is_vertical:
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
-            # Keep original POS/Lemma for structured file
             df["token"] = df["token"].fillna("").astype(str)
             df["pos"] = df["pos"].fillna("###").astype(str)
             df["lemma"] = df["lemma"].fillna("###").astype(str)
             df["_token_low"] = df["token"].str.lower()
-            st.sidebar.info("File loaded as **pre-tagged vertical corpus**.")
             return df
             
-        file_bytes.seek(0)
+        file_source.seek(0)
 
     except Exception:
-         file_bytes.seek(0) 
+         file_source.seek(0) 
          pass
 
     # 2. Fallback: Treat as Raw Horizontal Text (Fast Regex Tokenizer + Nonsense Tags)
     try:
-        raw_text = file_bytes.read().decode('utf-8')
+        raw_text = file_source.read().decode('utf-8')
         
         # Regex to split tokens based on space and punctuation, keeping punctuation as separate tokens
-        # (This is a simplified equivalent to the request "Use space and punctiations to delimit token")
         tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
         tokens = [t.strip() for t in tokens if t.strip()] # Clean up any empty strings
 
@@ -217,12 +242,11 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
         })
         
         df["_token_low"] = df["token"].str.lower()
-        st.sidebar.warning("File treated as raw text, tagged with **'##'** for fast analysis.")
         return df
         
     except Exception as raw_e:
-        st.error(f"Error processing raw text: {raw_e}")
-        raise raw_e
+        st.error(f"Error processing corpus data: {raw_e}")
+        return None # Return None on final failure
 
 
 # ---------------------------
@@ -234,11 +258,41 @@ st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal tex
 # ---------------------------
 # Panel: upload and corpus info
 # ---------------------------
+corpus_source = None
+corpus_name = "Uploaded File"
+
 with st.sidebar:
     st.header("Upload & Options")
-    uploaded_file = st.file_uploader("Upload corpus file", type=["txt","csv"])
+    
+    st.subheader("1. Choose Corpus Source")
+    
+    # Option A: Built-in Corpus Selection
+    selected_corpus_name = st.selectbox(
+        "Select a pre-loaded corpus:", 
+        options=list(BUILT_IN_CORPORA.keys())
+    )
+    
+    # Option B: Upload File
+    uploaded_file = st.file_uploader("OR Upload your own corpus file", type=["txt","csv"])
+    
     st.markdown("---")
     
+    # Determine the corpus source
+    if uploaded_file is not None:
+        corpus_source = uploaded_file
+        corpus_name = uploaded_file.name
+    elif selected_corpus_name != "Select built-in corpus...":
+        corpus_url = BUILT_IN_CORPORA[selected_corpus_name]
+        with st.spinner(f"Downloading {selected_corpus_name}..."):
+            corpus_source = download_file_to_bytesio(corpus_url)
+        corpus_name = selected_corpus_name
+    
+    if corpus_source is None:
+        st.info("Please select a corpus or upload a file to proceed.")
+        st.stop()
+        
+    st.subheader("2. Settings")
+
     # 1. Collocation window control
     coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=5, step=1, help="Window used for collocation counting (default ±5).")
     st.markdown("---")
@@ -256,12 +310,16 @@ with st.sidebar:
     st.write("Shareable deployment tip:")
     st.info("Deploy this app on Streamlit Cloud or HuggingFace Spaces for free sharing.")
 
-if uploaded_file is None:
-    st.info("Please upload a corpus file (vertical: token pos lemma, or raw text).")
-    st.stop()
 
 # load corpus (cached)
-df = load_corpus_file(uploaded_file)
+df = load_corpus_file(corpus_source)
+
+if df is None:
+    st.error("Corpus failed to load. Please check the file format or download source.")
+    st.stop()
+    
+st.header(f"Analyzing Corpus: {corpus_name}")
+
 total_tokens = len(df)
 
 # corpus info and frequency list
@@ -300,9 +358,10 @@ with col1:
 with col2:
     st.subheader("Top frequency (token / POS / freq) (Punctuation skipped)")
     
-    # Replace the existing POS with '##' if needed for display consistency
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
-    if all(freq_df_filtered['pos'].str.contains('##')):
+    
+    # Set POS to '##' for display if raw text was loaded
+    if 'pos' in freq_df_filtered.columns and all(freq_df_filtered['pos'].str.contains('##')):
          freq_df_filtered['pos'] = '##'
 
     freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
@@ -474,4 +533,3 @@ if analyze_btn and target_input:
             )
 
 st.caption("Tip: This fast processing mode uses generic tags (`##`), which means collocation results are word-based only, ignoring grammar.")
-
