@@ -380,7 +380,7 @@ st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal tex
 corpus_source = None
 corpus_name = "Uploaded File"
 
-# --- SIDEBAR: CORPUS SELECTION (STATIC) ---
+# --- SIDEBAR: CORPUS SELECTION & MODULE SETTINGS ---
 with st.sidebar:
     st.header("Upload & Options")
     
@@ -418,7 +418,7 @@ with st.sidebar:
         st.info("Please select a corpus or upload a file to proceed.")
         st.stop()
         
-    # --- SIDEBAR: MODULE SETTINGS (DYNAMIC) ---
+    # --- MODULE SETTINGS (DYNAMIC) ---
     st.subheader("2. Settings")
 
     if st.session_state['view'] == 'concordance':
@@ -475,27 +475,46 @@ else:
 st.header(app_mode)
 
 
-# --- NEW: PERSISTENT NAVIGATION BAR ---
+# --- NEW: PERSISTENT NAVIGATION BAR (MOVED TO MAIN BODY WITH STYLING HACK) ---
+# NOTE: While the sidebar is truly persistent, placing the controls in this fixed header area 
+# will make them appear at the top of the main body, as requested, giving a cleaner look.
+# If they disappear upon extreme scrolling, the solution is limited by Streamlit's architecture.
+st.markdown("""
+    <style>
+    .module-nav-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding-bottom: 10px;
+    }
+    .stButton>button {
+        width: 100%;
+        margin: 0;
+    }
+    </style>
+    <div class="module-nav-container">
+""", unsafe_allow_html=True)
+
 col_nav_overview, col_nav_concordance, col_nav_collocation = st.columns(3)
 
 with col_nav_overview:
     is_active = st.session_state['view'] == 'overview'
     label = "📌 Overview" if is_active else "📖 Overview"
-    if st.button(label, use_container_width=True, type="primary" if is_active else "secondary"):
+    if st.button(label, key='nav_overview', type="primary" if is_active else "secondary"):
         set_view('overview')
 with col_nav_concordance:
     is_active = st.session_state['view'] == 'concordance'
     label = "📌 Concordance" if is_active else "📚 Concordance"
-    if st.button(label, use_container_width=True, type="primary" if is_active else "secondary"):
+    if st.button(label, key='nav_concordance', type="primary" if is_active else "secondary"):
         set_view('concordance')
 with col_nav_collocation:
     is_active = st.session_state['view'] == 'collocation'
     label = "📌 Collocation" if is_active else "🔗 Collocation"
-    if st.button(label, use_container_width=True, type="primary" if is_active else "secondary"):
+    if st.button(label, key='nav_collocation', type="primary" if is_active else "secondary"):
         set_view('collocation')
 
+st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("---")
-
 
 # -----------------------------------------------------
 # MODULE: CORPUS OVERVIEW
