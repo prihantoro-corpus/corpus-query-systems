@@ -9,7 +9,7 @@ from io import BytesIO
 import tempfile 
 import os       
 import re       
-import requests # Import for downloading remote files
+import requests 
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components # Import for HTML embedding
 st.set_page_config(page_title="Corpus Explorer Version 12 Dec 25", layout="wide")
 
 # ---------------------------
-# Built-in Corpus Configuration (Updated with user's GitHub files)
+# Built-in Corpus Configuration
 # ---------------------------
 
 BUILT_IN_CORPORA = {
@@ -82,7 +82,7 @@ def df_to_excel_bytes(df):
 def create_pyvis_graph(target_word, coll_df):
     """
     Creates a Pyvis interactive network graph. 
-    All collocate nodes are Gray due to the generic '##' POS tag.
+    Node colors are based on the first letter of the POS tag, if available.
     """
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
     
@@ -123,9 +123,13 @@ def create_pyvis_graph(target_word, coll_df):
     # 1. Add Target Node 
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
-    # Define colors (only Gray is truly relevant now)
+    # Define colors for POS categories (Restored for tagged files)
     pos_colors = {
-        '#': '#AAAAAA',  # Nonsense Tag / Other (Gray)
+        'N': '#33CC33',  # Noun (Green)
+        'V': '#3366FF',  # Verb (Blue)
+        'J': '#FF33B5',  # Adjective (Pink)
+        'R': '#FFCC00',  # Adverb (Yellow)
+        '#': '#AAAAAA',  # Nonsense Tag / Raw (Gray)
         'O': '#AAAAAA'   # Other (Gray)
     }
     
@@ -135,8 +139,17 @@ def create_pyvis_graph(target_word, coll_df):
         ll_score = row['LL']
         observed = row['Observed']
         
-        # All nodes default to Gray ('#')
-        pos_code = '#' 
+        # Get the POS tag and determine the color
+        pos_tag = row['POS']
+        
+        # Use the first letter of the tag if it's N, V, J, or R; otherwise use '#' or 'O'
+        pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
+        
+        if pos_tag.startswith('##'):
+            pos_code = '#'
+        elif pos_code not in ['N', 'V', 'J', 'R']:
+            pos_code = 'O'
+        
         color = pos_colors.get(pos_code, pos_colors['O'])
         
         # Node size based on LL score
@@ -171,22 +184,21 @@ def create_pyvis_graph(target_word, coll_df):
 def download_file_to_bytesio(url):
     """Downloads a file from a URL and returns its content as BytesIO."""
     try:
-        # Use simple requests.get for simplicity, assumes small files or high bandwidth
         response = requests.get(url, stream=True)
-        response.raise_for_status() # Raise exception for bad status codes
+        response.raise_for_status() 
         return BytesIO(response.content)
     except Exception as e:
         st.error(f"Failed to download built-in corpus from {url}. Ensure the file is public and the URL is a RAW content link.")
         return None
 
 # ---------------------------
-# Cached loading (Fast regex tokenization)
+# Cached loading (Conditional Logic Implemented)
 # ---------------------------
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
     """
-    Loads corpus either from an uploaded file handle or a BytesIO object 
-    (from a remote download).
+    Loads corpus either from an uploaded file handle or a BytesIO object,
+    prioritizing structured tab-separated format.
     """
     
     if file_source is None:
@@ -194,15 +206,13 @@ def load_corpus_file(file_source, sep=r"\s+"):
 
     # 1. Try to read as structured 3-column data (Vertical Corpus)
     try:
-        # --- FIX: Try Tab Separator First for common vertical corpora ---
+        # Attempt 1: Tab Separator (for Europarl and typical tagged corpora)
         file_source.seek(0)
-        
-        # Attempt 1: Tab Separator
         try:
             df_attempt = pd.read_csv(file_source, sep='\t', header=None, engine="python", dtype=str)
         except Exception:
             file_source.seek(0)
-            # Attempt 2: Default Separator (Whitespace)
+            # Attempt 2: Default Separator (Whitespace) for other formats
             df_attempt = pd.read_csv(file_source, sep=sep, header=None, engine="python", dtype=str)
             
         # Continue with structural check
@@ -214,8 +224,10 @@ def load_corpus_file(file_source, sep=r"\s+"):
                 is_vertical = True
             
         if is_vertical:
+            # --- PROCESS TAGGED/VERTICAL FILE ---
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
+            # Preserve original tags and lemmas for visualization
             df["token"] = df["token"].fillna("").astype(str)
             df["pos"] = df["pos"].fillna("###").astype(str)
             df["lemma"] = df["lemma"].fillna("###").astype(str)
@@ -230,6 +242,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 
     # 2. Fallback: Treat as Raw Horizontal Text (Fast Regex Tokenizer + Nonsense Tags)
     try:
+        # --- PROCESS RAW/LINEAR FILE ---
         raw_text = file_source.read().decode('utf-8')
         
         # Regex to split tokens based on space and punctuation, keeping punctuation as separate tokens
@@ -254,7 +267,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         
     except Exception as raw_e:
         st.error(f"Error processing corpus data: {raw_e}")
-        return None # Return None on final failure
+        return None 
 
 
 # ---------------------------
@@ -289,12 +302,16 @@ with st.sidebar:
     if uploaded_file is not None:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
+        is_raw_mode = False # Assume uploaded file intended to be vertical first
     elif selected_corpus_name != "Select built-in corpus...":
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name]
         with st.spinner(f"Downloading {selected_corpus_name}..."):
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
-    
+        is_raw_mode = False # Assume built-in files are intended to be vertical first
+    else:
+        is_raw_mode = False
+
     if corpus_source is None:
         st.info("Please select a corpus or upload a file to proceed.")
         st.stop()
@@ -326,7 +343,13 @@ if df is None:
     st.error("Corpus failed to load. Please check the file format or download source.")
     st.stop()
     
-st.header(f"Analyzing Corpus: {corpus_name}")
+# Determine if raw mode was used by checking for the nonsense tag in the output DataFrame
+is_raw_mode = 'pos' in df.columns and any(df['pos'].str.contains('##', na=False))
+
+if is_raw_mode:
+    st.header(f"Analyzing Corpus: {corpus_name} (RAW/LINEAR MODE)")
+else:
+    st.header(f"Analyzing Corpus: {corpus_name} (TAGGED MODE)")
 
 total_tokens = len(df)
 
@@ -369,7 +392,7 @@ with col2:
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
     
     # Set POS to '##' for display if raw text was loaded
-    if 'pos' in freq_df_filtered.columns and all(freq_df_filtered['pos'].str.contains('##')):
+    if is_raw_mode:
          freq_df_filtered['pos'] = '##'
 
     freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
@@ -490,7 +513,8 @@ if analyze_btn and target_input:
             full_mi = full_mi_all.head(10).copy()
             full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
-            # --- Collocation Network Graph (Visually all nodes will be Gray) ---
+            
+            # --- Collocation Network Graph ---
             st.markdown("---")
             st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
             
@@ -499,17 +523,59 @@ if analyze_btn and target_input:
             
             st.markdown(
                 """
-                **Graph Key (Simplified):**
+                **Graph Key (POS Tags Restored):**
                 * Central Node (Target): **Yellow**
-                * Collocate Node Color: **All nodes are Gray** as POS tags are generic (`##`).
+                * Collocate Node Color: Noun (Prefix 'N') **Green**, Verb (Prefix 'V') **Blue**, Adjective (Prefix 'J') **Pink**, Adverb (Prefix 'R') **Yellow**. All other tags/raw text (`##`) are **Gray**.
                 * Edge Thickness: **All Thick** (Uniform)
                 * Collocate Bubble Size: Scales with Log-Likelihood (LL) score (**Bigger Bubble** = Stronger Collocation)
-                * Hover over nodes for details (POS: `##`, Observed Freq, LL score).
+                * Hover over nodes for details (POS, Observed Freq, LL score).
                 """
             )
             st.markdown("---")
+            
+            # --- Conditional POS Table Display ---
+            if not is_raw_mode:
+                # --- Category Tables Restoration (Only for Tagged Files) ---
+                def category_df(prefixes):
+                    mask = pd.Series(False, index=stats_df.index)
+                    for pref in prefixes:
+                        # Check if POS starts with the prefix (case-insensitive)
+                        mask = mask | stats_df["POS"].str.startswith(pref, na=False)
+                    sub = stats_df[mask].copy()
+                    ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
+                    ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
+                    mi_sub = sub[sub["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True).head(10).copy()
+                    mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
+                    return ll_sub, mi_sub
 
-            # ---------- Full Collocation Tables (No Tag Filtering) ----------
+                # Assuming standard tag prefixes (e.g., N, V, J, R, but will match Europarl tags like NN, VVP, JJ, etc.)
+                ll_N, mi_N = category_df(("N",))    # Noun
+                ll_V, mi_V = category_df(("V",))    # Verb
+                ll_J, mi_J = category_df(("J",))    # Adjective
+                ll_R, mi_R = category_df(("R",))    # Adverb
+                
+                st.subheader("Log-Likelihood — Top 10 by POS")
+                cols = st.columns(4, gap="small")
+                
+                with cols[0]:
+                    st.markdown("**N (N*) — LL**")
+                    st.dataframe(ll_N, use_container_width=True, hide_index=True)
+                with cols[1]:
+                    st.markdown("**V (V*) — LL**")
+                    st.dataframe(ll_V, use_container_width=True, hide_index=True)
+                with cols[2]:
+                    st.markdown("**J (J*) — LL**")
+                    st.dataframe(ll_J, use_container_width=True, hide_index=True)
+                with cols[3]:
+                    st.markdown("**R (R*) — LL**")
+                    st.dataframe(ll_R, use_container_width=True, hide_index=True)
+                
+                st.markdown("---") # Separate POS tables from full tables
+
+            else:
+                st.info("POS-specific collocation tables (N, V, J, R) are skipped in RAW/LINEAR mode.")
+            
+            # ---------- Full Collocation Tables (All Tags) ----------
             st.subheader("Top 10 Collocations (All Tags)")
             
             cols_full = st.columns(2, gap="large")
@@ -527,6 +593,28 @@ if analyze_btn and target_input:
             st.markdown("---")
             st.subheader("Download Full Results")
             
+            if not is_raw_mode:
+                # Download categories re-added
+                st.markdown("**LL Top 10 Downloads (POS-Filtered)**")
+                ll_dl_cols = st.columns(5)
+                ll_mapping = {
+                    "Full": full_ll, "N": ll_N, "V": ll_V, "J": ll_J, "R": ll_R
+                }
+                for i, (cat, df_tab) in enumerate(ll_mapping.items()):
+                    bname = f"LL {cat} top10"
+                    ll_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target}_LL_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+                st.markdown("**MI Top 10 Downloads (POS-Filtered)**")
+                mi_dl_cols = st.columns(5)
+                mi_mapping = {
+                    "Full": full_mi, "N": mi_N, "V": mi_V, "J": mi_J, "R": mi_R
+                }
+                for i, (cat, df_tab) in enumerate(mi_mapping.items()):
+                    bname = f"MI {cat} top10"
+                    mi_dl_cols[i].download_button(f"⬇ {bname} (xlsx)", data=df_to_excel_bytes(df_tab), file_name=f"{target}_MI_{cat}_top10.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.markdown("---")
+            
+            # Full Results Download
             st.download_button(
                 "⬇ Download full LL results (xlsx)", 
                 data=df_to_excel_bytes(stats_df_sorted), 
@@ -540,4 +628,4 @@ if analyze_btn and target_input:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-st.caption("Tip: This fast processing mode uses generic tags (`##`), which means collocation results are word-based only, ignoring grammar.")
+st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text, adjusting analysis depth automatically.")
