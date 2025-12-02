@@ -7,16 +7,24 @@ from collections import Counter
 from io import BytesIO
 import tempfile 
 import os       
-import re       # For fallback tokenization
-import nltk     # For structured tokenization
+import re       
+import spacy    # Using spaCy for tagging raw text
+import nltk     # Keeping import for tokenization fallback
 
-# Note: In a deployed environment (like Streamlit Cloud), you might need to ensure NLTK's 'punkt'
-# resource is available, possibly by including nltk.download('punkt') at the start, 
-# or listing it in your environment dependencies.
+# --- Load spaCy Model ---
+# NOTE: The spaCy model MUST be installed in your environment before deployment.
+# Typically done with: python -m spacy download en_core_web_sm
+@st.cache_resource
+def load_spacy_model():
+    try:
+        # Load the small English model
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        st.error("Error: spaCy model 'en_core_web_sm' not found. Please install it using 'python -m spacy download en_core_web_sm' or run the app in a pre-configured environment.")
+        return None
 
-# Import for Pyvis Network Graph
-from pyvis.network import Network
-import streamlit.components.v1 as components # Import for HTML embedding
+NLP_MODEL = load_spacy_model()
+# ---------------------------
 
 st.set_page_config(page_title="Corpus Explorer Version 12 Dec 25", layout="wide")
 
@@ -36,19 +44,16 @@ def compute_ll(k11, k12, k21, k22):
     if total == 0:
         return 0.0
     
-    # Expected frequencies
     e11 = (k11 + k12) * (k11 + k21) / total
     e12 = (k11 + k12) * (k12 + k22) / total
     e21 = (k21 + k22) * (k11 + k21) / total
     e22 = (k21 + k22) * (k12 + k22) / total
     
     s = 0.0
-    # Sum of k * log(k / e) for each cell
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
         if k > 0 and e > 0:
             s += k * math.log(k / e)
             
-    # LL = 2 * sum
     return 2.0 * s
 
 def compute_mi(k11, target_freq, coll_total, corpus_size):
@@ -58,12 +63,11 @@ def compute_mi(k11, target_freq, coll_total, corpus_size):
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0:
         return 0.0
-    # MI = log2(Observed / Expected)
     return math.log2(k11 / expected)
 
 def significance_from_ll(ll_val):
     """
-    Converts Log-Likelihood value to significance level (based on 1 d.f. Chi-squared).
+    Converts Log-Likelihood value to significance level.
     """
     if ll_val >= 15.13:
         return '*** (p<0.001)'
@@ -74,31 +78,24 @@ def significance_from_ll(ll_val):
     return 'ns'
 
 def df_to_excel_bytes(df):
-    """
-    Converts a pandas DataFrame to an Excel file (xlsx) in memory (BytesIO).
-    """
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     buf.seek(0)
     return buf.getvalue()
 
-def df_to_csv_bytes(df):
-    return df.to_csv(index=False).encode('utf-8')
-
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
     """
-    Creates a Pyvis interactive network graph for the top collocates.
+    Creates a Pyvis interactive network graph with custom styling.
     """
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
     
-    # Normalize LL for node size
     max_ll = coll_df['LL'].max()
     min_ll = coll_df['LL'].min()
     ll_range = max_ll - min_ll
     
-    # New Pyvis options (JSON MUST NOT contain // comments)
+    # JSON MUST NOT contain // comments
     net.set_options(f"""
     var options = {{
       "nodes": {{
@@ -133,11 +130,13 @@ def create_pyvis_graph(target_word, coll_df):
     
     # Define colors for POS categories
     pos_colors = {
-        'N': '#33CC33',  # Green
-        'V': '#3366FF',  # Blue
-        'J': '#FF33B5',  # Pink (Adjective, J*)
-        'R': '#FFCC00',  # Yellow (Adverb, R*)
-        'Other': '#AAAAAA' # Gray
+        'N': '#33CC33',  # Noun
+        'V': '#3366FF',  # Verb
+        'J': '#FF33B5',  # Adjective (J*)
+        'R': '#FFCC00',  # Adverb (R*)
+        'O': '#AAAAAA',  # Other (from spaCy: other parts, punct, etc.)
+        'RAW': '#AAAAAA', # Placeholder/Raw tag
+        '###': '#AAAAAA' # Placeholder/Raw tag
     }
     
     # 2. Add Collocate Nodes and Edges
@@ -145,24 +144,18 @@ def create_pyvis_graph(target_word, coll_df):
         collocate = row['Collocate']
         ll_score = row['LL']
         observed = row['Observed']
-        # Handle 'RAW' placeholder tag
-        pos_prefix = row['POS'][0].upper() if row['POS'] and row['POS'] != 'RAW' else 'Other' 
-        color = pos_colors.get(pos_prefix, pos_colors['Other'])
+        pos_code = row['POS'][0].upper() if row['POS'] else 'O'
+        color = pos_colors.get(pos_code, pos_colors['O'])
         
         # Node size based on LL score
         if ll_range > 0:
             normalized_ll = (ll_score - min_ll) / ll_range
-            node_size = 15 + normalized_ll * 25 # Min size 15, Max size 40
+            node_size = 15 + normalized_ll * 25 
         else:
             node_size = 25
             
-        edge_width = 5 
-        
-        # Collocate Nodes
         net.add_node(collocate, label=collocate, size=node_size, color=color, title=f"POS: {row['POS']}\nObs: {observed}\nLL: {ll_score:.2f}")
-        
-        # Edges (fixed width=5)
-        net.add_edge(target_word, collocate, value=ll_score, width=edge_width, title=f"LL: {ll_score:.2f}")
+        net.add_edge(target_word, collocate, value=ll_score, width=5, title=f"LL: {ll_score:.2f}")
 
     # --- Use a Temporary HTML File ---
     html_content = ""
@@ -171,12 +164,9 @@ def create_pyvis_graph(target_word, coll_df):
         temp_filename = "pyvis_graph.html"
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, temp_filename)
-        
         net.write_html(temp_path, notebook=False)
-        
         with open(temp_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-            
     finally:
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
@@ -186,7 +176,7 @@ def create_pyvis_graph(target_word, coll_df):
 
 
 # ---------------------------
-# Cached loading (Modified to handle horizontal raw text)
+# Cached loading (Modified to handle horizontal raw text using spaCy)
 # ---------------------------
 @st.cache_data
 def load_corpus_file(file_bytes, sep=r"\s+"):
@@ -195,66 +185,62 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
         file_bytes.seek(0)
         df_attempt = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
         
-        # Check if it looks like the expected 3-column format
+        # Heuristic to check if it's a vertical corpus
+        is_vertical = False
         if df_attempt.shape[1] >= 3:
+            df_check = df_attempt.iloc[:, :3].copy()
+            # If the number of unique tokens in the first column is significantly less than total rows, it's likely structured (not raw run-on text)
+            if df_check.iloc[:, 0].nunique() < len(df_check) * 0.95 and len(df_check) > 5:
+                is_vertical = True
+            
+        if is_vertical:
+            # Use the structured file
             df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
+            df["token"] = df["token"].fillna("").astype(str)
+            df["pos"] = df["pos"].fillna("###").astype(str)
+            df["lemma"] = df["lemma"].fillna("###").astype(str)
+            df["_token_low"] = df["token"].str.lower()
+            return df
             
-            # Simple heuristic check for vertical format:
-            # 1. If it has fewer rows than the first 100 tokens would be in a raw text.
-            # 2. Or if the first column is highly repetitive (likely not raw text)
-            is_vertical = True
-            
-            # Check the first few rows to confirm structure
-            if df.shape[0] > 100:
-                # If first token (word) is 'the' and appears fewer times than 10, probably not raw running text.
-                if df['token'].iloc[0].lower() in ['the', 'a', 'to'] and df['token'].str.lower().head(100).value_counts().max() < 10:
-                    is_vertical = False
-            
-            if is_vertical or df.shape[0] < 5: # Assume short files or structurally sound files are vertical
-                # Normalize and return vertical corpus
-                df["token"] = df["token"].fillna("").astype(str)
-                df["pos"] = df["pos"].fillna("###").astype(str)
-                df["lemma"] = df["lemma"].fillna("###").astype(str)
-                df["_token_low"] = df["token"].str.lower()
-                return df
-            
-        file_bytes.seek(0) # Reset file pointer for raw reading
+        file_bytes.seek(0) # Reset pointer for raw reading
 
     except Exception:
          file_bytes.seek(0) 
          pass # Proceed to raw text processing
 
-    # 2. Fallback: Treat as Raw Horizontal Text (Untagged Corpus)
+    # 2. Fallback: Treat as Raw Horizontal Text (Tagging using spaCy if model loaded)
     try:
         raw_text = file_bytes.read().decode('utf-8')
         
-        # Use NLTK for simple tokenization, with regex fallback
-        try:
-             # Basic tokenization (requires NLTK punkt/data to be available)
-             tokenizer = nltk.tokenize.RegexpTokenizer(r'\w+|[^\w\s]+')
-             tokens = tokenizer.tokenize(raw_text)
-        except Exception:
-             # Fallback if NLTK is not properly set up/fails
-             tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
+        if NLP_MODEL:
+            # Use spaCy for accurate tokenization, POS, and lemmatization
+            doc = NLP_MODEL(raw_text)
+            tokens = [token.text for token in doc if token.text.strip()]
+            pos_tags = [token.pos_ for token in doc if token.text.strip()]
+            lemmas = [token.lemma_ for token in doc if token.text.strip()]
+            
+            st.sidebar.info("Raw text successfully processed and tagged by **spaCy**.")
+            
+        else:
+            # Fallback to simple regex tokenization if spaCy model failed to load
+            tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
+            tokens = [t.strip() for t in tokens if t.strip()]
+            pos_tags = ["RAW"] * len(tokens)
+            lemmas = ["###"] * len(tokens)
+            st.sidebar.warning("Raw text processed using basic tokenization. POS/Lemma columns are placeholders ('RAW'/'###').")
         
-        # Filter out empty tokens which can occur
-        tokens = [t.strip() for t in tokens if t.strip()]
-
-        # Create the DataFrame with placeholders for POS and lemma
         df = pd.DataFrame({
             "token": tokens,
-            "pos": ["RAW"] * len(tokens), # Placeholder tag
-            "lemma": ["###"] * len(tokens) # Placeholder lemma
+            "pos": pos_tags,
+            "lemma": lemmas
         })
         
-        # Final formatting
         df["_token_low"] = df["token"].str.lower()
-        st.sidebar.warning("File treated as raw text. POS/Lemma columns are placeholders ('RAW'/'###').")
         return df
         
     except Exception as raw_e:
-        st.error(f"Error reading file as structured or raw text: {raw_e}")
+        st.error(f"Error processing raw text: {raw_e}")
         raise raw_e
 
 
@@ -262,7 +248,7 @@ def load_corpus_file(file_bytes, sep=r"\s+"):
 # UI: header
 # ---------------------------
 st.title("CORTEX -- Corpus Texts Explorer version 12-Dec-25")
-st.caption("Upload vertical corpus (token POS lemma) **or** raw horizontal text.")
+st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Uses spaCy for tagging untagged text.")
 
 # ---------------------------
 # Panel: upload and corpus info
@@ -296,7 +282,6 @@ if uploaded_file is None:
 # load corpus (cached)
 df = load_corpus_file(uploaded_file)
 total_tokens = len(df)
-st.sidebar.success(f"Loaded: {total_tokens:,} tokens")
 
 # corpus info and frequency list
 tokens_lower = df["_token_low"].tolist()
@@ -334,29 +319,25 @@ with col1:
         "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count", "STTR (w/o punc, chunk=1000)"],
         "Value": [f"{total_tokens:,}", unique_types, unique_lemmas, round(sttr_score,4)]
     })
-    # Hide index
     st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
 with col2:
     st.subheader("Top frequency (token / POS / freq) (Punctuation skipped)")
     
-    # Filter the main DataFrame to exclude punctuation tokens for frequency list display
     freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()]
     
     freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
     
     freq_head = freq_df.head(10).copy()
     freq_head.insert(0,"No", range(1, len(freq_head)+1))
-    # Hide index
     st.dataframe(freq_head, use_container_width=True, hide_index=True) 
     
-    # download freq (use the full filtered list)
     st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 st.markdown("---")
 
 # ---------------------------
-# Target input (option C: both)
+# Target input 
 # ---------------------------
 st.subheader("Target word input")
 col_a, col_b = st.columns(2)
@@ -365,24 +346,19 @@ with col_a:
 with col_b:
     uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
 
-# build selectable targets if list uploaded
 selected_target = None
 if uploaded_targets is not None:
     try:
-        # try to read lines
         target_list = pd.read_csv(uploaded_targets, header=None, squeeze=True, engine="python")[0].astype(str).str.strip().tolist()
     except Exception:
         uploaded_targets.seek(0)
         target_list = uploaded_targets.read().decode('utf-8').splitlines()
         target_list = [t.strip() for t in target_list if t.strip()]
     if target_list:
-        # create a dropdown so user picks one
         selected_target = st.selectbox("Select target from uploaded list", options=target_list)
-# Final chosen target precedence: selected_target > typed_target
 target_input = (selected_target if selected_target else typed_target).strip()
 if not target_input:
     st.info("Type a token or upload a target list and choose one. Then click Analyze.")
-# analyze button
 analyze_btn = st.button("🔎 Analyze")
 
 # ---------------------------
@@ -390,7 +366,6 @@ analyze_btn = st.button("🔎 Analyze")
 # ---------------------------
 if analyze_btn and target_input:
     target = target_input.lower()
-    # find positions
     positions = [i for i, t in enumerate(tokens_lower) if t == target]
     freq = len(positions)
     if freq == 0:
@@ -404,19 +379,15 @@ if analyze_btn and target_input:
         st.subheader(f"Concordance (KWIC) — top 10 ({kwic_left} left & {kwic_right} right)")
         kwic_rows = []
         for i in positions:
-            # Use dynamic kwic_left and kwic_right
             left = tokens_lower[max(0, i - kwic_left):i]
             right = tokens_lower[i + 1:i + 1 + kwic_right]
-            # display original-case node
             node_orig = df["token"].iloc[i]
             kwic_rows.append({"Left": " ".join(left), "Node": node_orig, "Right": " ".join(right)})
         kwic_df = pd.DataFrame(kwic_rows)
         kwic_preview = kwic_df.head(10).copy().reset_index(drop=True)
         kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
-        # Hide index
         st.dataframe(kwic_preview, use_container_width=True, hide_index=True)
 
-        # full concordance download
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{target}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         # ---------- COLLATION: compute stats ----------
@@ -461,25 +432,20 @@ if analyze_btn and target_input:
         if stats_df.empty:
             st.warning("No collocates found.")
         else:
-            # Sort for display and network generation
             stats_df_sorted = stats_df.sort_values("LL", ascending=False)
-            
-            # Use top 20 LL for network graph visualization
             network_df = stats_df_sorted.head(20).copy()
 
-            # full LL top10
             full_ll = stats_df_sorted.head(10).copy()
             full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
-            # full MI (apply MI min freq)
             full_mi_all = stats_df[stats_df["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
             full_mi = full_mi_all.head(10).copy()
             full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
 
-            # category tables
             def category_df(prefixes):
                 mask = pd.Series(False, index=stats_df.index)
                 for pref in prefixes:
                     mask = mask | stats_df["POS"].str.startswith(pref, na=False)
+                # Also include "RAW" and "###" in a separate 'Other' category if needed, but here we focus on major POS tags
                 sub = stats_df[mask].copy()
                 ll_sub = sub.sort_values("LL", ascending=False).reset_index(drop=True).head(10).copy()
                 ll_sub.insert(0, "Rank", range(1, len(ll_sub)+1))
@@ -487,23 +453,20 @@ if analyze_btn and target_input:
                 mi_sub.insert(0, "Rank", range(1, len(mi_sub)+1))
                 return ll_sub, mi_sub
 
-            ll_N, mi_N = category_df(("N",))    # N (NN*, NNP*, ...)
-            ll_V, mi_V = category_df(("V",))
-            ll_J, mi_J = category_df(("J",))
-            ll_R, mi_R = category_df(("R",))
+            # Using standard spaCy/Universal POS conventions for better compatibility
+            ll_N, mi_N = category_df(("NOUN", "PROPN"))    # Noun
+            ll_V, mi_V = category_df(("VERB", "AUX"))      # Verb/Auxiliary
+            ll_J, mi_J = category_df(("ADJ",))             # Adjective
+            ll_R, mi_R = category_df(("ADV",))             # Adverb
 
-            # ---------- Downloads for full result sets ----------
             st.download_button("⬇ Download full LL (all collocates) (xlsx)", data=df_to_excel_bytes(stats_df_sorted), file_name=f"{target}_LL_full.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             st.download_button(f"⬇ Download full MI (obs≥{mi_min_freq}) (xlsx)", data=df_to_excel_bytes(full_mi_all), file_name=f"{target}_MI_full_obsge{mi_min_freq}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-            # ---------- Collocation Network Graph (REPLACES Full LL Table) ----------
+            # ---------- Collocation Network Graph ----------
             st.markdown("---")
             st.subheader(f"Interactive Collocation Network (Top {len(network_df)} LL)")
             
-            # Generate the network HTML (cached)
             network_html = create_pyvis_graph(target_input, network_df)
-            
-            # Embed the network using Streamlit Components
             components.html(network_html, height=450)
             
             st.markdown(
@@ -518,26 +481,23 @@ if analyze_btn and target_input:
             )
             st.markdown("---")
 
-
             # ---------- Side-by-side display for LL: N | V | J | R ----------
             st.subheader("Log-Likelihood — Top 10 by POS")
             cols = st.columns(4, gap="small")
             
             with cols[0]:
-                st.markdown("**N (N*) — LL**")
+                st.markdown("**N (NOUN/PROPN) — LL**")
                 st.dataframe(ll_N, use_container_width=True, hide_index=True)
             with cols[1]:
-                st.markdown("**V (V*) — LL**")
+                st.markdown("**V (VERB/AUX) — LL**")
                 st.dataframe(ll_V, use_container_width=True, hide_index=True)
             with cols[2]:
-                st.markdown("**J (J*) — LL**")
+                st.markdown("**J (ADJ) — LL**")
                 st.dataframe(ll_J, use_container_width=True, hide_index=True)
             with cols[3]:
-                st.markdown("**R (R*) — LL**")
+                st.markdown("**R (ADV) — LL**")
                 st.dataframe(ll_R, use_container_width=True, hide_index=True)
 
-
-            # small per-category download buttons 
             st.markdown("---")
             st.subheader("Download Top 10 Tables")
             
@@ -569,16 +529,16 @@ if analyze_btn and target_input:
                 st.markdown("**Full (MI)**")
                 st.dataframe(full_mi, use_container_width=True, hide_index=True)
             with cols_mi[1]:
-                st.markdown("**N (N*) — MI**")
+                st.markdown("**N (NOUN/PROPN) — MI**")
                 st.dataframe(mi_N, use_container_width=True, hide_index=True)
             with cols_mi[2]:
-                st.markdown("**V (V*) — MI**")
+                st.markdown("**V (VERB/AUX) — MI**")
                 st.dataframe(mi_V, use_container_width=True, hide_index=True)
             with cols_mi[3]:
-                st.markdown("**J (J*) — MI**")
+                st.markdown("**J (ADJ) — MI**")
                 st.dataframe(mi_J, use_container_width=True, hide_index=True)
             with cols_mi[4]:
-                st.markdown("**R (R*) — MI**")
+                st.markdown("**R (ADV) — MI**")
                 st.dataframe(mi_R, use_container_width=True, hide_index=True)
 
 st.caption("Tip: Deploy this file to Streamlit Cloud or HuggingFace Spaces to share with others.")
