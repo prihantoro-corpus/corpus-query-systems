@@ -5,8 +5,14 @@ import numpy as np
 import math
 from collections import Counter
 from io import BytesIO
-import tempfile # For creating temporary files for pyvis
-import os       # For managing temporary files
+import tempfile 
+import os       
+import re       # For fallback tokenization
+import nltk     # For structured tokenization
+
+# Note: In a deployed environment (like Streamlit Cloud), you might need to ensure NLTK's 'punkt'
+# resource is available, possibly by including nltk.download('punkt') at the start, 
+# or listing it in your environment dependencies.
 
 # Import for Pyvis Network Graph
 from pyvis.network import Network
@@ -25,10 +31,6 @@ def safe_log(x):
 def compute_ll(k11, k12, k21, k22):
     """
     Computes the Log-Likelihood (LL) statistic based on a 2x2 contingency table.
-    k11: observed frequency of target and collocate
-    k12: observed frequency of target but not collocate
-    k21: observed frequency of collocate but not target
-    k22: observed frequency of neither target nor collocate
     """
     total = k11 + k12 + k21 + k22
     if total == 0:
@@ -43,7 +45,6 @@ def compute_ll(k11, k12, k21, k22):
     s = 0.0
     # Sum of k * log(k / e) for each cell
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
-        # Check to avoid log(0)
         if k > 0 and e > 0:
             s += k * math.log(k / e)
             
@@ -53,10 +54,6 @@ def compute_ll(k11, k12, k21, k22):
 def compute_mi(k11, target_freq, coll_total, corpus_size):
     """
     Computes the Mutual Information (MI) statistic.
-    k11: observed frequency of target and collocate
-    target_freq: frequency of the target word
-    coll_total: frequency of the collocate word
-    corpus_size: total number of tokens
     """
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0:
@@ -93,12 +90,7 @@ def df_to_csv_bytes(df):
 def create_pyvis_graph(target_word, coll_df):
     """
     Creates a Pyvis interactive network graph for the top collocates.
-    Uses a temporary file path to satisfy Pyvis requirements.
-    
-    Revised per user requests: Yellow target, LL-scaled bubble size, thick edges, large font.
-    Fixed: JSONDecodeError by removing comments from JSON string in net.set_options.
     """
-    # Initialize Pyvis network
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
     
     # Normalize LL for node size
@@ -136,16 +128,15 @@ def create_pyvis_graph(target_word, coll_df):
     }}
     """)
     
-    # 1. Add Target Node (large and central)
+    # 1. Add Target Node 
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", font={'color': 'black'})
     
     # Define colors for POS categories
-    # Noun (Green), Verb (Blue), Adjective (Pink), Adverb (Yellow), Other (Gray)
     pos_colors = {
         'N': '#33CC33',  # Green
         'V': '#3366FF',  # Blue
-        'J': '#FF33B5',  # Pink (Adjective)
-        'R': '#FFCC00',  # Yellow (Adverb)
+        'J': '#FF33B5',  # Pink (Adjective, J*)
+        'R': '#FFCC00',  # Yellow (Adverb, R*)
         'Other': '#AAAAAA' # Gray
     }
     
@@ -154,18 +145,17 @@ def create_pyvis_graph(target_word, coll_df):
         collocate = row['Collocate']
         ll_score = row['LL']
         observed = row['Observed']
-        pos_prefix = row['POS'][0].upper() if row['POS'] else 'Other'
+        # Handle 'RAW' placeholder tag
+        pos_prefix = row['POS'][0].upper() if row['POS'] and row['POS'] != 'RAW' else 'Other' 
         color = pos_colors.get(pos_prefix, pos_colors['Other'])
         
-        # Node size based on LL score (Collocate Bubble Size change)
+        # Node size based on LL score
         if ll_range > 0:
-            # Scale LL to node size range (e.g., 15 to 40)
             normalized_ll = (ll_score - min_ll) / ll_range
             node_size = 15 + normalized_ll * 25 # Min size 15, Max size 40
         else:
             node_size = 25
             
-        # Edge width is fixed (width=5) as requested
         edge_width = 5 
         
         # Collocate Nodes
@@ -174,24 +164,20 @@ def create_pyvis_graph(target_word, coll_df):
         # Edges (fixed width=5)
         net.add_edge(target_word, collocate, value=ll_score, width=edge_width, title=f"LL: {ll_score:.2f}")
 
-    # --- FIX: Use a Temporary HTML File ---
+    # --- Use a Temporary HTML File ---
     html_content = ""
     temp_path = None
     try:
-        # Create a temporary file path that ends in .html in a temporary directory
         temp_filename = "pyvis_graph.html"
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, temp_filename)
         
-        # Write the network to the temporary HTML file
         net.write_html(temp_path, notebook=False)
         
-        # Read the content back into a variable
         with open(temp_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
             
     finally:
-        # Crucial: Clean up the temporary file immediately
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
 
@@ -200,57 +186,90 @@ def create_pyvis_graph(target_word, coll_df):
 
 
 # ---------------------------
-# Cached loading
+# Cached loading (Modified to handle horizontal raw text)
 # ---------------------------
 @st.cache_data
 def load_corpus_file(file_bytes, sep=r"\s+"):
-    # Attempt to read vertical 3-column format token pos lemma
+    # 1. Try to read as structured 3-column data (Vertical Corpus)
     try:
-        # read as whitespace-separated with no header
-        df = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
-        if df.shape[1] >= 3:
-            df = df.iloc[:, :3]
+        file_bytes.seek(0)
+        df_attempt = pd.read_csv(file_bytes, sep=sep, header=None, engine="python", dtype=str)
+        
+        # Check if it looks like the expected 3-column format
+        if df_attempt.shape[1] >= 3:
+            df = df_attempt.iloc[:, :3]
             df.columns = ["token", "pos", "lemma"]
-        else:
-            # fallback to reading headers
-            df = pd.read_csv(file_bytes, engine="python", dtype=str)
-            cols = [c.lower() for c in df.columns]
-            if 'token' in cols:
-                df.columns = [c.lower() for c in df.columns]
-            elif 'word' in cols:
-                df.rename(columns={df.columns[cols.index('word')]: 'token'}, inplace=True)
-            else:
-                # assume first three columns are token,pos,lemma
-                df = df.iloc[:, :3]
-                df.columns = ["token", "pos", "lemma"]
-    except Exception as e:
-        # last resort: try pandas default
-        df = pd.read_csv(file_bytes, engine="python", dtype=str)
-        if df.shape[1] >= 3:
-            df = df.iloc[:, :3]
-            df.columns = ["token", "pos", "lemma"]
-        else:
-            raise e
-    # normalize and fill
-    df["token"] = df["token"].fillna("").astype(str)
-    df["pos"] = df["pos"].fillna("###").astype(str)
-    df["lemma"] = df["lemma"].fillna("###").astype(str)
-    # create lowercase tokens for matching
-    df["_token_low"] = df["token"].str.lower()
-    return df
+            
+            # Simple heuristic check for vertical format:
+            # 1. If it has fewer rows than the first 100 tokens would be in a raw text.
+            # 2. Or if the first column is highly repetitive (likely not raw text)
+            is_vertical = True
+            
+            # Check the first few rows to confirm structure
+            if df.shape[0] > 100:
+                # If first token (word) is 'the' and appears fewer times than 10, probably not raw running text.
+                if df['token'].iloc[0].lower() in ['the', 'a', 'to'] and df['token'].str.lower().head(100).value_counts().max() < 10:
+                    is_vertical = False
+            
+            if is_vertical or df.shape[0] < 5: # Assume short files or structurally sound files are vertical
+                # Normalize and return vertical corpus
+                df["token"] = df["token"].fillna("").astype(str)
+                df["pos"] = df["pos"].fillna("###").astype(str)
+                df["lemma"] = df["lemma"].fillna("###").astype(str)
+                df["_token_low"] = df["token"].str.lower()
+                return df
+            
+        file_bytes.seek(0) # Reset file pointer for raw reading
+
+    except Exception:
+         file_bytes.seek(0) 
+         pass # Proceed to raw text processing
+
+    # 2. Fallback: Treat as Raw Horizontal Text (Untagged Corpus)
+    try:
+        raw_text = file_bytes.read().decode('utf-8')
+        
+        # Use NLTK for simple tokenization, with regex fallback
+        try:
+             # Basic tokenization (requires NLTK punkt/data to be available)
+             tokenizer = nltk.tokenize.RegexpTokenizer(r'\w+|[^\w\s]+')
+             tokens = tokenizer.tokenize(raw_text)
+        except Exception:
+             # Fallback if NLTK is not properly set up/fails
+             tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
+        
+        # Filter out empty tokens which can occur
+        tokens = [t.strip() for t in tokens if t.strip()]
+
+        # Create the DataFrame with placeholders for POS and lemma
+        df = pd.DataFrame({
+            "token": tokens,
+            "pos": ["RAW"] * len(tokens), # Placeholder tag
+            "lemma": ["###"] * len(tokens) # Placeholder lemma
+        })
+        
+        # Final formatting
+        df["_token_low"] = df["token"].str.lower()
+        st.sidebar.warning("File treated as raw text. POS/Lemma columns are placeholders ('RAW'/'###').")
+        return df
+        
+    except Exception as raw_e:
+        st.error(f"Error reading file as structured or raw text: {raw_e}")
+        raise raw_e
+
 
 # ---------------------------
 # UI: header
 # ---------------------------
 st.title("CORTEX -- Corpus Texts Explorer version 12-Dec-25")
-st.caption("Upload vertical corpus (token POS lemma). Search tokens, view KWIC, LL & MI collocates, and download results.")
+st.caption("Upload vertical corpus (token POS lemma) **or** raw horizontal text.")
 
 # ---------------------------
 # Panel: upload and corpus info
 # ---------------------------
 with st.sidebar:
     st.header("Upload & Options")
-    uploaded_file = st.file_uploader("Upload corpus file (vertical: token POS lemma)", type=["txt","csv"])
+    uploaded_file = st.file_uploader("Upload corpus file", type=["txt","csv"])
     st.markdown("---")
     
     # 1. Collocation window control
@@ -271,7 +290,7 @@ with st.sidebar:
     st.info("Deploy this app on Streamlit Cloud or HuggingFace Spaces for free sharing.")
 
 if uploaded_file is None:
-    st.info("Please upload a corpus file (vertical: token pos lemma).")
+    st.info("Please upload a corpus file (vertical: token pos lemma, or raw text).")
     st.stop()
 
 # load corpus (cached)
@@ -294,11 +313,9 @@ unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
 # STTR per 1000
 def compute_sttr_tokens(tokens_list, chunk=1000):
     """
-    Computes the Standardized Type-Token Ratio (STTR) by averaging TTR over fixed chunks.
-    STTR is a ratio between 0 and 1.
+    Computes the Standardized Type-Token Ratio (STTR) by averaging TTR over fixed chunks (ratio 0-1).
     """
     if len(tokens_list) < chunk:
-        # For a short list, return the TTR itself (which is between 0 and 1)
         return (len(set(tokens_list)) / len(tokens_list)) if len(tokens_list) > 0 else 0.0
     ttrs = []
     for i in range(0, len(tokens_list), chunk):
@@ -306,7 +323,6 @@ def compute_sttr_tokens(tokens_list, chunk=1000):
         if not c: continue
         ttrs.append(len(set(c)) / len(c))
     
-    # Returns the average TTR (STTR) as a ratio between 0 and 1.
     return (sum(ttrs)/len(ttrs)) if ttrs else 0.0
 
 sttr_score = compute_sttr_tokens(tokens_lower_filtered)
@@ -505,7 +521,6 @@ if analyze_btn and target_input:
 
             # ---------- Side-by-side display for LL: N | V | J | R ----------
             st.subheader("Log-Likelihood — Top 10 by POS")
-            # Changed to 4 columns since the Full LL table is now the graph
             cols = st.columns(4, gap="small")
             
             with cols[0]:
@@ -528,7 +543,6 @@ if analyze_btn and target_input:
             
             st.markdown("**LL Top 10 Downloads**")
             ll_dl_cols = st.columns(5)
-            # Added Full LL back to the download list
             ll_mapping = {
                 "Full": full_ll, "N": ll_N, "V": ll_V, "J": ll_J, "R": ll_R
             }
