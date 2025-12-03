@@ -108,7 +108,7 @@ def compute_ll(k11, k12, k21, k22):
     return 2.0 * s
 
 def compute_mi(k11, target_freq, coll_total, corpus_size):
-    """Computes the Mutual Information (MI) statistic."""
+    """Compuutes the Mutual Information (MI) statistic."""
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0:
         return 0.0
@@ -1237,7 +1237,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 # -----------------------------------------------------
 # MODULE: COLLOCATION LOGIC
 # -----------------------------------------------------
-# FIX: Corrected typo from st.session_session_state to st.session_state
 if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Get Collocation Settings
