@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v15.0 - Integrated LLM Interpretation & Debugging Tool
+# CORTEX Corpus Explorer v15.1 - Integrated LLM Interpretation & DEBUG FALLBACK
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -17,20 +17,16 @@ import streamlit.components.v1 as components
 
 # --- LLM Imports ---
 try:
-    # Ensure google-genai is installed via requirements.txt
     from google import genai
     from google.genai import types
 except ImportError:
-    # If the library import fails, the LLM features will be disabled/error.
     pass 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v15.0", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v15.1", layout="wide") 
 
-# Initialize Session State for View Management
+# Initialize Session State
 if 'view' not in st.session_state:
     st.session_state['view'] = 'overview'
-    
-# Initialize Analysis Trigger States
 if 'last_target_input' not in st.session_state:
     st.session_state['last_target_input'] = ''
 if 'last_pattern_collocate' not in st.session_state:
@@ -96,7 +92,7 @@ def trigger_analysis_callback():
         st.session_state['llm_interpretation_result'] = None
 
 # -----------------------------------------------------
-# LLM INTERPRETATION (Live API Implementation - with robust error trapping)
+# LLM INTERPRETATION (Hardcoded Fallback Implemented)
 # -----------------------------------------------------
 
 def interpret_results_llm(target_word, analysis_type, data_description, data):
@@ -107,14 +103,26 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
     if data is None or data.empty:
         return f"Analysis results are empty. Cannot generate an interpretation for '{target_word}'."
 
-    # 1. Initialize Client - relies on GEMINI_API_KEY being set in Streamlit Secrets
+    # 1. Initialize Client - FORCING KEY INJECTION FOR DEBUGGING STREAMLIT SECRETS FAILURE
+    
+    API_KEY = os.environ.get("GEMINI_API_KEY") 
+    
+    if not API_KEY:
+        # If Streamlit fails (as confirmed by debug check), use the hardcoded fallback.
+        # !!! SECURITY WARNING: REPLACE THE DUMMY KEY BELOW with your ACTUAL API Key for TESTING ONLY!
+        API_KEY = "AIzaSyCikFUdhqMfvcODM08AULRNOq4KOWL4Mys" # <--- REPLACE WITH YOUR KEY!
+        st.warning("🚨 **WARNING:** Streamlit Secrets failed. Using **Hardcoded Key Fallback** for testing.")
+        
     try:
-        if 'genai' not in globals() or not os.environ.get("GEMINI_API_KEY"):
-             return "LLM API Error: **GEMINI_API_KEY** environment variable is not set in Streamlit Secrets, or the 'google-genai' library failed to import. Please check your app's Secrets settings."
+        if 'genai' not in globals():
+             return "LLM API Error: 'google-genai' library failed to import. Check requirements.txt."
              
-        client = genai.Client()
+        client = genai.Client(api_key=API_KEY) # Inject the key directly
+        
     except Exception as e:
-        return f"LLM Client Initialization Failed. Please ensure 'google-genai' is installed and API key is valid. Error: {e}"
+        # This error is now specifically about the client connection failure itself
+        return f"LLM Client Initialization Failed. Error: {e}"
+
 
     # 2. Construct the Prompt with Data and Instructions
     data_sample = data.head(20).to_markdown(index=False, numalign="left", stralign="left")
@@ -140,7 +148,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
     try:
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
-            temperature=0.3, # Low temperature for factual, reliable analysis
+            temperature=0.3, 
         )
         
         response = client.models.generate_content(
@@ -163,17 +171,14 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
         
         **Full Error Detail:** `{e}`
         """
-        # Store the error in session state so it is visible in the expander
         st.session_state['llm_interpretation_result'] = error_message
         
-        # Also show an immediate Streamlit error box for visibility
         st.error("LLM API Call Failed. See 'LLM Interpretation' expander for details.")
         
-        # Return a simple flag indicating failure
         return f"LLM API Error: {error_message}"
 
 # ---------------------------
-# Helpers: stats, IO utilities (rest of the helper functions remain unchanged)
+# Helpers: stats, IO utilities 
 # ---------------------------
 EPS = 1e-12
 
@@ -500,7 +505,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v15.0")
+st.title("CORTEX - Corpus Texts Explorer v15.1")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -1233,7 +1238,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 data_description="KWIC Context Sample (Max 10 lines)",
                 data=kwic_df_for_llm
             )
-            # The error message is stored in session state if it failed, and displayed below.
+            # This error box is explicitly triggered by the failure flag
             if "LLM API Error" in result:
                  st.error(result)
 
@@ -1627,7 +1632,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                 data_description="Top Log-Likelihood Collocates",
                 data=stats_df_sorted[['Collocate', 'POS', 'Observed', 'LL', 'Direction']]
             )
-            # The error message is stored in session state if it failed, and displayed below.
+            # This error box is explicitly triggered by the failure flag
             if "LLM API Error" in result:
                  st.error(result)
             
