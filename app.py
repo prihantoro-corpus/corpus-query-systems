@@ -36,6 +36,8 @@ if 'collocate_pos_regex' not in st.session_state:
     st.session_state['collocate_pos_regex'] = ''
 if 'pattern_collocate_pos' not in st.session_state: 
     st.session_state['pattern_collocate_pos'] = ''
+if 'collocate_lemma' not in st.session_state: # Initialise lemma state safely
+    st.session_state['collocate_lemma'] = ''
 
 
 # --- CONSTANTS ---
@@ -570,18 +572,19 @@ with st.sidebar:
                 st.session_state['selected_pos_tags'] = None
         else:
             st.info("POS filtering requires a tagged corpus.")
-            # FIX 1: Ensure these are set to empty string for safety when raw mode is active
+            # Set to empty string for safety when raw mode is active
             st.session_state['collocate_pos_regex'] = ''
             st.session_state['pos_wildcard_regex'] = '' 
             st.session_state['selected_pos_tags'] = None
 
         # 3. Lemma Filter (Requires Lemmatized Corpus)
         if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
-            collocate_lemma = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value="", help="Enter the base form (e.g., 'approach'). Uses wildcard/regex logic on the lemma.")
-            st.session_state['collocate_lemma'] = collocate_lemma
+            collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value="", help="Enter the base form (e.g., 'approach'). Uses wildcard/regex logic on the lemma.")
+            st.session_state['collocate_lemma'] = collocate_lemma_input
         else:
             st.info("Lemma filtering requires a lemmatized corpus.")
-            st.session_state['collocate_lemma'] = None
+            # Set to empty string for safety when raw mode is active
+            st.session_state['collocate_lemma'] = '' # Changed from None
 
     # Removed Contextual Pattern Filter section entirely
 
@@ -1248,12 +1251,15 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     # Get Filter Settings
     collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
     
-    # FIX 2: Explicitly handle None values that might be set in the sidebar for untagged corpora
+    # Robust POS retrieval
     collocate_pos_regex_raw = st.session_state.get('collocate_pos_regex', '')
     collocate_pos_regex_input = str(collocate_pos_regex_raw or '').strip()
 
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
-    collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
+    
+    # FIX: Robust Lemma retrieval to handle None (the reported crashing line)
+    collocate_lemma_raw = st.session_state.get('collocate_lemma', '')
+    collocate_lemma = str(collocate_lemma_raw or '').lower().strip()
     
     # Use raw input for structural parsing to preserve case
     raw_target_input = target_input
@@ -1485,7 +1491,8 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
             filtered_df = filtered_df[filtered_df['POS'].isin(selected_pos_tags)]
             
         # 3. Lemma Filter
-        if collocate_lemma and 'Lemma' in filtered_df.columns:
+        # Check if corpus is fully tagged/lemmatized AND a lemma filter was provided
+        if collocate_lemma and 'Lemma' in filtered_df.columns and not is_raw_mode: 
             lemma_pattern = re.escape(collocate_lemma).replace(r'\*', '.*').replace(r'\|', '|').replace(r'\.', '.')
             try:
                 filtered_df = filtered_df[filtered_df['Lemma'].str.fullmatch(lemma_pattern, case=True, na=False)]
