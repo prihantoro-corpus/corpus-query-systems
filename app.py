@@ -570,8 +570,9 @@ with st.sidebar:
                 st.session_state['selected_pos_tags'] = None
         else:
             st.info("POS filtering requires a tagged corpus.")
-            st.session_state['collocate_pos_regex'] = None
-            st.session_state['pos_wildcard_regex'] = None 
+            # FIX 1: Ensure these are set to empty string for safety when raw mode is active
+            st.session_state['collocate_pos_regex'] = ''
+            st.session_state['pos_wildcard_regex'] = '' 
             st.session_state['selected_pos_tags'] = None
 
         # 3. Lemma Filter (Requires Lemmatized Corpus)
@@ -1246,7 +1247,11 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Get Filter Settings
     collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
-    collocate_pos_regex_input = st.session_state.get('collocate_pos_regex', '').strip() # NEW
+    
+    # FIX 2: Explicitly handle None values that might be set in the sidebar for untagged corpora
+    collocate_pos_regex_raw = st.session_state.get('collocate_pos_regex', '')
+    collocate_pos_regex_input = str(collocate_pos_regex_raw or '').strip()
+
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
     collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
     
