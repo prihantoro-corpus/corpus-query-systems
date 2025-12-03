@@ -15,7 +15,7 @@ from wordcloud import WordCloud
 from pyvis.network import Network
 import streamlit.components.v1 as components 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v14", layout="wide")
+st.set_page_config(page_title="CORTEX - Corpus Explorer v14.7", layout="wide") # Updated title
 
 # Initialize Session State for View Management
 if 'view' not in st.session_state:
@@ -36,7 +36,7 @@ if 'collocate_pos_regex' not in st.session_state:
     st.session_state['collocate_pos_regex'] = ''
 if 'pattern_collocate_pos' not in st.session_state: 
     st.session_state['pattern_collocate_pos'] = ''
-if 'collocate_lemma' not in st.session_state: # Initialise lemma state safely
+if 'collocate_lemma' not in st.session_state:
     st.session_state['collocate_lemma'] = ''
 
 
@@ -50,7 +50,6 @@ KWIC_INITIAL_DISPLAY_HEIGHT = 10 # Approximate lines for initial view
 
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
-    # FIX: Corrected URL to raw content
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
@@ -411,7 +410,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v14")
+st.title("CORTEX - Corpus Texts Explorer v14.7")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -420,11 +419,11 @@ st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal tex
 corpus_source = None
 corpus_name = "Uploaded File"
 
-# --- SIDEBAR: CORPUS SELECTION & MODULE SETTINGS ---
+# --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
 with st.sidebar:
-    st.header("Upload & Options")
     
-    st.subheader("1. Choose Corpus Source")
+    # 1. CORPUS SELECTION (TOP)
+    st.header("1. Corpus Source")
     
     selected_corpus_name = st.selectbox(
         "Select a pre-loaded corpus:", 
@@ -440,22 +439,20 @@ with st.sidebar:
         on_change=reset_analysis
     )
     
-    st.markdown("---")
-    
     # Determine the corpus source
     if uploaded_file is not None:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
     elif selected_corpus_name != "Select built-in corpus...":
-        # FIX: Corrected URL to point to raw content to avoid HTML parsing errors
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
         with st.spinner(f"Downloading {selected_corpus_name}..."):
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
     
-    # --- PERSISTENT NAVIGATION (TOOLS) ---
+    
+    # 2. NAVIGATION (MOVED UP)
     st.markdown("---")
-    st.subheader("TOOLS")
+    st.subheader("2. Navigation (TOOLS)")
     
     is_active_o = st.session_state['view'] == 'overview'
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
@@ -468,8 +465,8 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # --- MODULE SETTINGS (DYNAMIC) ---
-    st.subheader("Tool Settings")
+    # 3. MODULE SETTINGS (MOVED UP)
+    st.subheader("3. Tool Settings")
     
     # Load corpus inside sidebar to get df for filtering logic (safe execution)
     df_sidebar = load_corpus_file(corpus_source)
@@ -584,9 +581,7 @@ with st.sidebar:
         else:
             st.info("Lemma filtering requires a lemmatized corpus.")
             # Set to empty string for safety when raw mode is active
-            st.session_state['collocate_lemma'] = '' # Changed from None
-
-    # Removed Contextual Pattern Filter section entirely
+            st.session_state['collocate_lemma'] = ''
 
     st.markdown("---")
     st.write("Shareable deployment tip:")
@@ -702,23 +697,22 @@ if st.session_state['view'] != 'overview':
             on_change=trigger_analysis_callback # Trigger analysis if primary input changes
         )
     with col_b:
-        uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
+        # REMOVED: uploaded_targets file uploader
+        selected_target = st.selectbox(
+            "Select token from recent searches (if any)", 
+            options=[""] + list(st.session_state.get('recent_targets', [])), 
+            key="selected_target_input",
+            on_change=trigger_analysis_callback,
+            index=0 # Default to empty string
+        )
+        # Store current non-empty target for future use
+        if typed_target.strip():
+            if 'recent_targets' not in st.session_state:
+                st.session_state['recent_targets'] = []
+            if typed_target not in st.session_state['recent_targets']:
+                st.session_state['recent_targets'].insert(0, typed_target)
+            st.session_state['recent_targets'] = st.session_state['recent_targets'][:10] # Keep top 10
 
-    selected_target = None
-    if uploaded_targets is not None:
-        try:
-            target_list = pd.read_csv(uploaded_targets, header=None, squeeze=True, engine="python")[0].astype(str).str.strip().tolist()
-        except Exception:
-            uploaded_targets.seek(0)
-            target_list = uploaded_targets.read().decode('utf-8').splitlines()
-            target_list = [t.strip() for t in target_list if t.strip()]
-        if target_list:
-            selected_target = st.selectbox(
-                "Select target from uploaded list", 
-                options=target_list, 
-                key="selected_target_input",
-                on_change=trigger_analysis_callback # Trigger analysis if selection changes
-            )
     
     # Determine the primary search input
     primary_input = (selected_target if selected_target else typed_target).strip()
@@ -1257,7 +1251,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
 
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
     
-    # FIX: Robust Lemma retrieval to handle None (the reported crashing line)
+    # Robust Lemma retrieval
     collocate_lemma_raw = st.session_state.get('collocate_lemma', '')
     collocate_lemma = str(collocate_lemma_raw or '').lower().strip()
     
