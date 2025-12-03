@@ -1,5 +1,5 @@
 # app.py
-# handles non tagged and non lemmatised text
+# CORTEX Corpus Explorer v15.0 - Integrated LLM Interpretation
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -15,7 +15,16 @@ from wordcloud import WordCloud
 from pyvis.network import Network
 import streamlit.components.v1 as components 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v14", layout="wide")
+# --- LLM Imports ---
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    # This will show an error if google-genai wasn't added to requirements.txt 
+    # or if the environment hasn't been re-deployed yet.
+    st.error("LLM Error: 'google-genai' library not found. Please ensure it's in requirements.txt.")
+
+st.set_page_config(page_title="CORTEX - Corpus Explorer v15.0", layout="wide") # Updated title
 
 # Initialize Session State for View Management
 if 'view' not in st.session_state:
@@ -38,6 +47,8 @@ if 'pattern_collocate_pos' not in st.session_state:
     st.session_state['pattern_collocate_pos'] = ''
 if 'collocate_lemma' not in st.session_state: 
     st.session_state['collocate_lemma'] = ''
+if 'llm_interpretation_result' not in st.session_state:
+    st.session_state['llm_interpretation_result'] = None
 
 
 # --- CONSTANTS ---
@@ -50,7 +61,6 @@ KWIC_INITIAL_DISPLAY_HEIGHT = 10 # Approximate lines for initial view
 
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
-    # FIX: Corrected URL to raw content
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
@@ -68,6 +78,7 @@ POS_COLOR_MAP = {
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
     st.session_state['view'] = view_name
+    st.session_state['llm_interpretation_result'] = None # Clear interpretation on view change
     
 def reset_analysis():
     st.cache_data.clear()
@@ -76,15 +87,77 @@ def reset_analysis():
     st.session_state['last_pattern_collocate'] = ''
     st.session_state['trigger_analyze'] = False
     st.session_state['initial_load_complete'] = False
+    st.session_state['llm_interpretation_result'] = None # Clear interpretation on reset
     
 # --- Analysis Trigger Callback ---
 def trigger_analysis_callback():
     # Only trigger if the input value is non-empty, otherwise it triggers on clearing the input
     if st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('typed_target_input', '').strip():
         st.session_state['trigger_analyze'] = True
+        st.session_state['llm_interpretation_result'] = None
+
+# -----------------------------------------------------
+# LLM INTERPRETATION (Live API Implementation)
+# -----------------------------------------------------
+
+def interpret_results_llm(target_word, analysis_type, data_description, data):
+    """
+    Calls the Gemini 2.5 Flash API to get a linguistic interpretation of the corpus results.
+    """
+    
+    if data is None or data.empty:
+        return f"Analysis results are empty. Cannot generate an interpretation for '{target_word}'."
+
+    # 1. Initialize Client - relies on GEMINI_API_KEY being set in Streamlit Secrets
+    try:
+        if not os.environ.get("GEMINI_API_KEY"):
+             return "LLM API Error: **GEMINI_API_KEY** environment variable is not set. Please set the key in the Streamlit Cloud secrets manager."
+             
+        client = genai.Client()
+    except Exception as e:
+        return f"LLM Client Initialization Failed. Please ensure 'google-genai' is installed and API key is valid. Error: {e}"
+
+    # 2. Construct the Prompt with Data and Instructions
+    data_sample = data.head(20).to_markdown(index=False, numalign="left", stralign="left")
+    
+    system_instruction = (
+        "You are an expert Corpus Linguist and Lexicographer. "
+        "Your task is to analyze the provided raw linguistic data (KWIC or Collocation) "
+        "and provide a concise, professional interpretation. Focus on semantic prosody, "
+        "typical syntactic patterns, and the functional or register-specific usage of the target word. "
+        "Your interpretation must be in clean Markdown, maximum 4 paragraphs."
+    )
+    
+    user_prompt = f"""
+    Analyze the following {analysis_type} results for the target word: **{target_word}**.
+    
+    --- Data Type: {data_description} ---
+    {data_sample}
+    
+    Provide your expert interpretation based *only* on the provided data.
+    """
+    
+    # 3. Call the API
+    try:
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.3, # Low temperature for factual, reliable analysis
+        )
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[user_prompt],
+            config=config
+        )
+        
+        st.session_state['llm_interpretation_result'] = response.text
+        return response.text
+        
+    except Exception as e:
+        return f"Gemini API Call Error: Failed to generate content. This often indicates a rate limit, network issue, or invalid API usage permissions. Error: {e}"
 
 # ---------------------------
-# Helpers: stats, IO utilities
+# Helpers: stats, IO utilities (rest of the helper functions remain unchanged)
 # ---------------------------
 EPS = 1e-12
 
@@ -411,7 +484,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v14")
+st.title("CORTEX - Corpus Texts Explorer v15.0")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -420,11 +493,11 @@ st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal tex
 corpus_source = None
 corpus_name = "Uploaded File"
 
-# --- SIDEBAR: CORPUS SELECTION & MODULE SETTINGS ---
+# --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
 with st.sidebar:
-    st.header("Upload & Options")
     
-    st.subheader("1. Choose Corpus Source")
+    # 1. CORPUS SELECTION (TOP)
+    st.header("1. Corpus Source")
     
     selected_corpus_name = st.selectbox(
         "Select a pre-loaded corpus:", 
@@ -440,22 +513,20 @@ with st.sidebar:
         on_change=reset_analysis
     )
     
-    st.markdown("---")
-    
     # Determine the corpus source
     if uploaded_file is not None:
         corpus_source = uploaded_file
         corpus_name = uploaded_file.name
     elif selected_corpus_name != "Select built-in corpus...":
-        # FIX: Corrected URL to point to raw content to avoid HTML parsing errors
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
         with st.spinner(f"Downloading {selected_corpus_name}..."):
             corpus_source = download_file_to_bytesio(corpus_url)
         corpus_name = selected_corpus_name
     
-    # --- PERSISTENT NAVIGATION (TOOLS) ---
+    
+    # 2. NAVIGATION (MOVED UP)
     st.markdown("---")
-    st.subheader("TOOLS")
+    st.subheader("2. Navigation (TOOLS)")
     
     is_active_o = st.session_state['view'] == 'overview'
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
@@ -468,8 +539,8 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # --- MODULE SETTINGS (DYNAMIC) ---
-    st.subheader("Tool Settings")
+    # 3. MODULE SETTINGS (MOVED UP)
+    st.subheader("3. Tool Settings")
     
     # Load corpus inside sidebar to get df for filtering logic (safe execution)
     df_sidebar = load_corpus_file(corpus_source)
@@ -572,7 +643,7 @@ with st.sidebar:
                 st.session_state['selected_pos_tags'] = None
         else:
             st.info("POS filtering requires a tagged corpus.")
-            # FIX 1: Ensure these are set to empty string for safety when raw mode is active
+            # Set to empty string for safety when raw mode is active
             st.session_state['collocate_pos_regex'] = ''
             st.session_state['pos_wildcard_regex'] = '' 
             st.session_state['selected_pos_tags'] = None
@@ -689,49 +760,28 @@ if st.session_state['view'] != 'overview':
     
     # --- SEARCH INPUT (SHARED) ---
     st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        # Default search box, used unless pattern search fields are filled
-        # Note: This is now the entry point for structural queries like [love]_VVG
-        typed_target = st.text_input(
-            "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
-            value="", 
-            key="typed_target_input",
-            on_change=trigger_analysis_callback # Trigger analysis if primary input changes
-        )
-    with col_b:
-        uploaded_targets = st.file_uploader("Or upload list of tokens (one per line)", type=["txt","csv"], key="targets_upload")
-
-    selected_target = None
-    if uploaded_targets is not None:
-        try:
-            target_list = pd.read_csv(uploaded_targets, header=None, squeeze=True, engine="python")[0].astype(str).str.strip().tolist()
-        except Exception:
-            uploaded_targets.seek(0)
-            target_list = uploaded_targets.read().decode('utf-8').splitlines()
-            target_list = [t.strip() for t in target_list if t.strip()]
-        if target_list:
-            selected_target = st.selectbox(
-                "Select target from uploaded list", 
-                options=target_list, 
-                key="selected_target_input",
-                on_change=trigger_analysis_callback # Trigger analysis if selection changes
-            )
+    
+    # Full-width primary search input (used for v14.8/v15.0)
+    typed_target = st.text_input(
+        "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
+        value="", 
+        key="typed_target_input",
+        on_change=trigger_analysis_callback # Trigger analysis if primary input changes
+    )
     
     # Determine the primary search input
-    primary_input = (selected_target if selected_target else typed_target).strip()
+    primary_input = typed_target.strip()
+    target_input = primary_input
+    contains_wildcard = '*' in target_input
     
-    # Check if we should use the Pattern Search parameters instead
+    # FIX: Initialize use_pattern_search for all views
     use_pattern_search = False
+    
     if st.session_state['view'] == 'concordance':
-        # Check if Node Word, Collocate Word/Pattern, OR Collocate POS Pattern is provided
+        # Check if we should use the Pattern Search parameters instead
         if primary_input and (st.session_state.get('pattern_collocate', '').strip() or st.session_state.get('pattern_collocate_pos', '').strip()):
             if st.session_state.get('pattern_collocate', '').strip() or st.session_state.get('pattern_collocate_pos', '').strip():
                 use_pattern_search = True
-    
-    target_input = primary_input
-
-    contains_wildcard = '*' in target_input
 
     if not target_input and not use_pattern_search:
         st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis.")
@@ -778,7 +828,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- PATTERN SEARCH VARIABLES ---
     pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
-    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos', '').strip() # NEW
+    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos', '').strip() 
     pattern_window = st.session_state.get('pattern_search_window', 0)
     
     is_pattern_search_active = use_pattern_search and (pattern_collocate or pattern_collocate_pos) and pattern_window > 0
@@ -993,6 +1043,9 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         current_kwic_left = pattern_window
         current_kwic_right = pattern_window
     # -----------------------------------------------------------------
+    
+    # Create the DF used for the LLM interpretation prompt
+    kwic_rows_for_llm = [] 
 
     for i in final_positions[:max_kwic_display]: # Use max_kwic_display here
         
@@ -1069,6 +1122,16 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             "Node": node_orig, 
             "Right": " ".join(right_context)
         })
+
+        # Prepare plain text rows for LLM only
+        kwic_rows_for_llm.append({
+            "Left_Context": " ".join(left_context).replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", ""), 
+            "Node": node_orig, 
+            "Right_Context": " ".join(right_context).replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", "")
+        })
+    
+    # Prepare DataFrame for LLM interpretation (plain text)
+    kwic_df_for_llm = pd.DataFrame(kwic_rows_for_llm).head(10).copy()
     
     # --- Prepare Collocate Frequency Data ---
     results_panel_data = []
@@ -1076,8 +1139,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     if is_pattern_search_active:
         
         # Calculate expected frequency (total frequency of the collocate pattern/POS in the whole corpus)
-        # For mixed word/POS filters, total corpus frequency is complex. We calculate based on the single most restrictive filter.
-        
         expected_metric = "Collocate Pattern/POS"
         collocate_pattern_total_freq = 0
         
@@ -1136,6 +1197,25 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
     # -----------------------------------------------------
 
+    # --- LLM INTERPRETATION BUTTON/EXPANDER ---
+    if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
+        with st.spinner("Requesting linguistic interpretation from LLM..."):
+            result = interpret_results_llm(
+                target_word=raw_target_input,
+                analysis_type="Concordance",
+                data_description="KWIC Context Sample (Max 10 lines)",
+                data=kwic_df_for_llm
+            )
+            if "LLM API Error" in result:
+                 st.error(result)
+
+    
+    if st.session_state['llm_interpretation_result']:
+        with st.expander("LLM Interpretation", expanded=True):
+            st.markdown(st.session_state['llm_interpretation_result'])
+        st.markdown("---")
+    # ----------------------------------------
+    
     col_kwic, col_freq = st.columns([3, 2], gap="large")
 
     with col_kwic:
@@ -1509,6 +1589,24 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     else:
         st.warning("No collocates found.")
         st.stop()
+        
+    # --- LLM INTERPRETATION BUTTON/EXPANDER ---
+    if st.button("🧠 Interpret Collocation Results (LLM)", key="llm_collocation_btn"):
+        with st.spinner("Requesting linguistic interpretation from LLM..."):
+            result = interpret_results_llm(
+                target_word=raw_target_input,
+                analysis_type="Collocation",
+                data_description="Top Log-Likelihood Collocates",
+                data=stats_df_sorted[['Collocate', 'POS', 'Observed', 'LL', 'Direction']]
+            )
+            if "LLM API Error" in result:
+                 st.error(result)
+            
+    if st.session_state['llm_interpretation_result']:
+        with st.expander("LLM Interpretation", expanded=True):
+            st.markdown(st.session_state['llm_interpretation_result'])
+        st.markdown("---")
+    # ----------------------------------------
         
     # --- Prepare Directional DataFrames for Graphing (Top N) ---
 
