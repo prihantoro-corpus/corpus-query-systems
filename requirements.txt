@@ -7,3 +7,4 @@ matplotlib
 requests
 xlsxwriter
 openpyxl
+google-genai
