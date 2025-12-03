@@ -15,7 +15,7 @@ from wordcloud import WordCloud
 from pyvis.network import Network
 import streamlit.components.v1 as components 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v14.7", layout="wide") # Updated title
+st.set_page_config(page_title="CORTEX - Corpus Explorer v14.8", layout="wide") # Updated title
 
 # Initialize Session State for View Management
 if 'view' not in st.session_state:
@@ -36,7 +36,7 @@ if 'collocate_pos_regex' not in st.session_state:
     st.session_state['collocate_pos_regex'] = ''
 if 'pattern_collocate_pos' not in st.session_state: 
     st.session_state['pattern_collocate_pos'] = ''
-if 'collocate_lemma' not in st.session_state:
+if 'collocate_lemma' not in st.session_state: 
     st.session_state['collocate_lemma'] = ''
 
 
@@ -410,7 +410,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v14.7")
+st.title("CORTEX - Corpus Texts Explorer v14.8")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -684,47 +684,18 @@ if st.session_state['view'] == 'overview':
 
 if st.session_state['view'] != 'overview':
     
-    # --- SEARCH INPUT (SHARED) ---
+    # --- SEARCH INPUT (SINGLE FIELD) ---
     st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        # Default search box, used unless pattern search fields are filled
-        # Note: This is now the entry point for structural queries like [love]_VVG
-        typed_target = st.text_input(
-            "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
-            value="", 
-            key="typed_target_input",
-            on_change=trigger_analysis_callback # Trigger analysis if primary input changes
-        )
-    with col_b:
-        # REMOVED: uploaded_targets file uploader
-        selected_target = st.selectbox(
-            "Select token from recent searches (if any)", 
-            options=[""] + list(st.session_state.get('recent_targets', [])), 
-            key="selected_target_input",
-            on_change=trigger_analysis_callback,
-            index=0 # Default to empty string
-        )
-        # Store current non-empty target for future use
-        if typed_target.strip():
-            if 'recent_targets' not in st.session_state:
-                st.session_state['recent_targets'] = []
-            if typed_target not in st.session_state['recent_targets']:
-                st.session_state['recent_targets'].insert(0, typed_target)
-            st.session_state['recent_targets'] = st.session_state['recent_targets'][:10] # Keep top 10
-
+    
+    typed_target = st.text_input(
+        "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
+        value="", 
+        key="typed_target_input",
+        on_change=trigger_analysis_callback # Trigger analysis if primary input changes
+    )
     
     # Determine the primary search input
-    primary_input = (selected_target if selected_target else typed_target).strip()
-    
-    # Check if we should use the Pattern Search parameters instead
-    use_pattern_search = False
-    if st.session_state['view'] == 'concordance':
-        # Check if Node Word, Collocate Word/Pattern, OR Collocate POS Pattern is provided
-        if primary_input and (st.session_state.get('pattern_collocate', '').strip() or st.session_state.get('pattern_collocate_pos', '').strip()):
-            if st.session_state.get('pattern_collocate', '').strip() or st.session_state.get('pattern_collocate_pos', '').strip():
-                use_pattern_search = True
-    
+    primary_input = typed_target.strip()
     target_input = primary_input
 
     contains_wildcard = '*' in target_input
