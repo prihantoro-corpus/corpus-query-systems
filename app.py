@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v15.0 - Integrated LLM Interpretation
+# CORTEX Corpus Explorer v15.0 - Integrated LLM Interpretation & Debugging Tool
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -20,8 +20,7 @@ try:
     from google import genai
     from google.genai import types
 except ImportError:
-    # This will show an error if google-genai wasn't added to requirements.txt 
-    # or if the environment hasn't been re-deployed yet.
+    # If the library import fails (e.g., due to requirements.txt missing the package)
     pass 
 
 st.set_page_config(page_title="CORTEX - Corpus Explorer v15.0", layout="wide") # Updated title
@@ -663,6 +662,18 @@ with st.sidebar:
     st.markdown("---")
     st.write("Shareable deployment tip:")
     st.info("Deploy this app on Streamlit Cloud or HuggingFace Spaces for free sharing.")
+    
+    # -----------------------------------------------------------------
+    # TEMPORARY DEBUG CHECK (ADDED CODE BLOCK)
+    # -----------------------------------------------------------------
+    st.markdown("---")
+    if st.button("DEBUG: Check API Key Status", key="debug_key_status"):
+        key_is_set = os.environ.get("GEMINI_API_KEY") is not None
+        if key_is_set:
+            st.sidebar.success("✅ **SUCCESS:** GEMINI_API_KEY is loaded!")
+        else:
+            st.sidebar.error("❌ **FAILURE:** GEMINI_API_KEY is NOT loaded. Check Secrets format and Restart app.")
+    # -----------------------------------------------------------------
 
 
 # load corpus (cached) for main body access
