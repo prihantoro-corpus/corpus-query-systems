@@ -7,4 +7,5 @@ matplotlib
 requests
 xlsxwriter
 openpyxl
-google-genai
+huggingface-hub
+
