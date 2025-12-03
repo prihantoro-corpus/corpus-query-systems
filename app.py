@@ -22,7 +22,7 @@ try:
 except ImportError:
     # This will show an error if google-genai wasn't added to requirements.txt 
     # or if the environment hasn't been re-deployed yet.
-    st.error("LLM Error: 'google-genai' library not found. Please ensure it's in requirements.txt.")
+    pass 
 
 st.set_page_config(page_title="CORTEX - Corpus Explorer v15.0", layout="wide") # Updated title
 
@@ -97,7 +97,7 @@ def trigger_analysis_callback():
         st.session_state['llm_interpretation_result'] = None
 
 # -----------------------------------------------------
-# LLM INTERPRETATION (Live API Implementation)
+# LLM INTERPRETATION (Live API Implementation - with robust error trapping)
 # -----------------------------------------------------
 
 def interpret_results_llm(target_word, analysis_type, data_description, data):
@@ -110,8 +110,8 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
 
     # 1. Initialize Client - relies on GEMINI_API_KEY being set in Streamlit Secrets
     try:
-        if not os.environ.get("GEMINI_API_KEY"):
-             return "LLM API Error: **GEMINI_API_KEY** environment variable is not set. Please set the key in the Streamlit Cloud secrets manager."
+        if 'genai' not in globals() or not os.environ.get("GEMINI_API_KEY"):
+             return "LLM API Error: **GEMINI_API_KEY** environment variable is not set in Streamlit Secrets, or the 'google-genai' library failed to import. Please check your app's Secrets settings."
              
         client = genai.Client()
     except Exception as e:
@@ -154,7 +154,10 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
         return response.text
         
     except Exception as e:
-        return f"Gemini API Call Error: Failed to generate content. This often indicates a rate limit, network issue, or invalid API usage permissions. Error: {e}"
+        # Aggressive error reporting to prevent silent failure
+        error_message = f"Gemini API FAILED. The key might be invalid, expired, or the request exceeded the rate limit. Full Error: {e}"
+        st.session_state['llm_interpretation_result'] = error_message
+        return f"LLM API Error: {error_message}"
 
 # ---------------------------
 # Helpers: stats, IO utilities (rest of the helper functions remain unchanged)
@@ -955,6 +958,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     # --- 2. Concordance Generation (Pattern Search or Standard) ---
     
     kwic_rows = []
+    kwic_rows_for_llm = [] # For LLM prompt (plain text)
     
     # 2b. Apply pattern filtering if active 
     final_positions = []
@@ -1044,8 +1048,6 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         current_kwic_right = pattern_window
     # -----------------------------------------------------------------
     
-    # Create the DF used for the LLM interpretation prompt
-    kwic_rows_for_llm = [] 
 
     for i in final_positions[:max_kwic_display]: # Use max_kwic_display here
         
@@ -1123,7 +1125,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
             "Right": " ".join(right_context)
         })
 
-        # Prepare plain text rows for LLM only
+        # Prepare plain text rows for LLM only (removing HTML for clean context)
         kwic_rows_for_llm.append({
             "Left_Context": " ".join(left_context).replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", ""), 
             "Node": node_orig, 
