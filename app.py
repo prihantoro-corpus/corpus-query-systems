@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v16.0 - Hugging Face Free LLM Integration
+# CORTEX Corpus Explorer v16.1 - Hugging Face Free LLM Integration with Forced Timeout
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -20,10 +20,12 @@ try:
     # Use Hugging Face Hub for free inference API access
     from huggingface_hub import InferenceClient
     from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
+    # We will explicitly catch requests.exceptions.Timeout, which InferenceClient raises
+    import requests.exceptions
 except ImportError:
     pass 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v16.0", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v16.1", layout="wide") 
 
 # Initialize Session State
 if 'view' not in st.session_state:
@@ -54,6 +56,7 @@ KWIC_INITIAL_DISPLAY_HEIGHT = 10
 
 # Hugging Face Model for Inference (Fast, free-tier available)
 HF_MODEL_NAME = "Mistralai/Mistral-7B-Instruct-v0.2"
+API_TIMEOUT = 120 # Set a maximum timeout of 120 seconds
 
 
 # ---------------------------
@@ -97,7 +100,7 @@ def trigger_analysis_callback():
         st.session_state['llm_interpretation_result'] = None
 
 # -----------------------------------------------------
-# LLM INTERPRETATION (Hugging Face Inference API)
+# LLM INTERPRETATION (Hugging Face Inference API with Timeout)
 # -----------------------------------------------------
 
 def interpret_results_llm(target_word, analysis_type, data_description, data):
@@ -113,11 +116,10 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
     if 'InferenceClient' not in globals():
          return "LLM API Error: **huggingface-hub** library failed to import. Please check your `requirements.txt`."
 
-    # 1. Initialize Client (using no API key for the free tier)
+    # 1. Initialize Client (Set a timeout to prevent indefinite hanging)
     try:
-        # Use a generic client without an API key. 
-        # This defaults to the free, rate-limited public inference endpoint.
-        client = InferenceClient() 
+        # Pass the timeout to the constructor
+        client = InferenceClient(timeout=API_TIMEOUT) 
     except Exception as e:
         return f"LLM Client Initialization Failed. Error: {e}"
 
@@ -164,13 +166,28 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
         st.session_state['llm_interpretation_result'] = text_result
         return text_result
         
+    except requests.exceptions.Timeout:
+         # Explicitly catch the timeout error that InferenceClient raises
+         error_message = f"""
+         **🚨 HUGGING FACE INFERENCE API TIMEOUT!**
+         
+         **Cause:** The request took longer than {API_TIMEOUT} seconds. This means the free tier queue is likely full or the model is overloaded.
+         
+         **Action:** Please wait a few minutes and try again. If this persists, the free public endpoint is too congested for real-time use.
+         
+         **Full Error Detail:** `Request timed out after {API_TIMEOUT} seconds.`
+         """
+         st.session_state['llm_interpretation_result'] = error_message
+         st.error("LLM API Call Failed due to Timeout. See 'LLM Interpretation' expander.")
+         return f"LLM API Error: {error_message}"
+        
     except HfHubHTTPError as e:
         error_message = f"""
-        **🚨 HUGGING FACE INFERENCE API FAILED!**
+        **🚨 HUGGING FACE INFERENCE API FAILED (HTTP Error)!**
         
-        **Cause:** This usually means the **free rate limit** has been exceeded (too many users hitting the public endpoint) or the model is temporarily unavailable.
+        **Cause:** This usually means the free rate limit has been exceeded (too many users hitting the public endpoint) or the model is temporarily unavailable.
         
-        **Action:** Please wait a few minutes and try again, or check the Hugging Face model page for {HF_MODEL_NAME} for status.
+        **Action:** Please wait a few minutes and try again.
         
         **Full Error Detail:** `{e}`
         """
@@ -518,7 +535,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v16.0")
+st.title("CORTEX - Corpus Texts Explorer v16.1")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -702,7 +719,7 @@ with st.sidebar:
     if st.button("DEBUG: Check LLM Connection Status", key="debug_llm_status"):
         if 'InferenceClient' in globals():
             st.sidebar.success("✅ **SUCCESS:** `huggingface-hub` is installed.")
-            st.sidebar.info(f"Model used: `{HF_MODEL_NAME}` (Free Inference Endpoint)")
+            st.sidebar.info(f"Model used: `{HF_MODEL_NAME}` (Free Inference Endpoint with {API_TIMEOUT}s Timeout)")
         else:
             st.sidebar.error("❌ **FAILURE:** `huggingface-hub` is NOT installed. Check `requirements.txt`.")
     # -----------------------------------------------------------------
@@ -1244,7 +1261,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
-        with st.spinner("Requesting linguistic interpretation from LLM (Hugging Face Free Tier)..."):
+        with st.spinner("Requesting linguistic interpretation from LLM (Hugging Face Free Tier, max 120 seconds)..."):
             result = interpret_results_llm(
                 target_word=raw_target_input,
                 analysis_type="Concordance",
@@ -1638,7 +1655,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Collocation Results (LLM)", key="llm_collocation_btn"):
-        with st.spinner("Requesting linguistic interpretation from LLM (Hugging Face Free Tier)..."):
+        with st.spinner(f"Requesting linguistic interpretation from LLM (Hugging Face Free Tier, max {API_TIMEOUT} seconds)..."):
             result = interpret_results_llm(
                 target_word=raw_target_input,
                 analysis_type="Collocation",
