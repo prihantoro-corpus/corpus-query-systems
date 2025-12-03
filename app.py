@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v15.1 - Integrated LLM Interpretation & DEBUG FALLBACK
+# CORTEX Corpus Explorer v16.0 - Hugging Face Free LLM Integration
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -17,12 +17,13 @@ import streamlit.components.v1 as components
 
 # --- LLM Imports ---
 try:
-    from google import genai
-    from google.genai import types
+    # Use Hugging Face Hub for free inference API access
+    from huggingface_hub import InferenceClient
+    from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
 except ImportError:
     pass 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v15.1", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v16.0", layout="wide") 
 
 # Initialize Session State
 if 'view' not in st.session_state:
@@ -50,6 +51,10 @@ if 'llm_interpretation_result' not in st.session_state:
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
+
+# Hugging Face Model for Inference (Fast, free-tier available)
+HF_MODEL_NAME = "Mistralai/Mistral-7B-Instruct-v0.2"
+
 
 # ---------------------------
 # Built-in Corpus Configuration
@@ -92,42 +97,35 @@ def trigger_analysis_callback():
         st.session_state['llm_interpretation_result'] = None
 
 # -----------------------------------------------------
-# LLM INTERPRETATION (Hardcoded Fallback Implemented)
+# LLM INTERPRETATION (Hugging Face Inference API)
 # -----------------------------------------------------
 
 def interpret_results_llm(target_word, analysis_type, data_description, data):
     """
-    Calls the Gemini 2.5 Flash API to get a linguistic interpretation of the corpus results.
+    Calls the Hugging Face Inference API to get a linguistic interpretation.
+    Uses Mistral-7B-Instruct-v0.2, which is generally available on the free tier.
     """
     
     if data is None or data.empty:
         return f"Analysis results are empty. Cannot generate an interpretation for '{target_word}'."
+    
+    # Check for library import failure
+    if 'InferenceClient' not in globals():
+         return "LLM API Error: **huggingface-hub** library failed to import. Please check your `requirements.txt`."
 
-    # 1. Initialize Client - FORCING KEY INJECTION FOR DEBUGGING STREAMLIT SECRETS FAILURE
-    
-    API_KEY = os.environ.get("GEMINI_API_KEY") 
-    
-    if not API_KEY:
-        # If Streamlit fails (as confirmed by debug check), use the hardcoded fallback.
-        # !!! SECURITY WARNING: REPLACE THE DUMMY KEY BELOW with your ACTUAL API Key for TESTING ONLY!
-        API_KEY = "AIzaSyCikFUdhqMfvcODM08AULRNOq4KOWL4Mys" # <--- REPLACE WITH YOUR KEY!
-        st.warning("🚨 **WARNING:** Streamlit Secrets failed. Using **Hardcoded Key Fallback** for testing.")
-        
+    # 1. Initialize Client (using no API key for the free tier)
     try:
-        if 'genai' not in globals():
-             return "LLM API Error: 'google-genai' library failed to import. Check requirements.txt."
-             
-        client = genai.Client(api_key=API_KEY) # Inject the key directly
-        
+        # Use a generic client without an API key. 
+        # This defaults to the free, rate-limited public inference endpoint.
+        client = InferenceClient() 
     except Exception as e:
-        # This error is now specifically about the client connection failure itself
         return f"LLM Client Initialization Failed. Error: {e}"
-
 
     # 2. Construct the Prompt with Data and Instructions
     data_sample = data.head(20).to_markdown(index=False, numalign="left", stralign="left")
     
-    system_instruction = (
+    # System Prompt for the LLM
+    system_prompt = (
         "You are an expert Corpus Linguist and Lexicographer. "
         "Your task is to analyze the provided raw linguistic data (KWIC or Collocation) "
         "and provide a concise, professional interpretation. Focus on semantic prosody, "
@@ -135,6 +133,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
         "Your interpretation must be in clean Markdown, maximum 4 paragraphs."
     )
     
+    # User Prompt combining instructions and data
     user_prompt = f"""
     Analyze the following {analysis_type} results for the target word: **{target_word}**.
     
@@ -144,41 +143,55 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
     Provide your expert interpretation based *only* on the provided data.
     """
     
-    # 3. Call the API
+    # Format the prompt for Mistral (Instruction format)
+    full_prompt = f"<s>[INST] {system_prompt}\n\n{user_prompt} [/INST]"
+
+    # 3. Call the Hugging Face API
     try:
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.3, 
+        # Using the text_generation endpoint for simple, fast response
+        response = client.text_generation(
+            model=HF_MODEL_NAME,
+            prompt=full_prompt,
+            max_new_tokens=512,
+            temperature=0.3,
+            # Stop sequence for Mistral instruction format
+            stop_sequences=["</s>"], 
         )
         
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[user_prompt],
-            config=config
-        )
+        # Clean up the output if it includes a repeat of the prompt or system message
+        text_result = str(response).strip()
         
-        st.session_state['llm_interpretation_result'] = response.text
-        return response.text
+        st.session_state['llm_interpretation_result'] = text_result
+        return text_result
         
-    except Exception as e:
-        # AGGRESSIVE ERROR HANDLING: Force the error to be visible
+    except HfHubHTTPError as e:
         error_message = f"""
-        **🚨 GEMINI API CONNECTION FAILED!**
+        **🚨 HUGGING FACE INFERENCE API FAILED!**
         
-        **Cause:** This usually means the API key is invalid, the account has no quota, or the network connection timed out.
+        **Cause:** This usually means the **free rate limit** has been exceeded (too many users hitting the public endpoint) or the model is temporarily unavailable.
         
-        **Action:** Please check your key's usage dashboard on Google AI Studio.
+        **Action:** Please wait a few minutes and try again, or check the Hugging Face model page for {HF_MODEL_NAME} for status.
         
         **Full Error Detail:** `{e}`
         """
         st.session_state['llm_interpretation_result'] = error_message
-        
         st.error("LLM API Call Failed. See 'LLM Interpretation' expander for details.")
+        return f"LLM API Error: {error_message}"
+    
+    except Exception as e:
+        error_message = f"""
+        **🚨 LLM API Connection Failed (General Error)!**
         
+        **Cause:** An unexpected error occurred.
+        
+        **Full Error Detail:** `{e}`
+        """
+        st.session_state['llm_interpretation_result'] = error_message
+        st.error("LLM API Call Failed. See 'LLM Interpretation' expander for details.")
         return f"LLM API Error: {error_message}"
 
 # ---------------------------
-# Helpers: stats, IO utilities 
+# Helpers: stats, IO utilities (rest of the helper functions remain unchanged)
 # ---------------------------
 EPS = 1e-12
 
@@ -505,7 +518,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v15.1")
+st.title("CORTEX - Corpus Texts Explorer v16.0")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -683,15 +696,15 @@ with st.sidebar:
     st.info("Deploy this app on Streamlit Cloud or HuggingFace Spaces for free sharing.")
     
     # -----------------------------------------------------------------
-    # TEMPORARY DEBUG CHECK 
+    # LLM DIAGNOSTIC CHECK (modified for Hugging Face)
     # -----------------------------------------------------------------
     st.markdown("---")
-    if st.button("DEBUG: Check API Key Status", key="debug_key_status"):
-        key_is_set = os.environ.get("GEMINI_API_KEY") is not None
-        if key_is_set:
-            st.sidebar.success("✅ **SUCCESS:** GEMINI_API_KEY is loaded!")
+    if st.button("DEBUG: Check LLM Connection Status", key="debug_llm_status"):
+        if 'InferenceClient' in globals():
+            st.sidebar.success("✅ **SUCCESS:** `huggingface-hub` is installed.")
+            st.sidebar.info(f"Model used: `{HF_MODEL_NAME}` (Free Inference Endpoint)")
         else:
-            st.sidebar.error("❌ **FAILURE:** GEMINI_API_KEY is NOT loaded. Check Secrets format and Restart app.")
+            st.sidebar.error("❌ **FAILURE:** `huggingface-hub` is NOT installed. Check `requirements.txt`.")
     # -----------------------------------------------------------------
 
 
@@ -1231,7 +1244,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
-        with st.spinner("Requesting linguistic interpretation from LLM..."):
+        with st.spinner("Requesting linguistic interpretation from LLM (Hugging Face Free Tier)..."):
             result = interpret_results_llm(
                 target_word=raw_target_input,
                 analysis_type="Concordance",
@@ -1244,7 +1257,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
 
     
     if st.session_state['llm_interpretation_result']:
-        with st.expander("LLM Interpretation", expanded=True):
+        with st.expander("LLM Interpretation (Hugging Face)", expanded=True):
             st.markdown(st.session_state['llm_interpretation_result'])
         st.markdown("---")
     # ----------------------------------------
@@ -1625,7 +1638,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Collocation Results (LLM)", key="llm_collocation_btn"):
-        with st.spinner("Requesting linguistic interpretation from LLM..."):
+        with st.spinner("Requesting linguistic interpretation from LLM (Hugging Face Free Tier)..."):
             result = interpret_results_llm(
                 target_word=raw_target_input,
                 analysis_type="Collocation",
@@ -1637,7 +1650,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                  st.error(result)
             
     if st.session_state['llm_interpretation_result']:
-        with st.expander("LLM Interpretation", expanded=True):
+        with st.expander("LLM Interpretation (Hugging Face)", expanded=True):
             st.markdown(st.session_state['llm_interpretation_result'])
         st.markdown("---")
     # ----------------------------------------
