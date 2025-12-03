@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v16.2 - Mock LLM Success Test (NO API CALL)
+# CORTEX Corpus Explorer v16.3 - Corpus Load Debug Version (MOCK LLM)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -23,7 +23,7 @@ try:
 except ImportError:
     pass 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v16.2", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v16.3", layout="wide") 
 
 # Initialize Session State
 if 'view' not in st.session_state:
@@ -53,8 +53,8 @@ KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
 
 # Mock Constants
-MOCK_MODEL_NAME = "MOCK_SUCCESS_TEST_V16.2"
-API_TIMEOUT = 120 # Timeout is irrelevant but kept for context
+MOCK_MODEL_NAME = "MOCK_SUCCESS_TEST_V16.3"
+API_TIMEOUT = 120 
 
 
 # ---------------------------
@@ -117,9 +117,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
 
     The application has successfully processed the request and updated the UI, proving that the execution flow (Button Click -> Function Call -> Session State Update -> UI Refresh) is working perfectly.
 
-    The recurring issue you experienced with both **Gemini** and **Hugging Face** was therefore due to **external factors**:
-    1.  **Streamlit Secrets Failure** (initial Gemini issue).
-    2.  **API Call Hang/Silent Timeout** (subsequent hardcoded Gemini & Hugging Face issues) caused by network congestion or unresponsive free-tier endpoints.
+    The recurring issue you experienced with both **Gemini** and **Hugging Face** was therefore due to **external factors** (API Key failure or free endpoint congestion/timeouts).
 
     ---
     
@@ -413,11 +411,11 @@ def load_corpus_file(file_source, sep=r"\s+"):
 
     try:
         file_buffer_for_pandas.seek(0) 
+        # --- Attempt 1: Tab-separated (Standard Vertical Format) ---
         try:
-            # Try structured format first
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
         except Exception:
-            # Fallback to space/general delimiter
+            # --- Attempt 2: Space/General Delimiter ---
             file_buffer_for_pandas.seek(0)
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
             
@@ -437,7 +435,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
          pass # Continue to raw text tokenization if all else fails
 
     try:
-        # Raw text tokenization as a final fallback
+        # --- Final Fallback: Raw text tokenization ---
         raw_text = file_content_str
         tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
         tokens = [t.strip() for t in tokens if t.strip()] 
@@ -465,7 +463,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v16.2")
+st.title("CORTEX - Corpus Texts Explorer v16.3")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -500,8 +498,12 @@ with st.sidebar:
         corpus_name = uploaded_file.name
     elif selected_corpus_name != "Select built-in corpus...":
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
-        with st.spinner(f"Downloading {selected_corpus_name}..."):
-            corpus_source = download_file_to_bytesio(corpus_url)
+        # Check if we are mid-run, then display download status
+        if 'initial_load_complete' not in st.session_state or st.session_state['initial_load_complete'] == False:
+            with st.spinner(f"Downloading {selected_corpus_name}..."):
+                corpus_source = download_file_to_bytesio(corpus_url)
+        else:
+             corpus_source = download_file_to_bytesio(corpus_url) # Must re-run uncached if selection changes
         corpus_name = selected_corpus_name
     
     
@@ -662,8 +664,15 @@ if df is None:
     st.markdown("---")
     st.markdown("## Get Started")
     st.markdown("**Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
+    
+    # --- CRITICAL STATUS MESSAGE FOR DEBUGGING ---
+    st.error(f"❌ **CORPUS LOAD FAILED** or **NO CORPUS SELECTED**. Please check the sidebar selection.")
     st.stop()
 # ---------------------------------------------------------------------
+
+# --- CRITICAL STATUS MESSAGE FOR DEBUGGING (SUCCESS PATH) ---
+st.info(f"✅ Corpus **'{corpus_name}'** loaded successfully. Total tokens: **{len(df):,}**.")
+st.markdown("---")
     
 # --- CORPUS STATS CALCULATION (SHARED) ---
 # df is guaranteed to be non-None here
@@ -818,7 +827,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- PATTERN SEARCH VARIABLES ---
     pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
-    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos', '').strip() 
+    pattern_collocate_pos = st.session_session.get('pattern_collocate_pos', '').strip() 
     pattern_window = st.session_state.get('pattern_search_window', 0)
     
     is_pattern_search_active = use_pattern_search and (pattern_collocate or pattern_collocate_pos) and pattern_window > 0
