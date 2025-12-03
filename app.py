@@ -17,13 +17,14 @@ import streamlit.components.v1 as components
 
 # --- LLM Imports ---
 try:
+    # Ensure google-genai is installed via requirements.txt
     from google import genai
     from google.genai import types
 except ImportError:
-    # If the library import fails (e.g., due to requirements.txt missing the package)
+    # If the library import fails, the LLM features will be disabled/error.
     pass 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v15.0", layout="wide") # Updated title
+st.set_page_config(page_title="CORTEX - Corpus Explorer v15.0", layout="wide") 
 
 # Initialize Session State for View Management
 if 'view' not in st.session_state:
@@ -52,7 +53,7 @@ if 'llm_interpretation_result' not in st.session_state:
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
-KWIC_INITIAL_DISPLAY_HEIGHT = 10 # Approximate lines for initial view
+KWIC_INITIAL_DISPLAY_HEIGHT = 10 
 
 # ---------------------------
 # Built-in Corpus Configuration
@@ -77,7 +78,7 @@ POS_COLOR_MAP = {
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
     st.session_state['view'] = view_name
-    st.session_state['llm_interpretation_result'] = None # Clear interpretation on view change
+    st.session_state['llm_interpretation_result'] = None 
     
 def reset_analysis():
     st.cache_data.clear()
@@ -86,11 +87,10 @@ def reset_analysis():
     st.session_state['last_pattern_collocate'] = ''
     st.session_state['trigger_analyze'] = False
     st.session_state['initial_load_complete'] = False
-    st.session_state['llm_interpretation_result'] = None # Clear interpretation on reset
+    st.session_state['llm_interpretation_result'] = None 
     
 # --- Analysis Trigger Callback ---
 def trigger_analysis_callback():
-    # Only trigger if the input value is non-empty, otherwise it triggers on clearing the input
     if st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('typed_target_input', '').strip():
         st.session_state['trigger_analyze'] = True
         st.session_state['llm_interpretation_result'] = None
@@ -153,9 +153,23 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
         return response.text
         
     except Exception as e:
-        # Aggressive error reporting to prevent silent failure
-        error_message = f"Gemini API FAILED. The key might be invalid, expired, or the request exceeded the rate limit. Full Error: {e}"
+        # AGGRESSIVE ERROR HANDLING: Force the error to be visible
+        error_message = f"""
+        **🚨 GEMINI API CONNECTION FAILED!**
+        
+        **Cause:** This usually means the API key is invalid, the account has no quota, or the network connection timed out.
+        
+        **Action:** Please check your key's usage dashboard on Google AI Studio.
+        
+        **Full Error Detail:** `{e}`
+        """
+        # Store the error in session state so it is visible in the expander
         st.session_state['llm_interpretation_result'] = error_message
+        
+        # Also show an immediate Streamlit error box for visibility
+        st.error("LLM API Call Failed. See 'LLM Interpretation' expander for details.")
+        
+        # Return a simple flag indicating failure
         return f"LLM API Error: {error_message}"
 
 # ---------------------------
@@ -664,7 +678,7 @@ with st.sidebar:
     st.info("Deploy this app on Streamlit Cloud or HuggingFace Spaces for free sharing.")
     
     # -----------------------------------------------------------------
-    # TEMPORARY DEBUG CHECK (ADDED CODE BLOCK)
+    # TEMPORARY DEBUG CHECK 
     # -----------------------------------------------------------------
     st.markdown("---")
     if st.button("DEBUG: Check API Key Status", key="debug_key_status"):
@@ -1219,6 +1233,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
                 data_description="KWIC Context Sample (Max 10 lines)",
                 data=kwic_df_for_llm
             )
+            # The error message is stored in session state if it failed, and displayed below.
             if "LLM API Error" in result:
                  st.error(result)
 
@@ -1612,6 +1627,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
                 data_description="Top Log-Likelihood Collocates",
                 data=stats_df_sorted[['Collocate', 'POS', 'Observed', 'LL', 'Direction']]
             )
+            # The error message is stored in session state if it failed, and displayed below.
             if "LLM API Error" in result:
                  st.error(result)
             
