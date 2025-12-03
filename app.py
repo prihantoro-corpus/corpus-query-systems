@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v16.3 - Corpus Load Debug Version (MOCK LLM)
+# CORTEX Corpus Explorer v16.4 - Typo Fix (Final Mock Version)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -23,7 +23,7 @@ try:
 except ImportError:
     pass 
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v16.3", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v16.4", layout="wide") 
 
 # Initialize Session State
 if 'view' not in st.session_state:
@@ -53,7 +53,7 @@ KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
 
 # Mock Constants
-MOCK_MODEL_NAME = "MOCK_SUCCESS_TEST_V16.3"
+MOCK_MODEL_NAME = "MOCK_SUCCESS_TEST_V16.4"
 API_TIMEOUT = 120 
 
 
@@ -117,7 +117,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
 
     The application has successfully processed the request and updated the UI, proving that the execution flow (Button Click -> Function Call -> Session State Update -> UI Refresh) is working perfectly.
 
-    The recurring issue you experienced with both **Gemini** and **Hugging Face** was therefore due to **external factors** (API Key failure or free endpoint congestion/timeouts).
+    The recurring issue you experienced was due to external factors (API Key failure or free endpoint congestion/timeouts). The typo that caused the crash in v16.3 has been fixed.
 
     ---
     
@@ -463,7 +463,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v16.3")
+st.title("CORTEX - Corpus Texts Explorer v16.4")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**. Raw text is analyzed quickly using basic tokenization and generic tags (`##`).")
 
 # ---------------------------
@@ -827,7 +827,10 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     
     # --- PATTERN SEARCH VARIABLES ---
     pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
-    pattern_collocate_pos = st.session_session.get('pattern_collocate_pos', '').strip() 
+    
+    # --- FIX: TYPO from st.session_session to st.session_state ---
+    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos', '').strip() 
+    
     pattern_window = st.session_state.get('pattern_search_window', 0)
     
     is_pattern_search_active = use_pattern_search and (pattern_collocate or pattern_collocate_pos) and pattern_window > 0
