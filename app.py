@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.9 - KWIC Examples up to 100 Collocates
+# CORTEX Corpus Explorer v17.10 - Dictionary Word Forms & Collocation KWIC Limit
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,12 +18,12 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.9", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.10", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
-KWIC_COLLOC_DISPLAY_LIMIT = 30 # UPDATED: New limit for KWIC examples below collocation tables
+KWIC_COLLOC_DISPLAY_LIMIT = 20 # UPDATED: Limit for KWIC examples below collocation tables (was 100)
 
 # ---------------------------
 # Initializing Session State
@@ -312,6 +312,53 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         
     return (kwic_rows, total_matches, raw_target_input, literal_freq)
 
+# --- Word Forms Helper ---
+@st.cache_data
+def get_word_forms_by_lemma(df_corpus, target_word):
+    # 1. Find the lemma(s) of the target word
+    target_lower = target_word.lower()
+    matching_rows = df_corpus[df_corpus['token'].str.lower() == target_lower]
+    
+    if matching_rows.empty or 'lemma' not in df_corpus.columns:
+        return []
+        
+    unique_lemmas = matching_rows['lemma'].unique()
+    
+    # Filter out nonsense tags
+    valid_lemmas = [l for l in unique_lemmas if l not in ('##', '###')]
+    if not valid_lemmas:
+        return []
+        
+    # 2. Find all tokens sharing those lemmas
+    all_related_forms = df_corpus[df_corpus['lemma'].isin(valid_lemmas)]['token'].unique()
+    
+    # Return as a sorted list, removing the exact user input word (case insensitive)
+    return sorted([w for w in all_related_forms if w.lower() != target_lower])
+
+# --- Regex Forms Helper ---
+@st.cache_data
+def get_related_forms_by_regex(df_corpus, target_word):
+    # Construct a broad regex for related forms: .*<target_word>.* (case insensitive)
+    # Escape the target_word in case it contains regex special characters
+    pattern_str = f".*{re.escape(target_word)}.*"
+    # Use re.IGNORECASE for case-insensitive matching
+    pattern = re.compile(pattern_str, re.IGNORECASE)
+    
+    # Search all unique tokens
+    all_unique_tokens = df_corpus['token'].unique()
+    
+    related_forms = []
+    for token in all_unique_tokens:
+        if pattern.fullmatch(token):
+            related_forms.append(token)
+            
+    # Remove the target word itself from the list (case insensitive comparison)
+    target_lower = target_word.lower()
+    final_forms = [w for w in related_forms if w.lower() != target_lower]
+    
+    # Use set for uniqueness (in case of case variations)
+    return sorted(list(set(final_forms)))
+
 # --- Word Cloud Function ---
 @st.cache_data
 def create_word_cloud(freq_data, is_tagged_mode):
@@ -530,7 +577,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception as raw_e: return None 
 
 # -----------------------------------------------------
-# NEW: Function to display KWIC examples for collocates
+# Function to display KWIC examples for collocates
 # -----------------------------------------------------
 def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1):
     """
@@ -611,7 +658,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.9")
+st.title("CORTEX - Corpus Texts Explorer v17.10")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -1212,9 +1259,36 @@ if st.session_state['view'] == 'dictionary':
     }
     st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
 
+    # --- 4. Word Forms (by Lemma) ---
     st.markdown("---")
+    st.subheader("Word Forms (by Lemma)")
 
-    # --- 2. Random Concordance Examples ---
+    if is_raw_mode or 'lemma' not in df.columns:
+        st.info("Lemma analysis requires a tagged and lemmatized corpus.")
+    else:
+        related_forms = get_word_forms_by_lemma(df, current_dict_word)
+        if related_forms:
+            st.markdown(f"**Related forms whose lemma is one of the following: `{unique_lemma}`**")
+            st.text_area("Related Word Forms", ", ".join(related_forms), height=100, key="lemma_forms_output")
+        else:
+            st.info(f"No other word forms found with the same lemma(s) ({unique_lemma}).")
+
+
+    # --- 5. Related Forms (by Regex) ---
+    st.markdown("---")
+    st.subheader("Related Forms (by Regex)")
+    
+    related_regex_forms = get_related_forms_by_regex(df, current_dict_word)
+    
+    if related_regex_forms:
+        st.markdown(f"**Tokens matching the pattern `*.{current_dict_word}.*` (case insensitive):**")
+        st.text_area("Related Forms (by regex)", ", ".join(related_regex_forms), height=100, key="regex_forms_output")
+    else:
+        st.info(f"No related tokens found matching the regex pattern.")
+        
+    st.markdown("---")
+    
+    # --- 2. Random Concordance Examples (Moved down) ---
     st.subheader("Random Examples (Concordance)")
     
     kwic_left = st.session_state.get('kwic_left', 7)
@@ -1291,7 +1365,6 @@ if st.session_state['view'] == 'dictionary':
     st.markdown(f"**Top {len(top_collocates)} Collocates (LL-ranked):**")
     st.text_area("Collocate List", collocate_list, height=100)
     
-    # 3b. Collocate Examples (Top 20 Collocates)
     st.markdown("---")
     st.subheader(f"Collocate Examples (Top {len(top_collocates)} LL Collocates)")
     
@@ -1482,4 +1555,3 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
 
 
 st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text.")
-
