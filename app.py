@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.14 - N-Gram Module Implementation
+# CORTEX Corpus Explorer v17.14 - N-Gram Module Implementation with Structural Filters
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -592,42 +592,64 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception as raw_e: return None 
 
 # -----------------------------------------------------
-# N-GRAM LOGIC
+# N-GRAM LOGIC (UPDATED FOR STRUCTURAL FILTERING)
 # -----------------------------------------------------
 @st.cache_data(show_spinner=False)
 def generate_n_grams(df_corpus, n, filter_type, positional_filters, is_raw_mode, max_display_lines=10000):
     total_tokens = len(df_corpus)
     
-    # 1. Determine the target column based on filter_type and corpus mode
-    target_column_name = 'token'
-    case_sensitive = True
-    
-    if filter_type == 'Token':
-        target_column_name = 'token'
-        case_sensitive = False
-    elif filter_type == 'Lemma' and not is_raw_mode and 'lemma' in df_corpus.columns:
-        target_column_name = 'lemma'
-        case_sensitive = False
-    elif filter_type == 'POS' and not is_raw_mode and 'pos' in df_corpus.columns:
-        target_column_name = 'pos'
-        case_sensitive = True # POS tags are typically case-sensitive
-
-    target_column = df_corpus[target_column_name].tolist()
+    # 1. Determine the target columns for data retrieval
+    # Ensure a lower-case token column exists for case-insensitive matching if needed
+    if '_token_low' not in df_corpus.columns:
+        df_corpus['_token_low'] = df_corpus['token'].str.lower()
     
     # 2. Compile Filters
     compiled_filters = {}
+    
+    # Set the default column based on the dropdown selection
+    default_column = 'token'
+    if filter_type == 'Lemma' and not is_raw_mode and 'lemma' in df_corpus.columns:
+        default_column = 'lemma'
+    elif filter_type == 'POS' and not is_raw_mode and 'pos' in df_corpus.columns:
+        default_column = 'pos'
+
     for pos_str, pattern_str in positional_filters.items():
         pattern_str = pattern_str.strip()
-        if pattern_str:
+        if not pattern_str:
+            continue
+
+        # --- Structural Pattern Detection ---
+        match_column = default_column
+        cleaned_pattern = pattern_str
+        
+        # Check for Lemma Pattern: [pattern]
+        lemma_match = re.fullmatch(r"\[(.*)\]", pattern_str)
+        if lemma_match and not is_raw_mode and 'lemma' in df_corpus.columns:
+            match_column = 'lemma'
+            cleaned_pattern = lemma_match.group(1).strip()
+        # Check for POS Pattern: _pattern
+        elif pattern_str.startswith('_') and not is_raw_mode and 'pos' in df_corpus.columns:
+            match_column = 'pos'
+            cleaned_pattern = pattern_str[1:].strip()
+        
+        # --- Final Pattern compilation ---
+        if cleaned_pattern:
             # Escape regex special characters, then replace * with .* for wildcard
-            safe_pattern = re.escape(pattern_str).replace(r'\*', '.*')
+            safe_pattern = re.escape(cleaned_pattern).replace(r'\*', '.*')
             
-            # Apply IGNORECASE flag only if filtering by Token or Lemma
-            flags = 0
-            if not case_sensitive:
+            # Determine case sensitivity based on the specific column being matched
+            if match_column == 'pos':
+                flags = 0 # POS tags are typically case-sensitive
+                match_column_data = df_corpus['pos']
+            elif match_column == 'token':
                 flags = re.IGNORECASE
+                match_column_data = df_corpus['_token_low']
+            else: # Lemma
+                flags = re.IGNORECASE
+                match_column_data = df_corpus['lemma'].str.lower() # Use lower case lemma for matching
             
-            compiled_filters[int(pos_str)] = re.compile(f"^{safe_pattern}$", flags)
+            # Store tuple: (compiled_regex, column_for_matching_data)
+            compiled_filters[int(pos_str)] = (re.compile(f"^{safe_pattern}$", flags), match_column_data.tolist())
 
     # 3. Generate and Count N-Grams
     n_gram_counts = Counter()
@@ -635,15 +657,20 @@ def generate_n_grams(df_corpus, n, filter_type, positional_filters, is_raw_mode,
     for i in range(total_tokens - n + 1):
         n_gram_raw = [df_corpus['token'].iloc[i+j] for j in range(n)]
         
-        # Determine the sequence to check against filters
-        n_gram_to_check = [df_corpus[target_column_name].iloc[i+j] for j in range(n)]
-
         # Positional Filtering check
         is_match = True
-        for pos_index, pattern in compiled_filters.items():
+        for pos_index, (pattern, match_data_list) in compiled_filters.items():
             # pos_index is 1-based, list index is 0-based
             if pos_index <= n and pos_index > 0:
-                item_to_check = n_gram_to_check[pos_index - 1]
+                list_index = i + pos_index - 1
+                
+                # Check bounds
+                if list_index >= len(match_data_list):
+                    is_match = False
+                    break
+                    
+                item_to_check = match_data_list[list_index]
+                
                 if not pattern.fullmatch(item_to_check):
                     is_match = False
                     break
@@ -668,7 +695,6 @@ def generate_n_grams(df_corpus, n, filter_type, positional_filters, is_raw_mode,
     df_n_gram.insert(0, 'Rank', range(1, len(df_n_gram) + 1))
     
     return df_n_gram
-
 # -----------------------------------------------------
 # Function to display KWIC examples for collocates
 # -----------------------------------------------------
@@ -1056,35 +1082,29 @@ with st.sidebar:
             st.markdown("---")
             st.subheader("Positional Filters")
 
-            # Filter Type Selector
-            filter_options = ['Token']
-            if not is_raw_mode_sidebar:
-                filter_options.append('Lemma')
-                filter_options.append('POS')
-
+            # Filter Type Selector (Primarily for guidance, structural syntax overrides this)
+            filter_options = ['Token', 'Lemma', 'POS']
+            if is_raw_mode_sidebar:
+                filter_options = ['Token']
+            
             n_gram_filter_type = st.selectbox(
-                "Filter By:", 
+                "Filter By (Default/Fallback):", 
                 options=filter_options, 
                 index=filter_options.index(st.session_state.get('n_gram_filter_type', 'Token')),
                 key="n_gram_filter_type_select",
                 on_change=trigger_n_gram_analysis_callback,
-                help="Choose which linguistic level (Token, Lemma, or POS Tag) to apply the filters to."
+                help="**Note:** Structural syntax ([lemma] or _POS) overrides this setting for specific positions."
             )
             st.session_state['n_gram_filter_type'] = n_gram_filter_type
             
             # Dynamic Positional Filter Boxes
             current_n_gram_filters = st.session_state.get('n_gram_filters', {})
             
-            # Create a dictionary for new filters to avoid modifying the list while iterating
+            # Ensure filter list is correctly sized (up to N)
             new_filters = {}
             for i in range(1, n_gram_size + 1):
                 default_val = current_n_gram_filters.get(str(i), '')
                 
-                # Check if filter type is relevant for the corpus mode
-                is_disabled = (n_gram_filter_type in ('Lemma', 'POS') and is_raw_mode_sidebar) or \
-                              (n_gram_filter_type == 'Lemma' and 'lemma' not in df_sidebar.columns) or \
-                              (n_gram_filter_type == 'POS' and 'pos' not in df_sidebar.columns)
-
                 input_key = f"n_gram_filter_{i}"
                 
                 filter_input = st.text_input(
@@ -1093,15 +1113,15 @@ with st.sidebar:
                     key=input_key,
                     on_change=trigger_n_gram_analysis_callback,
                     args=(),
-                    disabled=is_disabled
+                    help="Use structural syntax: [lemma] or _POS (e.g., [have] or _N*)."
                 )
                 new_filters[str(i)] = filter_input.strip()
 
-            # Update session state filters
-            st.session_state['n_gram_filters'] = new_filters
+            # Update session state filters, keeping only up to N-gram size
+            st.session_state['n_gram_filters'] = {k: v for k, v in new_filters.items() if int(k) <= n_gram_size}
             
-            if is_disabled:
-                st.warning(f"{n_gram_filter_type} filtering requires a tagged corpus.")
+            if is_raw_mode_sidebar:
+                st.warning("Lemma and POS structural filtering ([lemma] / _POS) requires a tagged corpus.")
             
         # --- COLLOCATION SETTINGS ---
         elif st.session_state['view'] == 'collocation':
@@ -1279,6 +1299,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
     analyze_btn_explicit = st.button("🔎 Analyze")
     
     analyze_btn = analyze_btn_explicit or st.session_state['trigger_analyze']
+    st.session_state['analyze_btn'] = analyze_btn # Store for downstream check
     st.session_state['trigger_analyze'] = False
     
     st.markdown("---")
