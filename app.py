@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.12 - Regex Forms Fix & Automatic Dictionary
+# CORTEX Corpus Explorer v17.13 - Conditional Sidebar Settings
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.12", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.13", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -53,6 +53,12 @@ if 'pattern_collocate_pos_input' not in st.session_state:
      st.session_state['pattern_collocate_pos_input'] = ''
 if 'typed_target_input' not in st.session_state:
      st.session_state['typed_target_input'] = ''
+if 'max_collocates' not in st.session_state:
+    st.session_state['max_collocates'] = 20
+if 'coll_window' not in st.session_state:
+    st.session_state['coll_window'] = 5
+if 'mi_min_freq' not in st.session_state:
+    st.session_state['mi_min_freq'] = 1
 
 
 # ---------------------------
@@ -118,15 +124,11 @@ def get_all_lemma_forms_details(df_corpus, target_word):
     return forms_list, all_forms_df['pos'].unique(), valid_lemmas
 
 # --- Regex Forms Helper (Caching Removed for Bug Fix) ---
-# Removed @st.cache_data to ensure this runs and updates every time the input word changes.
 def get_related_forms_by_regex(df_corpus, target_word):
     # Construct a broad regex for related forms: .*<target_word>.* (case insensitive)
-    # Escape the target_word in case it contains regex special characters
     pattern_str = f".*{re.escape(target_word)}.*"
-    # Use re.IGNORECASE for case-insensitive matching
     pattern = re.compile(pattern_str, re.IGNORECASE)
     
-    # Search all unique tokens
     all_unique_tokens = df_corpus['token'].unique()
     
     related_forms = []
@@ -134,18 +136,14 @@ def get_related_forms_by_regex(df_corpus, target_word):
         if pattern.fullmatch(token):
             related_forms.append(token)
             
-    # Remove the target word itself from the list (case insensitive comparison)
     target_lower = target_word.lower()
     final_forms = [w for w in related_forms if w.lower() != target_lower]
     
-    # Use set for uniqueness (in case of case variations)
     return sorted(list(set(final_forms)))
 
 # --- LLM PLACEHOLDER ---
 def interpret_results_llm(target_word, analysis_type, data_description, data):
-    """
-    Placeholder for LLM function. 
-    """
+    """Placeholder for LLM function."""
     mock_response = f"""
     ### 🧠 Feature Currently Unavailable
 
@@ -657,7 +655,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.12")
+st.title("CORTEX - Corpus Texts Explorer v17.13")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -701,14 +699,14 @@ with st.sidebar:
         corpus_name = selected_corpus_name
     
     
-    # 2. NAVIGATION (MOVED UP)
+    # 2. NAVIGATION
     st.markdown("---")
     st.subheader("2. Navigation (TOOLS)")
     
     is_active_o = st.session_state['view'] == 'overview'
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
     
-    is_active_d = st.session_state['view'] == 'dictionary' # NEW: Dictionary View
+    is_active_d = st.session_state['view'] == 'dictionary' 
     st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
     
     is_active_c = st.session_state['view'] == 'concordance'
@@ -717,11 +715,6 @@ with st.sidebar:
     is_active_l = st.session_state['view'] == 'collocation'
     st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
 
-    st.markdown("---")
-    
-    # 3. MODULE SETTINGS (MOVED UP)
-    st.subheader("3. Tool Settings")
-    
     # Load corpus inside sidebar to get df for filtering logic (safe execution)
     df_sidebar = load_corpus_file(corpus_source)
     
@@ -730,100 +723,111 @@ with st.sidebar:
     if df_sidebar is not None and 'pos' in df_sidebar.columns and len(df_sidebar) > 0:
         count_of_raw_tags = df_sidebar['pos'].str.contains('##', na=False).sum()
         is_raw_mode_sidebar = (count_of_raw_tags / len(df_sidebar)) > 0.99
-    
-    if st.session_state['view'] == 'concordance':
-        st.write("KWIC Context (Display)")
-        kwic_left = st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=7, step=1, help="Number of tokens shown to the left of the node word.")
-        kwic_right = st.number_input("Right Context (tokens)", min_value=1, max_value=20, value=7, step=1, help="Number of tokens shown to the right of the node word.")
-        st.session_state['kwic_left'] = kwic_left
-        st.session_state['kwic_right'] = kwic_right
-        
-        # --- Concordance Pattern Search Settings ---
+
+    # 3. TOOL SETTINGS (Conditional Block)
+    if st.session_state['view'] != 'overview':
         st.markdown("---")
-        st.subheader("Pattern Search Filter")
+        st.subheader("3. Tool Settings")
         
-        st.caption("The **Node Word** is set by the primary search input above.")
-        
-        pattern_search_window = st.number_input(
-            "Search Window (tokens, each side)", 
-            min_value=1, max_value=10, value=5, step=1, 
-            key="pattern_search_window_input", 
-            help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.",
-            on_change=trigger_analysis_callback 
-        )
-        
-        pattern_collocate = st.text_input(
-            "Collocate Word/Pattern (* for wildcard)", 
-            value=st.session_state.get('pattern_collocate_input', ''),
-            key="pattern_collocate_input", 
-            help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
-            on_change=trigger_analysis_callback 
-        )
-        
-        if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
-            pattern_collocate_pos_input = st.text_input(
-                "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
-                value=st.session_state.get('pattern_collocate_pos_input', ''),
-                key="pattern_collocate_pos_input",
-                help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
+        # --- CONCORDANCE SETTINGS ---
+        if st.session_state['view'] == 'concordance':
+            st.write("KWIC Context (Display)")
+            kwic_left = st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_left', 7), step=1, help="Number of tokens shown to the left of the node word.", key="concordance_kwic_left")
+            kwic_right = st.number_input("Right Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_right', 7), step=1, help="Number of tokens shown to the right of the node word.", key="concordance_kwic_right")
+            st.session_state['kwic_left'] = kwic_left
+            st.session_state['kwic_right'] = kwic_right
+            
+            st.markdown("---")
+            st.subheader("Pattern Search Filter")
+            
+            st.caption("The **Node Word** is set by the primary search input above.")
+            
+            pattern_search_window = st.number_input(
+                "Search Window (tokens, each side)", 
+                min_value=1, max_value=10, value=st.session_state.get('pattern_search_window', 5), step=1, 
+                key="pattern_search_window_input", 
+                help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.",
                 on_change=trigger_analysis_callback 
             )
-            st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
-        else:
-            st.info("POS filtering for collocates requires a tagged corpus.")
-            st.session_state['pattern_collocate_pos'] = ''
-
-        st.session_state['pattern_search_window'] = pattern_search_window
-        st.session_state['pattern_collocate'] = pattern_collocate
-        
-    elif st.session_state['view'] == 'collocation' or st.session_state['view'] == 'dictionary':
-        # Collocation Settings (Shared with Dictionary)
-        max_collocates = st.number_input("Max Collocates to Show (Network/Tables)", min_value=5, max_value=100, value=20, step=5, help="Maximum number of collocates displayed.")
-        coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=5, step=1, help="Window used for collocation counting (default ±5).")
-        mi_min_freq = st.number_input("MI minimum observed freq", min_value=1, max_value=100, value=1, step=1)
-        
-        st.session_state['max_collocates'] = max_collocates
-        st.session_state['coll_window'] = coll_window
-        st.session_state['mi_min_freq'] = mi_min_freq
-
-        st.markdown("---")
-        st.subheader("Collocate Filters")
-        
-        collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value=st.session_state.get('collocate_regex_input', ''), key="collocate_regex_input")
-        st.session_state['collocate_regex'] = collocate_regex
-        
-        if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
-            collocate_pos_regex_input = st.text_input(
-                "Filter by POS Tag Pattern (Wildcard/Concatenation)", 
-                value=st.session_state.get('collocate_pos_regex_input_coll', ''), 
-                key="collocate_pos_regex_input_coll",
-                help="E.g., V* (Verbs), NNS|NNP (Plural/Proper Nouns)."
-            )
-            st.session_state['collocate_pos_regex'] = collocate_pos_regex_input
             
-            all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###'])
-            if all_pos_tags:
-                selected_pos_tags = st.multiselect(
-                    "OR Filter by specific POS Tag(s)",
-                    options=all_pos_tags,
-                    default=st.session_state.get('selected_pos_tags_input', None),
-                    key="selected_pos_tags_input",
-                    help="Only shows collocates matching one of the selected POS tags. Ignored if Pattern is also set."
+            pattern_collocate = st.text_input(
+                "Collocate Word/Pattern (* for wildcard)", 
+                value=st.session_state.get('pattern_collocate_input', ''),
+                key="pattern_collocate_input", 
+                help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
+                on_change=trigger_analysis_callback 
+            )
+            
+            if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
+                pattern_collocate_pos_input = st.text_input(
+                    "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
+                    value=st.session_state.get('pattern_collocate_pos_input', ''),
+                    key="pattern_collocate_pos_input",
+                    help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
+                    on_change=trigger_analysis_callback 
                 )
-                st.session_state['selected_pos_tags'] = selected_pos_tags
+                st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
             else:
-                st.session_state['selected_pos_tags'] = None
-        else:
-            st.info("POS filtering requires a tagged corpus.")
-            st.session_state['collocate_pos_regex'] = ''
-            st.session_state['selected_pos_tags'] = None
+                st.info("POS filtering for collocates requires a tagged corpus.")
+                st.session_state['pattern_collocate_pos'] = ''
 
-        if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
-            collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value=st.session_state.get('collocate_lemma_input', ''), key="collocate_lemma_input")
-            st.session_state['collocate_lemma'] = collocate_lemma_input
-        else:
-            st.info("Lemma filtering requires a lemmatized corpus.")
-            st.session_state['collocate_lemma'] = ''
+            st.session_state['pattern_search_window'] = pattern_search_window
+            st.session_state['pattern_collocate'] = pattern_collocate
+            
+        # --- COLLOCATION SETTINGS ---
+        elif st.session_state['view'] == 'collocation':
+            st.subheader("Collocation Parameters")
+            
+            max_collocates = st.number_input("Max Collocates to Show (Network/Tables)", min_value=5, max_value=100, value=st.session_state.get('max_collocates', 20), step=5, help="Maximum number of collocates displayed.", key="coll_max_collocates")
+            coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=st.session_state.get('coll_window', 5), step=1, help="Window used for collocation counting (default ±5).", key="coll_window_input")
+            mi_min_freq = st.number_input("MI minimum observed freq", min_value=1, max_value=100, value=st.session_state.get('mi_min_freq', 1), step=1, key="coll_mi_min_freq")
+            
+            st.session_state['max_collocates'] = max_collocates
+            st.session_state['coll_window'] = coll_window
+            st.session_state['mi_min_freq'] = mi_min_freq
+
+            st.markdown("---")
+            st.subheader("Collocate Filters")
+            
+            collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value=st.session_state.get('collocate_regex_input', ''), key="collocate_regex_input_coll")
+            st.session_state['collocate_regex'] = collocate_regex
+            
+            if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
+                collocate_pos_regex_input = st.text_input(
+                    "Filter by POS Tag Pattern (Wildcard/Concatenation)", 
+                    value=st.session_state.get('collocate_pos_regex_input_coll', ''), 
+                    key="collocate_pos_regex_input_coll_tag",
+                    help="E.g., V* (Verbs), NNS|NNP (Plural/Proper Nouns)."
+                )
+                st.session_state['collocate_pos_regex'] = collocate_pos_regex_input
+                
+                all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###'])
+                if all_pos_tags:
+                    selected_pos_tags = st.multiselect(
+                        "OR Filter by specific POS Tag(s)",
+                        options=all_pos_tags,
+                        default=st.session_state.get('selected_pos_tags_input', None),
+                        key="selected_pos_tags_input",
+                        help="Only shows collocates matching one of the selected POS tags. Ignored if Pattern is also set."
+                    )
+                    st.session_state['selected_pos_tags'] = selected_pos_tags
+                else:
+                    st.session_state['selected_pos_tags'] = None
+            else:
+                st.info("POS filtering requires a tagged corpus.")
+                st.session_state['collocate_pos_regex'] = ''
+                st.session_state['selected_pos_tags'] = None
+
+            if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
+                collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value=st.session_state.get('collocate_lemma_input', ''), key="collocate_lemma_input_coll")
+                st.session_state['collocate_lemma'] = collocate_lemma_input
+            else:
+                st.info("Lemma filtering requires a lemmatized corpus.")
+                st.session_state['collocate_lemma'] = ''
+        
+        # --- DICTIONARY SETTINGS (Placeholder) ---
+        elif st.session_state['view'] == 'dictionary':
+            st.info("Dictionary module currently uses global Collocation Window/Filter settings for collocation analysis, accessible in the Collocation view.")
 
 
 # load corpus (cached) for main body access
@@ -1237,14 +1241,13 @@ if st.session_state['view'] == 'dictionary':
         
     st.markdown("---")
     
-    # --- 1. Consolidated Word Forms by Lemma (Replacing old Linguistic Summary) ---
+    # --- 1. Consolidated Word Forms by Lemma ---
     
     if is_raw_mode or 'lemma' not in df.columns:
         st.warning("Lemma and POS analysis requires a tagged and lemmatized corpus.")
         forms_list = pd.DataFrame()
         unique_lemma_list = []
     else:
-        # This function is cached, but its inputs change, so it reruns correctly.
         forms_list, unique_pos_list, unique_lemma_list = get_all_lemma_forms_details(df, current_dict_word)
 
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
@@ -1264,7 +1267,6 @@ if st.session_state['view'] == 'dictionary':
     st.markdown("---")
     st.subheader("Related Forms (by Regex)")
     
-    # No caching on this call, so it should run fresh every time.
     related_regex_forms = get_related_forms_by_regex(df, current_dict_word)
     
     if related_regex_forms:
@@ -1281,7 +1283,7 @@ if st.session_state['view'] == 'dictionary':
         
     st.markdown("---")
     
-    # --- 3. Random Concordance Examples (Was Section 2) ---
+    # --- 3. Random Concordance Examples ---
     st.subheader("Random Examples (Concordance)")
     
     kwic_left = st.session_state.get('kwic_left', 7)
@@ -1327,7 +1329,7 @@ if st.session_state['view'] == 'dictionary':
         
     st.markdown("---")
 
-    # --- 4. Collocates and Collocate Examples (Was Section 3) ---
+    # --- 4. Collocates and Collocate Examples ---
     st.subheader("Collocation Analysis")
     
     coll_window = st.session_state.get('coll_window', 5)
