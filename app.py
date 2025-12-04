@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.7 - KWIC Below Collocation
+# CORTEX Corpus Explorer v17.8 - Direct KWIC Collocation Examples
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,11 +18,12 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.7", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.8", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
+KWIC_COLLOC_DISPLAY_LIMIT = 10 # New limit for KWIC examples below collocation tables
 
 # ---------------------------
 # Initializing Session State
@@ -41,13 +42,6 @@ if 'collocate_lemma' not in st.session_state:
     st.session_state['collocate_lemma'] = ''
 if 'llm_interpretation_result' not in st.session_state:
     st.session_state['llm_interpretation_result'] = None
-# --- NEW/CLEANED: Cross-referencing State (Used for temporary KWIC display) ---
-if 'collocation_show_kwic' not in st.session_state:
-    st.session_state['collocation_show_kwic'] = False
-if 'coll_kwic_target' not in st.session_state:
-    st.session_state['coll_kwic_target'] = ''
-if 'coll_kwic_collocate' not in st.session_state:
-    st.session_state['coll_kwic_collocate'] = ''
 # --- Input State (must be initialized for keyed widgets) ---
 if 'dict_word_input_main' not in st.session_state: 
     st.session_state['dict_word_input_main'] = ''
@@ -82,10 +76,8 @@ POS_COLOR_MAP = {
 
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
-    # Clear LLM result and cross-reference state on navigation change
     st.session_state['view'] = view_name
     st.session_state['llm_interpretation_result'] = None
-    st.session_state['collocation_show_kwic'] = False # Clear cross-ref flag on view change
     
 def reset_analysis():
     st.cache_data.clear()
@@ -93,32 +85,15 @@ def reset_analysis():
     st.session_state['trigger_analyze'] = False
     st.session_state['initial_load_complete'] = False
     st.session_state['llm_interpretation_result'] = None
-    st.session_state['collocation_show_kwic'] = False
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
-    # This is used by the primary text input field in Concordance/Collocation
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
-    st.session_state['collocation_show_kwic'] = False # Clear KWIC display if user manually changes the target word
 
 # --- Dictionary Input Callback ---
 def trigger_dict_analysis_callback():
-    # This is used by the Dictionary text input field
     st.session_state['dict_word_triggered'] = True
-
-# --- Cross-Reference Handler (STAY IN COLLOCATION FLOW) ---
-def handle_collocate_click(target_word, collocate_word):
-    # 1. Set the values and the display flag
-    st.session_state['coll_kwic_target'] = target_word
-    st.session_state['coll_kwic_collocate'] = collocate_word
-    st.session_state['collocation_show_kwic'] = True
-    
-    # 2. Clear the general auto-analyze flag for the main module
-    st.session_state['trigger_analyze'] = False
-    
-    # 3. Force rerun to display the KWIC section below the tables
-    st.rerun()
 
 # --- LLM PLACEHOLDER ---
 def interpret_results_llm(target_word, analysis_type, data_description, data):
@@ -254,7 +229,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 
     total_matches = len(final_positions)
     if total_matches == 0:
-        return ([], 0, raw_target_input, 0)
+        return ([], 0, raw_target_input, literal_freq)
 
     # --- Sample Positions ---
     if random_sample:
@@ -553,12 +528,90 @@ def load_corpus_file(file_source, sep=r"\s+"):
         return df
         
     except Exception as raw_e: return None 
-# ---------------------------------------------------------------------
+
+# -----------------------------------------------------
+# NEW: Function to display KWIC examples for collocates
+# -----------------------------------------------------
+def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1):
+    """
+    Generates and displays KWIC examples for a list of top collocates.
+    Displays up to KWIC_COLLOC_DISPLAY_LIMIT total examples.
+    """
+    if top_collocates_df.empty:
+        st.info("No collocates to display examples for.")
+        return
+
+    colloc_list = top_collocates_df.head(KWIC_COLLOC_DISPLAY_LIMIT)
+    collex_rows_total = []
+    
+    # Custom KWIC table style for 4 columns (Collocate, Left, Node, Right)
+    collocate_example_table_style = f"""
+        <style>
+        .collex-table-container-fixed {{
+            max-height: 400px; /* Fixed height for scrollable view */
+            overflow-y: auto;
+            margin-bottom: 1rem;
+        }}
+        .collex-table-inner {{ font-family: monospace; color: white; width: 100%; }}
+        .collex-table-inner table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+        .collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; }}
+        /* Collocate Column */
+        .collex-table-inner td:nth-child(1) {{ text-align: left; font-weight: bold; width: 15%; border-right: 1px solid #444; }} 
+        /* Left Context Column */
+        .collex-table-inner td:nth-child(2) {{ text-align: right; color: white; width: 40%; }}
+        /* Node Column */
+        .collex-table-inner td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; width: 10%; }} 
+        /* Right Context Column */
+        .collex-table-inner td:nth-child(4) {{ text-align: left; color: white; width: 35%; }}
+        </style>
+    """
+    st.markdown(collocate_example_table_style, unsafe_allow_html=True)
+    
+    
+    with st.spinner(f"Generating concordance examples for top {len(colloc_list)} collocates..."):
+        for rank, (index, row) in enumerate(colloc_list.iterrows()):
+            collocate_word = row['Collocate']
+            
+            # Generate KWIC lines filtered by this specific collocate (show limit_per_collocate max)
+            kwic_rows, total_matches, _, _ = generate_kwic(
+                df_corpus, node_word, window, window, 
+                pattern_collocate_input=collocate_word, 
+                pattern_collocate_pos_input="", 
+                pattern_window=window, # Use collocation window for context
+                limit=limit_per_collocate # Show 1 example max
+            )
+            
+            if kwic_rows:
+                # Assuming limit=1, we only take the first row
+                kwic_row = kwic_rows[0]
+                collex_rows_total.append({
+                    "Collocate": f"{rank+1}. {collocate_word}",
+                    "Left Context": kwic_row['Left'],
+                    "Node": kwic_row['Node'],
+                    "Right Context": kwic_row['Right'],
+                })
+        
+    if collex_rows_total:
+        collex_df = pd.DataFrame(collex_rows_total)
+        # Manually create header for the collocate example table
+        header = "<tr><th>Collocate (Rank)</th><th>Left Context</th><th>Node</th><th>Right Context</th></tr>"
+        
+        html_table = collex_df.to_html(header=False, escape=False, classes=['collex-table-inner'], index=False)
+        # Insert the custom header before the table body
+        html_table = html_table.replace("<thead></thead>", f"<thead>{header}</thead>", 1)
+        
+        scrollable_html = f"<div class='collex-table-container-fixed'>{html_table}</div>"
+        st.markdown(scrollable_html, unsafe_allow_html=True)
+        st.caption(f"Context window is set to **±{window} tokens** (Collocation window). Matching collocate is **bolded and highlighted bright yellow**.")
+    else:
+        st.info(f"No specific KWIC examples found for the top {len(colloc_list)} collocates within the ±{window} window.")
+# -----------------------------------------------------
+
 
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.7")
+st.title("CORTEX - Corpus Texts Explorer v17.8")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -825,9 +878,6 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
     # --- SEARCH INPUT (SHARED) ---
     st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
     
-    # --- CROSS-REFERENCE LOGIC (OLD FLOW CLEANUP) ---
-    # The dedicated KWIC below tables flow will be handled at the end of the collocation module.
-    
     # The input field that controls analysis for Concordance/Collocation
     typed_target = st.text_input(
         "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
@@ -844,7 +894,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
         if primary_input and (st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('pattern_collocate_pos_input', '').strip()):
             use_pattern_search = True
 
-    if not target_input and not use_pattern_search:
+    if not target_input and not use_pattern_search and st.session_state['view'] != 'dictionary':
         st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis.")
     
     # The explicit button for manual initiation
@@ -1246,68 +1296,14 @@ if st.session_state['view'] == 'dictionary':
     st.subheader(f"Collocate Examples (Top {len(top_collocates)} LL Collocates)")
     
     
-    # Custom KWIC table style for 4 columns (Collocate, Left, Node, Right)
-    collocate_example_table_style = f"""
-        <style>
-        .collex-table-container {{
-            max-height: 400px; /* Fixed height for scrollable view */
-            overflow-y: auto;
-            margin-bottom: 1rem;
-        }}
-        .collex-table {{ font-family: monospace; color: white; width: 100%; }}
-        .collex-table table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
-        .collex-table th {{ font-weight: bold; text-align: center; }}
-        /* Collocate Column */
-        .collex-table td:nth-child(1) {{ text-align: left; font-weight: bold; width: 15%; }} 
-        /* Left Context Column */
-        .collex-table td:nth-child(2) {{ text-align: right; color: white; width: 40%; }}
-        /* Node Column */
-        .collex-table td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; width: 10%; }} 
-        /* Right Context Column */
-        .collex-table td:nth-child(4) {{ text-align: left; color: white; width: 35%; }}
-        </style>
-    """
-    st.markdown(collocate_example_table_style, unsafe_allow_html=True)
-    
-    # Loop through top 20 collocates
-    collex_rows_total = []
-    
-    with st.spinner(f"Generating concordance examples for top {len(top_collocates)} collocates..."):
-        for rank, (index, row) in enumerate(top_collocates.iterrows()):
-            collocate_word = row['Collocate']
-            
-            # Generate KWIC lines filtered by this specific collocate (show 1 example max for each)
-            collex_rows, _, _, _ = generate_kwic(
-                df, current_dict_word, kwic_left, kwic_right, 
-                pattern_collocate_input=collocate_word, 
-                pattern_collocate_pos_input="", 
-                pattern_window=coll_window, # Use collocation window for context
-                limit=1 # Show 1 example max
-            )
-            
-            if collex_rows:
-                kwic_row = collex_rows[0]
-                collex_rows_total.append({
-                    "Collocate": f"{rank+1}. {collocate_word}", # Collocate column shows the rank and word
-                    "Left Context": kwic_row['Left'],
-                    "Node": kwic_row['Node'],
-                    "Right Context": kwic_row['Right'],
-                })
-                
-    if collex_rows_total:
-        collex_df = pd.DataFrame(collex_rows_total)
-        # Manually create header for the collocate example table
-        header = "<tr><th>Collocate</th><th>Left Context</th><th>Node</th><th>Right Context</th></tr>"
-        
-        html_table = collex_df.to_html(header=False, escape=False, classes=['collex-table'], index=False)
-        # Insert the custom header before the table body
-        html_table = html_table.replace("<thead></thead>", f"<thead>{header}</thead>", 1)
-        
-        scrollable_html = f"<div class='collex-table-container'>{html_table}</div>"
-        st.markdown(scrollable_html, unsafe_allow_html=True)
-        
-    else:
-        st.info("No specific examples found for the top collocates within the set window.")
+    # Use the dedicated KWIC display function
+    display_collocation_kwic_examples(
+        df_corpus=df, 
+        node_word=current_dict_word, 
+        top_collocates_df=top_collocates, 
+        window=coll_window,
+        limit_per_collocate=1
+    )
 
 
 # -----------------------------------------------------
@@ -1362,8 +1358,9 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         st.markdown("---")
     
     # --- Graph Data ---
-    left_directional_df = stats_df_sorted[stats_df_sorted['Direction'].isin(['L', 'B'])].head(max_collocates).copy()
-    right_directional_df = stats_df_sorted[stats_df_sorted['Direction'].isin(['R', 'B'])].head(max_collocates).copy()
+    top_collocates_for_graphs = stats_df_sorted.head(max_collocates)
+    left_directional_df = top_collocates_for_graphs[top_collocates_for_graphs['Direction'].isin(['L', 'B'])].copy()
+    right_directional_df = top_collocates_for_graphs[top_collocates_for_graphs['Direction'].isin(['R', 'B'])].copy()
 
     # --- DISPLAY GRAPHS SIDE BY SIDE ---
     st.markdown("---")
@@ -1429,16 +1426,6 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         html_table = ll_display_df.to_html(index=False, classes=['collocate-table'])
         st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
         
-        # Add buttons below the table for cross-referencing
-        st.markdown("**Show Concordance for Top 5 (Click to view below):**")
-        cols = st.columns(5)
-        for i, row in full_ll.head(5).iterrows():
-             # Set key to reflect the row/collocate
-             if cols[i].button(f"🔍 {row['Collocate']}", key=f"ll_btn_{i}"):
-                 # NEW BEHAVIOR: Stay in Collocation, trigger KWIC display below
-                 handle_collocate_click(primary_target_mwu, row['Collocate'])
-
-
     with col_mi_table:
         st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq}, Top {len(full_mi)})**")
         
@@ -1448,15 +1435,6 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         # Use a scrollable container for the main table
         html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
         st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
-
-
-        # Add buttons below the table for cross-referencing
-        st.markdown("**Show Concordance for Top 5 (Click to view below):**")
-        cols = st.columns(5)
-        for i, row in full_mi.head(5).iterrows():
-             if cols[i].button(f"🔍 {row['Collocate']}", key=f"mi_btn_{i}"):
-                 # NEW BEHAVIOR: Stay in Collocation, trigger KWIC display below
-                 handle_collocate_click(primary_target_mwu, row['Collocate'])
 
     # ---------- Download Buttons ----------
     st.markdown("---")
@@ -1476,63 +1454,31 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     )
     
     # -----------------------------------------------------
-    # NEW SECTION: DEDICATED KWIC DISPLAY FOR COLLOCATE
+    # DEDICATED KWIC DISPLAY FOR TOP LL AND MI COLLOCATES
     # -----------------------------------------------------
-    if st.session_state.get('collocation_show_kwic', False):
-        
-        node_word = st.session_state['coll_kwic_target']
-        collocate_filter = st.session_state['coll_kwic_collocate']
-        window = st.session_state.get('coll_window', 5) # Use the collocation window size
-
-        st.markdown("---")
-        st.subheader(f"📚 Collocate Concordance (KWIC) — Node: '{node_word}', Collocate Filter: '{collocate_filter}'")
-
-        # Use the collocation window size as the KWIC context for this display
-        kwic_rows, total_matches, _, _ = generate_kwic(
-            df, node_word, window, window, 
-            pattern_collocate_input=collocate_filter, 
-            pattern_collocate_pos_input="", 
-            pattern_window=window,
-            limit=KWIC_MAX_DISPLAY_LINES
-        )
-        
-        if total_matches > 0:
-            st.success(f"Found **{total_matches}** occurrences of '{node_word}' matching collocate '{collocate_filter}'. Showing top {len(kwic_rows)}.")
-
-            kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
-            kwic_preview = kwic_df.copy().reset_index(drop=True)
-            kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
-            
-            # --- KWIC Table Style (reused from Concordance module) ---
-            kwic_table_style = f"""
-                 <style>
-                 .colloc-kwic-container-scroll {{
-                     max-height: 400px; /* Fixed height for scrollable view */
-                     overflow-y: auto;
-                     margin-bottom: 1rem;
-                 }}
-                 .colloc-kwic-table {{ font-family: monospace; color: white; width: 100%; }}
-                 .colloc-kwic-table table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
-                 .colloc-kwic-table th {{ font-weight: bold; text-align: center; }}
-                 .colloc-kwic-table td:nth-child(2) {{ text-align: right; color: white; }}
-                 .colloc-kwic-table td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
-                 .colloc-kwic-table td:nth-child(4) {{ text-align: left; color: white; }}
-                 .colloc-kwic-table thead th:first-child {{ width: 30px; }}
-                 </style>
-            """
-            st.markdown(kwic_table_style, unsafe_allow_html=True)
-            
-            html_table = kwic_preview.to_html(escape=False, classes=['colloc-kwic-table'], index=False)
-            scrollable_html = f"<div class='colloc-kwic-container-scroll'>{html_table}</div>"
-
-            st.markdown(scrollable_html, unsafe_allow_html=True)
-            st.caption(f"Context window is set to **±{window} tokens** (Collocation window). Matching collocate is **bolded and highlighted bright yellow**.")
-
-        else:
-            st.warning("No concordance lines found for this specific Node/Collocate pair.")
-        
-        # Clear the flag after display, so the section only shows up right after the button click.
-        st.session_state['collocation_show_kwic'] = False
+    st.markdown("---")
+    
+    # LL-Ranked KWIC Examples
+    st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} LL Collocates (1 example per collocate)")
+    display_collocation_kwic_examples(
+        df_corpus=df, 
+        node_word=primary_target_mwu, 
+        top_collocates_df=full_ll, 
+        window=coll_window,
+        limit_per_collocate=1 # Exactly 1 example per collocate
+    )
+    
+    st.markdown("---")
+    
+    # MI-Ranked KWIC Examples
+    st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} MI Collocates (1 example per collocate)")
+    display_collocation_kwic_examples(
+        df_corpus=df, 
+        node_word=primary_target_mwu, 
+        top_collocates_df=full_mi, 
+        window=coll_window,
+        limit_per_collocate=1 # Exactly 1 example per collocate
+    )
 
 
 st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text.")
