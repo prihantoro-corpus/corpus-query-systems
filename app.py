@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.15 - N-Gram Structural Filters Unlocked
+# CORTEX Corpus Explorer v17.15 - N-Gram Structural Filters Unlocked & Syntax Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -619,19 +619,15 @@ def generate_n_grams(df_corpus, n, positional_filters, is_raw_mode, max_display_
         match_column_key = '_token_low' # Default is case-insensitive token match (regex)
         cleaned_pattern = pattern_str
         
-        is_structural = False
-        
         # Check for Lemma Pattern: [pattern]
         lemma_match = re.fullmatch(r"\[(.*)\]", pattern_str)
         if lemma_match and not is_raw_mode and 'lemma' in df_corpus.columns:
             match_column_key = 'lemma'
             cleaned_pattern = lemma_match.group(1).strip().lower()
-            is_structural = True
         # Check for POS Pattern: _pattern
         elif pattern_str.startswith('_') and not is_raw_mode and 'pos' in df_corpus.columns:
             match_column_key = 'pos'
             cleaned_pattern = pattern_str[1:].strip()
-            is_structural = True
         
         # --- Final Pattern compilation ---
         if cleaned_pattern:
@@ -1080,7 +1076,7 @@ with st.sidebar:
                 help_text += "2. **POS Tag:** `_N*` (matches all tags starting with N).\n"
                 help_text += "3. **Lemma:** `[have]` (matches 'have', 'has', 'having', etc.)."
             else:
-                help_text += "⚠️ Lemma/POS filtering requires a tagged corpus."
+                help_text += "⚠️ Tagged corpus required for Lemma/POS filtering."
             
             # Dynamic Positional Filter Boxes
             current_n_gram_filters = st.session_state.get('n_gram_filters', {})
@@ -1347,5 +1343,446 @@ if st.session_state['view'] == 'n_gram':
     st.subheader("Download Full Results")
     
     # Download button tied to the latest analysis result
+    
+    # FIX: Concatenate the f-string parts to avoid termination error
+    download_label = (
+        f"⬇ Download Full {st.session_state['n_gram_size']}-Gram List "
+        f"({len(n_gram_df):,} entries) (xlsx)"
+    )
+    
     st.download_button(
-        f"⬇ Download Full {st.session_state['n_gram_size']}-Gram
+        download_label,
+        data=df_to_excel_bytes(n_gram_df), 
+        file_name=f"{st.session_state['n_gram_size']}-gram_full_list.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+# -----------------------------------------------------
+# MODULE: CONCORDANCE LOGIC
+# -----------------------------------------------------
+if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_btn', False) and st.session_state.get('typed_target_input'):
+    
+    # Get current parameters
+    kwic_left = st.session_state.get('kwic_left', 7)
+    kwic_right = st.session_state.get('kwic_right', 7)
+    # Use the session_state from the input keys
+    pattern_collocate = st.session_state.get('pattern_collocate_input', '').lower().strip()
+    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos_input', '').strip() 
+    pattern_window = st.session_state.get('pattern_search_window', 0)
+    
+    is_pattern_search_active = pattern_collocate or pattern_collocate_pos
+    
+    # Generate KWIC lines using the reusable function
+    with st.spinner("Searching corpus and generating concordance..."):
+        kwic_rows, total_matches, raw_target_input, literal_freq = generate_kwic(
+            df, st.session_state['typed_target_input'], kwic_left, kwic_right, 
+            pattern_collocate if is_pattern_search_active else "", 
+            pattern_collocate_pos if is_pattern_search_active else "", 
+            pattern_window if is_pattern_search_active else 0,
+            limit=KWIC_MAX_DISPLAY_LINES
+        )
+    
+    if total_matches == 0:
+        st.warning(f"Target '{raw_target_input}' not found or matched 0 instances after filtering.")
+        st.stop()
+        
+    # Prepare metadata for display
+    rel_freq = (literal_freq / total_tokens) * 1_000_000
+    wildcard_freq_df = pd.DataFrame([{"Query Result": raw_target_input, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
+    results_df = wildcard_freq_df.rename(columns={"Relative Frequency": "Expected Frequency"})
+
+    # --- KWIC Display ---
+    st.subheader("📚 Concordance Results")
+    
+    if is_pattern_search_active:
+        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{raw_target_input}' co-occurring with the specified criteria.")
+    else:
+        st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
+    
+    # --- LLM INTERPRETATION BUTTON/EXPANDER ---
+    if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
+        kwic_df_for_llm = pd.DataFrame(kwic_rows).head(10).copy().drop(columns=['Collocate'])
+        interpret_results_llm(raw_target_input, "Concordance", "KWIC Context Sample (Max 10 lines)", kwic_df_for_llm)
+
+    if st.session_state['llm_interpretation_result']:
+        with st.expander("LLM Interpretation (Feature Disabled)", expanded=True):
+            st.markdown(st.session_state['llm_interpretation_result'])
+        st.markdown("---")
+    # ----------------------------------------
+    
+    col_kwic, col_freq = st.columns([3, 2], gap="large")
+
+    with col_kwic:
+        st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
+        
+        kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
+        kwic_preview = kwic_df.copy().reset_index(drop=True)
+        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        
+        # --- KWIC Table Style (Extracted for cleaner re-use) ---
+        kwic_table_style = f"""
+             <style>
+             .dataframe-container-scroll {{
+                 max-height: 400px; /* Fixed height for scrollable view */
+                 overflow-y: auto;
+                 margin-bottom: 1rem;
+             }}
+             .dataframe {{ font-family: monospace; color: white; width: 100%; }}
+             .dataframe table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+             .dataframe th {{ font-weight: bold; text-align: center; }}
+             .dataframe td:nth-child(2) {{ text-align: right; color: white; }}
+             .dataframe td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
+             .dataframe td:nth-child(4) {{ text-align: left; color: white; }}
+             .dataframe thead th:first-child {{ width: 30px; }}
+             </style>
+        """
+        st.markdown(kwic_table_style, unsafe_allow_html=True)
+        
+        html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
+        scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
+
+        st.markdown(scrollable_html, unsafe_allow_html=True)
+
+        st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
+        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    with col_freq:
+        st.subheader(f"Target Frequency")
+        st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+
+# -----------------------------------------------------
+# MODULE: DICTIONARY
+# -----------------------------------------------------
+if st.session_state['view'] == 'dictionary':
+    
+    st.subheader("📘 Dictionary Lookup")
+    
+    # --- Input and Analysis Trigger (Automatic on Change) ---
+    current_dict_word = st.text_input(
+        "Enter a Token/Word to lookup (e.g., 'sessions'):", 
+        value=st.session_state.get('dict_word_input_main', ''),
+        key="dict_word_input_main",
+        # Reruns automatically on change, triggering analysis below.
+    ).strip()
+    
+    if not current_dict_word:
+        st.info("Enter a word to view its linguistic summary, examples, and collocates. Analysis runs automatically.")
+        # Keep a manual button as a fallback/re-analyze option
+        st.button("🔎 Manual Re-Analyze", key="manual_dict_analyze_disabled", disabled=True)
+        st.stop()
+    
+    # Manual button for re-analysis
+    st.button("🔎 Manual Re-Analyze", key="manual_dict_analyze")
+        
+    st.markdown("---")
+    
+    # --- 1. Consolidated Word Forms by Lemma ---
+    
+    if is_raw_mode or 'lemma' not in df.columns:
+        st.warning("Lemma and POS analysis is disabled because the corpus is not tagged/lemmatized.")
+        forms_list = pd.DataFrame()
+        unique_lemma_list = []
+    else:
+        forms_list, unique_pos_list, unique_lemma_list = get_all_lemma_forms_details(df, current_dict_word)
+
+    st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
+
+    if forms_list.empty and not is_raw_mode: # If not raw mode, failure to find forms is a significant issue
+        st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
+        st.stop()
+    elif not forms_list.empty:
+        # Display the consolidated forms table
+        st.dataframe(
+            forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}),
+            hide_index=True,
+            use_container_width=True
+        )
+    
+    # --- 2. Related Forms (by Regex) ---
+    st.markdown("---")
+    st.subheader("Related Forms (by Regex)")
+    
+    related_regex_forms = get_related_forms_by_regex(df, current_dict_word)
+    
+    if related_regex_forms:
+        st.markdown(f"**Tokens matching the pattern `*.{current_dict_word}.*` (case insensitive):**")
+        # Use a dynamic key based on the word to ensure the widget itself is updated.
+        st.text_area(
+            "Related Forms (by regex)", 
+            ", ".join(related_regex_forms), 
+            height=100, 
+            key=f"regex_forms_output_{current_dict_word}" 
+        )
+    else:
+        st.info(f"No related tokens found matching the regex pattern.")
+        
+    st.markdown("---")
+    
+    # --- 3. Random Concordance Examples ---
+    st.subheader("Random Examples (Concordance)")
+    
+    kwic_left = st.session_state.get('kwic_left', 7)
+    kwic_right = st.session_state.get('kwic_right', 7)
+    
+    with st.spinner(f"Fetching random concordance examples for '{current_dict_word}'..."):
+        kwic_rows, total_matches, _, _ = generate_kwic(
+            df, current_dict_word, kwic_left, kwic_right, 
+            random_sample=True, limit=KWIC_MAX_DISPLAY_LINES
+        )
+    
+    if kwic_rows:
+        display_limit = min(5, len(kwic_rows))
+        st.success(f"Showing {display_limit} random examples from {total_matches:,} total matches.")
+        
+        kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
+        kwic_preview = kwic_df.copy().reset_index(drop=True)
+        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        
+        kwic_table_style = f"""
+            <style>
+            .dictionary-kwic-container {{
+                max-height: 250px; /* Fixed height for scrollable view */
+                overflow-y: auto;
+                margin-bottom: 1rem;
+            }}
+            .dict-kwic-table {{ font-family: monospace; color: white; width: 100%; }}
+            .dict-kwic-table table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+            .dict-kwic-table th {{ font-weight: bold; text-align: center; }}
+            .dict-kwic-table td:nth-child(2) {{ text-align: right; color: white; }}
+            .dict-kwic-table td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
+            .dict-kwic-table td:nth-child(4) {{ text-align: left; color: white; }}
+            .dict-kwic-table thead th:first-child {{ width: 30px; }}
+            </style>
+        """
+        st.markdown(kwic_table_style, unsafe_allow_html=True)
+        
+        html_table = kwic_preview.to_html(escape=False, classes=['dict-kwic-table'], index=False)
+        scrollable_html = f"<div class='dictionary-kwic-container'>{html_table}</div>"
+        st.markdown(scrollable_html, unsafe_allow_html=True)
+    else:
+        st.info("No examples found.")
+        
+    st.markdown("---")
+
+    # --- 4. Collocates and Collocate Examples ---
+    st.subheader("Collocation Analysis")
+    
+    coll_window = st.session_state.get('coll_window', 5)
+    mi_min_freq = st.session_state.get('mi_min_freq', 1)
+    max_collocates = st.session_state.get('max_collocates', 20)
+    
+    # Collocation filter settings must be read from session state keys (even if empty in raw mode)
+    collocate_regex = st.session_state.get('collocate_regex_input', '').lower().strip()
+    collocate_pos_regex_input = st.session_state.get('collocate_pos_regex_input_coll', '').strip()
+    selected_pos_tags = st.session_state.get('selected_pos_tags_input', [])
+    collocate_lemma = st.session_state.get('collocate_lemma_input', '').lower().strip()
+    
+    with st.spinner(f"Running collocation analysis (window ±{coll_window})..."):
+        stats_df_sorted, freq, primary_target_mwu = generate_collocation_results(
+            df, current_dict_word, coll_window, mi_min_freq, max_collocates, is_raw_mode,
+            collocate_regex, collocate_pos_regex_input, selected_pos_tags, collocate_lemma
+        )
+    
+    if stats_df_sorted.empty:
+        st.warning("No collocates found matching the criteria.")
+        st.stop()
+        
+    # Get top 20 collocates for display/examples
+    top_collocates = stats_df_sorted.head(20)
+    
+    # 3a. Top Collocates List
+    collocate_list = ", ".join(top_collocates['Collocate'].tolist())
+    st.markdown(f"**Top {len(top_collocates)} Collocates (LL-ranked):**")
+    st.text_area("Collocate List", collocate_list, height=100)
+    
+    st.markdown("---")
+    st.subheader(f"Collocate Examples (Top {len(top_collocates)} LL Collocates)")
+    
+    
+    # Use the dedicated KWIC display function
+    display_collocation_kwic_examples(
+        df_corpus=df, 
+        node_word=current_dict_word, 
+        top_collocates_df=top_collocates, 
+        window=coll_window,
+        limit_per_collocate=1
+    )
+
+
+# -----------------------------------------------------
+# MODULE: COLLOCATION LOGIC
+# -----------------------------------------------------
+if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_btn', False) and st.session_state.get('typed_target_input'):
+    
+    # Get Collocation Settings
+    coll_window = st.session_state.get('coll_window', 5)
+    mi_min_freq = st.session_state.get('mi_min_freq', 1)
+    max_collocates = st.session_state.get('max_collocates', 20) 
+    
+    # Get Filter Settings
+    collocate_regex = st.session_state.get('collocate_regex_input', '').lower().strip()
+    collocate_pos_regex_input = st.session_state.get('collocate_pos_regex_input_coll', '').strip()
+    selected_pos_tags = st.session_state.get('selected_pos_tags_input', [])
+    collocate_lemma = st.session_state.get('collocate_lemma_input', '').lower().strip()
+    
+    raw_target_input = st.session_state.get('typed_target_input')
+    
+    with st.spinner("Running collocation analysis..."):
+        stats_df_sorted, freq, primary_target_mwu = generate_collocation_results(
+            df, raw_target_input, coll_window, mi_min_freq, max_collocates, is_raw_mode,
+            collocate_regex, collocate_pos_regex_input, selected_pos_tags, collocate_lemma
+        )
+
+    if freq == 0:
+        st.warning(f"Target '{raw_target_input}' not found in corpus.")
+        st.stop()
+        
+    primary_rel_freq = (freq / total_tokens) * 1_000_000
+    
+    st.subheader("🔗 Collocation Analysis Results")
+    st.success(f"Analyzing target '{primary_target_mwu}'. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
+
+    if stats_df_sorted.empty:
+        st.warning("No collocates found after applying filters.")
+        st.stop()
+        
+    # --- LLM INTERPRETATION BUTTON/EXPANDER ---
+    if st.button("🧠 Interpret Collocation Results (LLM)", key="llm_collocation_btn"):
+        interpret_results_llm(
+            target_word=raw_target_input,
+            analysis_type="Collocation",
+            data_description="Top Log-Likelihood Collocates",
+            data=stats_df_sorted[['Collocate', 'POS', 'Observed', 'LL', 'Direction']].head(10)
+        )
+            
+    if st.session_state['llm_interpretation_result']:
+        with st.expander("LLM Interpretation (Feature Disabled)", expanded=True):
+            st.markdown(st.session_state['llm_interpretation_result'])
+        st.markdown("---")
+    
+    # --- Graph Data ---
+    top_collocates_for_graphs = stats_df_sorted.head(max_collocates)
+    left_directional_df = top_collocates_for_graphs[top_collocates_for_graphs['Direction'].isin(['L', 'B'])].copy()
+    right_directional_df = top_collocates_for_graphs[top_collocates_for_graphs['Direction'].isin(['R', 'B'])].copy()
+
+    # --- DISPLAY GRAPHS SIDE BY SIDE ---
+    st.markdown("---")
+    st.subheader("Interactive Collocation Networks (Directional)")
+    
+    col_left_graph, col_right_graph = st.columns(2)
+
+    with col_left_graph:
+        st.subheader(f"Left Collocates Only (Top {len(left_directional_df)} LL)")
+        if not left_directional_df.empty:
+            network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
+            components.html(network_html_left, height=450)
+        else:
+            st.info("No Left-dominant collocates found.")
+
+    with col_right_graph:
+        st.subheader(f"Right Collocates Only (Top {len(right_directional_df)} LL)")
+        if not right_directional_df.empty:
+            network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
+            components.html(network_html_right, height=450)
+        else:
+            st.info("No Right-dominant collocates found.")
+    
+    st.markdown("---")
+    st.markdown(
+        """
+        **General Graph Key:** | Central Node (Target): **Yellow** | Collocate Node Color: Noun (N) **Green**, Verb (V) **Blue**, Adjective (J) **Pink**, Adverb (R) **Yellow**. | Bubble Size: Scales with Log-Likelihood (LL).
+        """
+    )
+    st.markdown("---")
+    
+    # --- Full Tables (Max 100 entries, scrollable) ---
+    st.subheader(f"Collocation Tables — Top {min(100, len(stats_df_sorted))} LL/MI")
+    
+    # Filter to max 100 entries for display
+    full_ll = stats_df_sorted.head(100).copy().reset_index(drop=True)
+    full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
+    
+    full_mi_all = stats_df_sorted[stats_df_sorted["Observed"] >= mi_min_freq].sort_values("MI", ascending=False).reset_index(drop=True)
+    full_mi = full_mi_all.head(100).copy()
+    full_mi.insert(0, "Rank", range(1, len(full_mi)+1))
+    
+    col_ll_table, col_mi_table = st.columns(2, gap="large")
+    
+    # --- Custom CSS for scrollable tables (Max 100 entries) ---
+    scroll_style = f"""
+    <style>
+    .scrollable-table {{
+        max-height: 400px; /* Fixed height for 100 entries max */
+        overflow-y: auto;
+    }}
+    </style>
+    """
+    st.markdown(scroll_style, unsafe_allow_html=True)
+    
+    with col_ll_table:
+        st.markdown(f"**Log-Likelihood (LL) (Top {len(full_ll)})**")
+        
+        # Display table with relevant columns
+        ll_display_df = full_ll[['Rank', 'Collocate', 'LL', 'Direction', 'Significance']].copy()
+        
+        # Use a scrollable container for the main table
+        html_table = ll_display_df.to_html(index=False, classes=['collocate-table'])
+        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+        
+    with col_mi_table:
+        st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq}, Top {len(full_mi)})**")
+        
+        # Display table with relevant columns
+        mi_display_df = full_mi[['Rank', 'Collocate', 'MI', 'Direction', 'Significance']].copy()
+        
+        # Use a scrollable container for the main table
+        html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
+        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+
+    # ---------- Download Buttons ----------
+    st.markdown("---")
+    st.subheader("Download Full Results")
+    
+    st.download_button(
+        f"⬇ Download full LL results (xlsx)", 
+        data=df_to_excel_bytes(stats_df_sorted), 
+        file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full_filtered.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    st.download_button(
+        f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
+        data=df_to_excel_bytes(full_mi_all), 
+        file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}_filtered.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    
+    # -----------------------------------------------------
+    # DEDICATED KWIC DISPLAY FOR TOP LL AND MI COLLOCATES
+    # -----------------------------------------------------
+    st.markdown("---")
+    
+    # LL-Ranked KWIC Examples
+    st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} LL Collocates (1 example per collocate)")
+    display_collocation_kwic_examples(
+        df_corpus=df, 
+        node_word=primary_target_mwu, 
+        top_collocates_df=full_ll, 
+        window=coll_window,
+        limit_per_collocate=1 # Exactly 1 example per collocate
+    )
+    
+    st.markdown("---")
+    
+    # MI-Ranked KWIC Examples
+    st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} MI Collocates (1 example per collocate)")
+    display_collocation_kwic_examples(
+        df_corpus=df, 
+        node_word=primary_target_mwu, 
+        top_collocates_df=full_mi, 
+        window=coll_window,
+        limit_per_collocate=1 # Exactly 1 example per collocate
+    )
+
+
+st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text.")
