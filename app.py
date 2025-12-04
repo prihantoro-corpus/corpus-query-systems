@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.6 - Guaranteed Manual Cross-Reference
+# CORTEX Corpus Explorer v17.7 - KWIC Below Collocation
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.6", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.7", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -29,16 +29,10 @@ KWIC_INITIAL_DISPLAY_HEIGHT = 10
 # ---------------------------
 if 'view' not in st.session_state:
     st.session_state['view'] = 'overview'
-if 'last_target_input' not in st.session_state:
-    st.session_state['last_target_input'] = ''
-if 'last_pattern_collocate' not in st.session_state:
-    st.session_state['last_pattern_collocate'] = ''
 if 'trigger_analyze' not in st.session_state:
     st.session_state['trigger_analyze'] = False
 if 'initial_load_complete' not in st.session_state:
     st.session_state['initial_load_complete'] = False
-if 'last_pattern_search_window' not in st.session_state:
-    st.session_state['last_pattern_search_window'] = 0
 if 'collocate_pos_regex' not in st.session_state: 
     st.session_state['collocate_pos_regex'] = ''
 if 'pattern_collocate_pos' not in st.session_state: 
@@ -47,9 +41,14 @@ if 'collocate_lemma' not in st.session_state:
     st.session_state['collocate_lemma'] = ''
 if 'llm_interpretation_result' not in st.session_state:
     st.session_state['llm_interpretation_result'] = None
-# --- NEW: Cross-referencing State (Used for message flag only) ---
-if 'show_cross_ref_message' not in st.session_state:
-    st.session_state['show_cross_ref_message'] = False
+# --- NEW/CLEANED: Cross-referencing State (Used for temporary KWIC display) ---
+if 'collocation_show_kwic' not in st.session_state:
+    st.session_state['collocation_show_kwic'] = False
+if 'coll_kwic_target' not in st.session_state:
+    st.session_state['coll_kwic_target'] = ''
+if 'coll_kwic_collocate' not in st.session_state:
+    st.session_state['coll_kwic_collocate'] = ''
+# --- Input State (must be initialized for keyed widgets) ---
 if 'dict_word_input_main' not in st.session_state: 
     st.session_state['dict_word_input_main'] = ''
 if 'collocate_regex_input' not in st.session_state: 
@@ -86,45 +85,39 @@ def set_view(view_name):
     # Clear LLM result and cross-reference state on navigation change
     st.session_state['view'] = view_name
     st.session_state['llm_interpretation_result'] = None
-    st.session_state['show_cross_ref_message'] = False # Clear cross-ref flag
+    st.session_state['collocation_show_kwic'] = False # Clear cross-ref flag on view change
     
 def reset_analysis():
     st.cache_data.clear()
     st.session_state['view'] = 'overview'
-    st.session_state['last_target_input'] = ''
-    st.session_state['last_pattern_collocate'] = ''
     st.session_state['trigger_analyze'] = False
     st.session_state['initial_load_complete'] = False
     st.session_state['llm_interpretation_result'] = None
-    st.session_state['show_cross_ref_message'] = False
+    st.session_state['collocation_show_kwic'] = False
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
     # This is used by the primary text input field in Concordance/Collocation
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
+    st.session_state['collocation_show_kwic'] = False # Clear KWIC display if user manually changes the target word
 
 # --- Dictionary Input Callback ---
 def trigger_dict_analysis_callback():
     # This is used by the Dictionary text input field
     st.session_state['dict_word_triggered'] = True
 
-# --- Cross-Reference Handler (MANUAL FLOW) ---
+# --- Cross-Reference Handler (STAY IN COLLOCATION FLOW) ---
 def handle_collocate_click(target_word, collocate_word):
-    # 1. Set the explicit input widget values. These are sticky.
-    st.session_state['typed_target_input'] = target_word
-    st.session_state['pattern_collocate_input'] = collocate_word
+    # 1. Set the values and the display flag
+    st.session_state['coll_kwic_target'] = target_word
+    st.session_state['coll_kwic_collocate'] = collocate_word
+    st.session_state['collocation_show_kwic'] = True
     
-    # 2. Set the temporary flag to show the pre-population message.
-    st.session_state['show_cross_ref_message'] = True
-    
-    # 3. Clear the general auto-analyze flag.
+    # 2. Clear the general auto-analyze flag for the main module
     st.session_state['trigger_analyze'] = False
     
-    # 4. Switch the view
-    st.session_state['view'] = 'concordance'
-    
-    # 5. Force rerun to switch views
+    # 3. Force rerun to display the KWIC section below the tables
     st.rerun()
 
 # --- LLM PLACEHOLDER ---
@@ -344,19 +337,53 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         
     return (kwic_rows, total_matches, raw_target_input, literal_freq)
 
+# --- Word Cloud Function ---
+@st.cache_data
+def create_word_cloud(freq_data, is_tagged_mode):
+    """Generates a word cloud from frequency data with conditional POS coloring."""
+    
+    # Filter out multi-word units for visualization stability
+    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
+    if single_word_freq_data.empty:
+        return None
 
-# ---------------------------
-# Helpers: stats, IO utilities, Pyvis, Corpus Loading (omitted for brevity)
-# ---------------------------
+    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
+    word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
+    
+    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
+    
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color='black',
+        colormap='viridis', 
+        stopwords=stopwords,
+        min_font_size=10
+    )
+    
+    wordcloud = wc.generate_from_frequencies(word_freq_dict)
 
-# Helper functions (safe_log, compute_ll, compute_mi, significance_from_ll, df_to_excel_bytes, create_pyvis_graph, download_file_to_bytesio, load_corpus_file)
-# These are kept unchanged from v17.0 for the sake of functionality but omitted here for conciseness. 
+    if is_tagged_mode:
+        def final_color_func(word, *args, **kwargs):
+            pos_tag = word_to_pos.get(word, 'O')
+            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
+            if pos_code not in POS_COLOR_MAP:
+                pos_code = 'O'
+            return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
 
+        wordcloud = wordcloud.recolor(color_func=final_color_func)
+        
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    
+    return fig
+
+# --- Statistical Helpers ---
 EPS = 1e-12
-
 def safe_log(x):
     return math.log(max(x, EPS))
-
 def compute_ll(k11, k12, k21, k22):
     """Computes the Log-Likelihood (LL) statistic."""
     total = k11 + k12 + k21 + k22
@@ -369,13 +396,11 @@ def compute_ll(k11, k12, k21, k22):
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
         if k > 0 and e > 0: s += k * math.log(k / e)
     return 2.0 * s
-
 def compute_mi(k11, target_freq, coll_total, corpus_size):
     """Compuutes the Mutual Information (MI) statistic."""
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0: return 0.0
     return math.log2(k11 / expected)
-
 def significance_from_ll(ll_val):
     """Converts Log-Likelihood value to significance level."""
     if ll_val >= 15.13: return '*** (p<0.001)'
@@ -383,6 +408,7 @@ def significance_from_ll(ll_val):
     if ll_val >= 3.84: return '* (p<0.05)'
     return 'ns'
 
+# --- IO / Data Helpers ---
 def df_to_excel_bytes(df):
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
@@ -527,55 +553,12 @@ def load_corpus_file(file_source, sep=r"\s+"):
         return df
         
     except Exception as raw_e: return None 
-
-# --- Word Cloud Function (Restored) ---
-@st.cache_data
-def create_word_cloud(freq_data, is_tagged_mode):
-    """Generates a word cloud from frequency data with conditional POS coloring."""
-    
-    # Filter out multi-word units for visualization stability
-    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
-    if single_word_freq_data.empty:
-        return None
-
-    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
-    word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
-    
-    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
-    
-    wc = WordCloud(
-        width=800,
-        height=400,
-        background_color='black',
-        colormap='viridis', 
-        stopwords=stopwords,
-        min_font_size=10
-    )
-    
-    wordcloud = wc.generate_from_frequencies(word_freq_dict)
-
-    if is_tagged_mode:
-        def final_color_func(word, *args, **kwargs):
-            pos_tag = word_to_pos.get(word, 'O')
-            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
-            if pos_code not in POS_COLOR_MAP:
-                pos_code = 'O'
-            return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
-
-        wordcloud = wordcloud.recolor(color_func=final_color_func)
-        
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis("off")
-    plt.tight_layout(pad=0)
-    
-    return fig
-
+# ---------------------------------------------------------------------
 
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.6")
+st.title("CORTEX - Corpus Texts Explorer v17.7")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -842,14 +825,9 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
     # --- SEARCH INPUT (SHARED) ---
     st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
     
-    # --- CROSS-REFERENCE LOGIC (FOR INFO MESSAGE DISPLAY ONLY) ---
-    if st.session_state['view'] == 'concordance' and st.session_state.get('show_cross_ref_message'):
-        # This message shows after a click from Collocation
-        st.info(f"Cross-reference loaded: Node Word: **'{st.session_state['typed_target_input']}'**, Collocate Filter: **'{st.session_state['pattern_collocate_input']}'**. Click **'🔎 Analyze'** below to run the search.")
-        
-        # Clear the flag immediately after displaying the message.
-        st.session_state['show_cross_ref_message'] = False
-
+    # --- CROSS-REFERENCE LOGIC (OLD FLOW CLEANUP) ---
+    # The dedicated KWIC below tables flow will be handled at the end of the collocation module.
+    
     # The input field that controls analysis for Concordance/Collocation
     typed_target = st.text_input(
         "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
@@ -869,7 +847,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
     if not target_input and not use_pattern_search:
         st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis.")
     
-    # The explicit button for manual initiation (required for the user's current manual flow)
+    # The explicit button for manual initiation
     analyze_btn_explicit = st.button("🔎 Analyze")
     
     analyze_btn = analyze_btn_explicit or st.session_state['trigger_analyze']
@@ -1452,11 +1430,12 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
         
         # Add buttons below the table for cross-referencing
-        st.markdown("**Cross-Reference to Concordance (Top 5):**")
+        st.markdown("**Show Concordance for Top 5 (Click to view below):**")
         cols = st.columns(5)
         for i, row in full_ll.head(5).iterrows():
              # Set key to reflect the row/collocate
              if cols[i].button(f"🔍 {row['Collocate']}", key=f"ll_btn_{i}"):
+                 # NEW BEHAVIOR: Stay in Collocation, trigger KWIC display below
                  handle_collocate_click(primary_target_mwu, row['Collocate'])
 
 
@@ -1472,10 +1451,11 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
 
 
         # Add buttons below the table for cross-referencing
-        st.markdown("**Cross-Reference to Concordance (Top 5):**")
+        st.markdown("**Show Concordance for Top 5 (Click to view below):**")
         cols = st.columns(5)
         for i, row in full_mi.head(5).iterrows():
              if cols[i].button(f"🔍 {row['Collocate']}", key=f"mi_btn_{i}"):
+                 # NEW BEHAVIOR: Stay in Collocation, trigger KWIC display below
                  handle_collocate_click(primary_target_mwu, row['Collocate'])
 
     # ---------- Download Buttons ----------
@@ -1494,5 +1474,65 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}_filtered.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+    
+    # -----------------------------------------------------
+    # NEW SECTION: DEDICATED KWIC DISPLAY FOR COLLOCATE
+    # -----------------------------------------------------
+    if st.session_state.get('collocation_show_kwic', False):
+        
+        node_word = st.session_state['coll_kwic_target']
+        collocate_filter = st.session_state['coll_kwic_collocate']
+        window = st.session_state.get('coll_window', 5) # Use the collocation window size
+
+        st.markdown("---")
+        st.subheader(f"📚 Collocate Concordance (KWIC) — Node: '{node_word}', Collocate Filter: '{collocate_filter}'")
+
+        # Use the collocation window size as the KWIC context for this display
+        kwic_rows, total_matches, _, _ = generate_kwic(
+            df, node_word, window, window, 
+            pattern_collocate_input=collocate_filter, 
+            pattern_collocate_pos_input="", 
+            pattern_window=window,
+            limit=KWIC_MAX_DISPLAY_LINES
+        )
+        
+        if total_matches > 0:
+            st.success(f"Found **{total_matches}** occurrences of '{node_word}' matching collocate '{collocate_filter}'. Showing top {len(kwic_rows)}.")
+
+            kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
+            kwic_preview = kwic_df.copy().reset_index(drop=True)
+            kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+            
+            # --- KWIC Table Style (reused from Concordance module) ---
+            kwic_table_style = f"""
+                 <style>
+                 .colloc-kwic-container-scroll {{
+                     max-height: 400px; /* Fixed height for scrollable view */
+                     overflow-y: auto;
+                     margin-bottom: 1rem;
+                 }}
+                 .colloc-kwic-table {{ font-family: monospace; color: white; width: 100%; }}
+                 .colloc-kwic-table table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+                 .colloc-kwic-table th {{ font-weight: bold; text-align: center; }}
+                 .colloc-kwic-table td:nth-child(2) {{ text-align: right; color: white; }}
+                 .colloc-kwic-table td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
+                 .colloc-kwic-table td:nth-child(4) {{ text-align: left; color: white; }}
+                 .colloc-kwic-table thead th:first-child {{ width: 30px; }}
+                 </style>
+            """
+            st.markdown(kwic_table_style, unsafe_allow_html=True)
+            
+            html_table = kwic_preview.to_html(escape=False, classes=['colloc-kwic-table'], index=False)
+            scrollable_html = f"<div class='colloc-kwic-container-scroll'>{html_table}</div>"
+
+            st.markdown(scrollable_html, unsafe_allow_html=True)
+            st.caption(f"Context window is set to **±{window} tokens** (Collocation window). Matching collocate is **bolded and highlighted bright yellow**.")
+
+        else:
+            st.warning("No concordance lines found for this specific Node/Collocate pair.")
+        
+        # Clear the flag after display, so the section only shows up right after the button click.
+        st.session_state['collocation_show_kwic'] = False
+
 
 st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text.")
