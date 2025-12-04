@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.13 - Conditional Sidebar & Dictionary Forms
+# CORTEX Corpus Explorer v17.14 - N-Gram Module Implementation
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.13", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.14", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -59,6 +59,17 @@ if 'coll_window' not in st.session_state:
     st.session_state['coll_window'] = 5
 if 'mi_min_freq' not in st.session_state:
     st.session_state['mi_min_freq'] = 1
+# --- N-Gram State ---
+if 'n_gram_size' not in st.session_state:
+    st.session_state['n_gram_size'] = 2
+if 'n_gram_filter_type' not in st.session_state:
+    st.session_state['n_gram_filter_type'] = 'Token'
+if 'n_gram_filters' not in st.session_state:
+    st.session_state['n_gram_filters'] = {} # Dictionary to hold positional filters: {'1': 'pattern', '2': 'pattern', ...}
+if 'n_gram_trigger_analyze' not in st.session_state:
+    st.session_state['n_gram_trigger_analyze'] = False
+if 'n_gram_results_df' not in st.session_state:
+    st.session_state['n_gram_results_df'] = pd.DataFrame()
 
 
 # ---------------------------
@@ -80,6 +91,8 @@ POS_COLOR_MAP = {
     'O': '#AAAAAA'   # Other (Gray)
 }
 
+PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
+
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
     st.session_state['view'] = view_name
@@ -89,6 +102,7 @@ def reset_analysis():
     st.cache_data.clear()
     st.session_state['view'] = 'overview'
     st.session_state['trigger_analyze'] = False
+    st.session_state['n_gram_trigger_analyze'] = False
     st.session_state['initial_load_complete'] = False
     st.session_state['llm_interpretation_result'] = None
     
@@ -96,6 +110,10 @@ def reset_analysis():
 def trigger_analysis_callback():
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
+
+# --- N-Gram Analysis Trigger Callback ---
+def trigger_n_gram_analysis_callback():
+    st.session_state['n_gram_trigger_analyze'] = True
 
 # --- Dictionary Helper: Get all forms by lemma ---
 @st.cache_data
@@ -574,6 +592,84 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception as raw_e: return None 
 
 # -----------------------------------------------------
+# N-GRAM LOGIC
+# -----------------------------------------------------
+@st.cache_data(show_spinner=False)
+def generate_n_grams(df_corpus, n, filter_type, positional_filters, is_raw_mode, max_display_lines=10000):
+    total_tokens = len(df_corpus)
+    
+    # 1. Determine the target column based on filter_type and corpus mode
+    target_column_name = 'token'
+    case_sensitive = True
+    
+    if filter_type == 'Token':
+        target_column_name = 'token'
+        case_sensitive = False
+    elif filter_type == 'Lemma' and not is_raw_mode and 'lemma' in df_corpus.columns:
+        target_column_name = 'lemma'
+        case_sensitive = False
+    elif filter_type == 'POS' and not is_raw_mode and 'pos' in df_corpus.columns:
+        target_column_name = 'pos'
+        case_sensitive = True # POS tags are typically case-sensitive
+
+    target_column = df_corpus[target_column_name].tolist()
+    
+    # 2. Compile Filters
+    compiled_filters = {}
+    for pos_str, pattern_str in positional_filters.items():
+        pattern_str = pattern_str.strip()
+        if pattern_str:
+            # Escape regex special characters, then replace * with .* for wildcard
+            safe_pattern = re.escape(pattern_str).replace(r'\*', '.*')
+            
+            # Apply IGNORECASE flag only if filtering by Token or Lemma
+            flags = 0
+            if not case_sensitive:
+                flags = re.IGNORECASE
+            
+            compiled_filters[int(pos_str)] = re.compile(f"^{safe_pattern}$", flags)
+
+    # 3. Generate and Count N-Grams
+    n_gram_counts = Counter()
+    
+    for i in range(total_tokens - n + 1):
+        n_gram_raw = [df_corpus['token'].iloc[i+j] for j in range(n)]
+        
+        # Determine the sequence to check against filters
+        n_gram_to_check = [df_corpus[target_column_name].iloc[i+j] for j in range(n)]
+
+        # Positional Filtering check
+        is_match = True
+        for pos_index, pattern in compiled_filters.items():
+            # pos_index is 1-based, list index is 0-based
+            if pos_index <= n and pos_index > 0:
+                item_to_check = n_gram_to_check[pos_index - 1]
+                if not pattern.fullmatch(item_to_check):
+                    is_match = False
+                    break
+        
+        if is_match:
+            # Filter out n-grams composed solely of punctuation/numbers if no explicit filters are set
+            if not compiled_filters:
+                is_only_noise = all(t.strip().lower() in PUNCTUATION or t.strip().isdigit() for t in n_gram_raw)
+                if is_only_noise:
+                    continue
+
+            # Key for counting is the raw token n-gram (space-joined string)
+            n_gram_key = " ".join(n_gram_raw)
+            n_gram_counts[n_gram_key] += 1
+
+    # 4. Format Output
+    n_gram_list = []
+    for n_gram, freq in n_gram_counts.most_common(max_display_lines):
+        n_gram_list.append({'N-Gram': n_gram, 'Frequency': freq})
+
+    df_n_gram = pd.DataFrame(n_gram_list)
+    df_n_gram.insert(0, 'Rank', range(1, len(df_n_gram) + 1))
+    
+    return df_n_gram
+
+# -----------------------------------------------------
 # Function to display KWIC examples for collocates
 # -----------------------------------------------------
 def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1):
@@ -652,404 +748,6 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # -----------------------------------------------------
 
 
-# ---------------------------
-# UI: header
-# ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.13")
-st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
-
-# ---------------------------
-# Panel: upload and corpus info
-# ---------------------------
-corpus_source = None
-corpus_name = "Uploaded File"
-
-# --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
-with st.sidebar:
-    
-    # 1. CORPUS SELECTION (TOP)
-    st.header("1. Corpus Source")
-    
-    selected_corpus_name = st.selectbox(
-        "Select a pre-loaded corpus:", 
-        options=list(BUILT_IN_CORPORA.keys()),
-        key="corpus_select", 
-        on_change=reset_analysis
-    )
-    
-    uploaded_file = st.file_uploader(
-        "OR Upload your own corpus file", 
-        type=["txt","csv"],
-        key="file_upload",
-        on_change=reset_analysis
-    )
-    
-    # Determine the corpus source
-    if uploaded_file is not None:
-        corpus_source = uploaded_file
-        corpus_name = uploaded_file.name
-    elif selected_corpus_name != "Select built-in corpus...":
-        corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
-        # Display download status if it's the initial run
-        if 'initial_load_complete' not in st.session_state or st.session_state['initial_load_complete'] == False:
-            with st.spinner(f"Downloading {selected_corpus_name}..."):
-                corpus_source = download_file_to_bytesio(corpus_url)
-        else:
-             corpus_source = download_file_to_bytesio(corpus_url) 
-        corpus_name = selected_corpus_name
-    
-    
-    # 2. NAVIGATION
-    st.markdown("---")
-    st.subheader("2. Navigation (TOOLS)")
-    
-    is_active_o = st.session_state['view'] == 'overview'
-    st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
-    
-    is_active_d = st.session_state['view'] == 'dictionary' 
-    st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
-    
-    is_active_c = st.session_state['view'] == 'concordance'
-    st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
-
-    is_active_l = st.session_state['view'] == 'collocation'
-    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
-
-    # Load corpus inside sidebar to get df for filtering logic (safe execution)
-    df_sidebar = load_corpus_file(corpus_source)
-    
-    # Determine tagging mode safely for filter visibility
-    is_raw_mode_sidebar = True
-    if df_sidebar is not None and 'pos' in df_sidebar.columns and len(df_sidebar) > 0:
-        count_of_raw_tags = df_sidebar['pos'].str.contains('##', na=False).sum()
-        is_raw_mode_sidebar = (count_of_raw_tags / len(df_sidebar)) > 0.99
-
-    # 3. TOOL SETTINGS (Conditional Block)
-    if st.session_state['view'] != 'overview':
-        st.markdown("---")
-        st.subheader("3. Tool Settings")
-        
-        # --- CONCORDANCE SETTINGS ---
-        if st.session_state['view'] == 'concordance':
-            st.write("KWIC Context (Display)")
-            kwic_left = st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_left', 7), step=1, help="Number of tokens shown to the left of the node word.", key="concordance_kwic_left")
-            kwic_right = st.number_input("Right Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_right', 7), step=1, help="Number of tokens shown to the right of the node word.", key="concordance_kwic_right")
-            st.session_state['kwic_left'] = kwic_left
-            st.session_state['kwic_right'] = kwic_right
-            
-            st.markdown("---")
-            st.subheader("Pattern Search Filter")
-            
-            st.caption("The **Node Word** is set by the primary search input above.")
-            
-            pattern_search_window = st.number_input(
-                "Search Window (tokens, each side)", 
-                min_value=1, max_value=10, value=st.session_state.get('pattern_search_window', 5), step=1, 
-                key="pattern_search_window_input", 
-                help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.",
-                on_change=trigger_analysis_callback 
-            )
-            
-            pattern_collocate = st.text_input(
-                "Collocate Word/Pattern (* for wildcard)", 
-                value=st.session_state.get('pattern_collocate_input', ''),
-                key="pattern_collocate_input", 
-                help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
-                on_change=trigger_analysis_callback 
-            )
-            
-            if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
-                pattern_collocate_pos_input = st.text_input(
-                    "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
-                    value=st.session_state.get('pattern_collocate_pos_input', ''),
-                    key="pattern_collocate_pos_input",
-                    help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
-                    on_change=trigger_analysis_callback 
-                )
-                st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
-            else:
-                st.info("POS filtering for collocates requires a tagged corpus.")
-                st.session_state['pattern_collocate_pos'] = ''
-
-            st.session_state['pattern_search_window'] = pattern_search_window
-            st.session_state['pattern_collocate'] = pattern_collocate
-            
-        # --- COLLOCATION SETTINGS ---
-        elif st.session_state['view'] == 'collocation':
-            st.subheader("Collocation Parameters")
-            
-            max_collocates = st.number_input("Max Collocates to Show (Network/Tables)", min_value=5, max_value=100, value=st.session_state.get('max_collocates', 20), step=5, help="Maximum number of collocates displayed.", key="coll_max_collocates")
-            coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=st.session_state.get('coll_window', 5), step=1, help="Window used for collocation counting (default ±5).", key="coll_window_input")
-            mi_min_freq = st.number_input("MI minimum observed freq", min_value=1, max_value=100, value=st.session_state.get('mi_min_freq', 1), step=1, key="coll_mi_min_freq")
-            
-            st.session_state['max_collocates'] = max_collocates
-            st.session_state['coll_window'] = coll_window
-            st.session_state['mi_min_freq'] = mi_min_freq
-
-            st.markdown("---")
-            st.subheader("Collocate Filters")
-            
-            collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value=st.session_state.get('collocate_regex_input', ''), key="collocate_regex_input_coll")
-            st.session_state['collocate_regex'] = collocate_regex
-            
-            if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
-                collocate_pos_regex_input = st.text_input(
-                    "Filter by POS Tag Pattern (Wildcard/Concatenation)", 
-                    value=st.session_state.get('collocate_pos_regex_input_coll', ''), 
-                    key="collocate_pos_regex_input_coll_tag",
-                    help="E.g., V* (Verbs), NNS|NNP (Plural/Proper Nouns)."
-                )
-                st.session_state['collocate_pos_regex'] = collocate_pos_regex_input
-                
-                all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###'])
-                if all_pos_tags:
-                    selected_pos_tags = st.multiselect(
-                        "OR Filter by specific POS Tag(s)",
-                        options=all_pos_tags,
-                        default=st.session_state.get('selected_pos_tags_input', None),
-                        key="selected_pos_tags_input",
-                        help="Only shows collocates matching one of the selected POS tags. Ignored if Pattern is also set."
-                    )
-                    st.session_state['selected_pos_tags'] = selected_pos_tags
-                else:
-                    st.session_state['selected_pos_tags'] = None
-            else:
-                st.info("POS filtering requires a tagged corpus.")
-                st.session_state['collocate_pos_regex'] = ''
-                st.session_state['selected_pos_tags'] = None
-
-            if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
-                collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value=st.session_state.get('collocate_lemma_input', ''), key="collocate_lemma_input_coll")
-                st.session_state['collocate_lemma'] = collocate_lemma_input
-            else:
-                st.info("Lemma filtering requires a lemmatized corpus.")
-                st.session_state['collocate_lemma'] = ''
-        
-        # --- DICTIONARY SETTINGS (Placeholder) ---
-        elif st.session_state['view'] == 'dictionary':
-            st.info("Dictionary module currently uses global Collocation Window/Filter settings for collocation analysis, accessible in the Collocation view.")
-
-
-# load corpus (cached) for main body access
-df = load_corpus_file(corpus_source)
-
-# --- Check for initial load failure and display better message ---
-if df is None:
-    st.header("👋 Welcome to CORTEX!")
-    st.markdown("---")
-    st.markdown("## Get Started")
-    st.markdown("**Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
-    st.error(f"❌ **CORPUS LOAD FAILED** or **NO CORPUS SELECTED**. Please check the sidebar selection.")
-    st.stop()
-# ---------------------------------------------------------------------
-
-# --- CRITICAL STATUS MESSAGE FOR DEBUGGING (SUCCESS PATH) ---
-st.info(f"✅ Corpus **'{corpus_name}'** loaded successfully. Total tokens: **{len(df):,}**.")
-st.markdown("---")
-    
-# --- CORPUS STATS CALCULATION (SHARED) ---
-if 'pos' in df.columns and len(df) > 0:
-    count_of_raw_tags = df['pos'].str.contains('##', na=False).sum()
-    is_raw_mode = (count_of_raw_tags / len(df)) > 0.99
-else:
-    is_raw_mode = True 
-
-total_tokens = len(df)
-tokens_lower = df["_token_low"].tolist()
-PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
-tokens_lower_filtered = [t for t in tokens_lower if t not in PUNCTUATION and not t.isdigit()]
-token_counts = Counter(tokens_lower) 
-unique_types = len(set(tokens_lower_filtered))
-unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
-
-freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
-if is_raw_mode:
-    freq_df_filtered['pos'] = '##'
-# FIX: Filter freq_df for non-empty tokens before grouping
-freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
-
-
-if is_raw_mode:
-    app_mode = f"Analyzing Corpus: {corpus_name} (RAW/LINEAR MODE)"
-else:
-    app_mode = f"Analyzing Corpus: {corpus_name} (TAGGED MODE)"
-st.header(app_mode)
-
-# -----------------------------------------------------
-# MODULE: CORPUS OVERVIEW
-# -----------------------------------------------------
-if st.session_state['view'] == 'overview':
-    
-    col1, col2 = st.columns([2,1])
-    with col1:
-        st.subheader("Corpus Summary")
-        # STTR calculation omitted for brevity but can be easily added back
-        info_df = pd.DataFrame({
-            "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count"],
-            "Value": [f"{total_tokens:,}", unique_types, unique_lemmas]
-        })
-        st.dataframe(info_df, use_container_width=True, hide_index=True) 
-
-        st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
-        # FIX: Ensure freq_df is not empty before creating word cloud
-        if not freq_df.empty:
-            wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
-            
-            if not is_raw_mode:
-                st.markdown(
-                    """
-                    **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
-                    """
-                , unsafe_allow_html=True)
-                
-            st.pyplot(wordcloud_fig)
-        else:
-            st.info("Not enough tokens to generate a word cloud.")
-
-    with col2:
-        st.subheader("Top frequency")
-        # FIX: Ensure freq_df is not empty before slicing
-        if not freq_df.empty:
-            freq_head = freq_df.head(10).copy()
-            freq_head.insert(0,"No", range(1, len(freq_head)+1))
-            st.dataframe(freq_head, use_container_width=True, hide_index=True) 
-            st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        else:
-             st.info("Frequency data not available.")
-
-    st.markdown("---")
-    
-# -----------------------------------------------------
-# MODULE: SEARCH INPUT (SHARED)
-# -----------------------------------------------------
-
-if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dictionary':
-    
-    # --- SEARCH INPUT (SHARED) ---
-    st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
-    
-    # The input field that controls analysis for Concordance/Collocation
-    typed_target = st.text_input(
-        "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
-        value=st.session_state.get('typed_target_input', ''), 
-        key="typed_target_input",
-        on_change=trigger_analysis_callback # Triggers analysis on Enter/change
-    )
-    
-    primary_input = typed_target.strip()
-    target_input = primary_input
-    
-    use_pattern_search = False
-    if st.session_state['view'] == 'concordance':
-        if primary_input and (st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('pattern_collocate_pos_input', '').strip()):
-            use_pattern_search = True
-
-    if not target_input and not use_pattern_search and st.session_state['view'] != 'dictionary':
-        st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis.")
-    
-    # The explicit button for manual initiation
-    analyze_btn_explicit = st.button("🔎 Analyze")
-    
-    analyze_btn = analyze_btn_explicit or st.session_state['trigger_analyze']
-    st.session_state['trigger_analyze'] = False
-    
-    st.markdown("---")
-
-
-# -----------------------------------------------------
-# MODULE: CONCORDANCE LOGIC
-# -----------------------------------------------------
-if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
-    
-    # Get current parameters
-    kwic_left = st.session_state.get('kwic_left', 7)
-    kwic_right = st.session_state.get('kwic_right', 7)
-    # Use the session_state from the input keys
-    pattern_collocate = st.session_state.get('pattern_collocate_input', '').lower().strip()
-    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos_input', '').strip() 
-    pattern_window = st.session_state.get('pattern_search_window', 0)
-    
-    is_pattern_search_active = pattern_collocate or pattern_collocate_pos
-    
-    # Generate KWIC lines using the reusable function
-    with st.spinner("Searching corpus and generating concordance..."):
-        kwic_rows, total_matches, raw_target_input, literal_freq = generate_kwic(
-            df, st.session_state['typed_target_input'], kwic_left, kwic_right, 
-            pattern_collocate if is_pattern_search_active else "", 
-            pattern_collocate_pos if is_pattern_search_active else "", 
-            pattern_window if is_pattern_search_active else 0,
-            limit=KWIC_MAX_DISPLAY_LINES
-        )
-    
-    if total_matches == 0:
-        st.warning(f"Target '{raw_target_input}' not found or matched 0 instances after filtering.")
-        st.stop()
-        
-    # Prepare metadata for display
-    rel_freq = (literal_freq / total_tokens) * 1_000_000
-    wildcard_freq_df = pd.DataFrame([{"Query Result": raw_target_input, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
-    results_df = wildcard_freq_df.rename(columns={"Relative Frequency": "Expected Frequency"})
-
-    # --- KWIC Display ---
-    st.subheader("📚 Concordance Results")
-    
-    if is_pattern_search_active:
-        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{raw_target_input}' co-occurring with the specified criteria.")
-    else:
-        st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
-    
-    # --- LLM INTERPRETATION BUTTON/EXPANDER ---
-    if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
-        kwic_df_for_llm = pd.DataFrame(kwic_rows).head(10).copy().drop(columns=['Collocate'])
-        interpret_results_llm(raw_target_input, "Concordance", "KWIC Context Sample (Max 10 lines)", kwic_df_for_llm)
-
-    if st.session_state['llm_interpretation_result']:
-        with st.expander("LLM Interpretation (Feature Disabled)", expanded=True):
-            st.markdown(st.session_state['llm_interpretation_result'])
-        st.markdown("---")
-    # ----------------------------------------
-    
-    col_kwic, col_freq = st.columns([3, 2], gap="large")
-
-    with col_kwic:
-        st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
-        
-        kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
-        kwic_preview = kwic_df.copy().reset_index(drop=True)
-        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
-        
-        # --- KWIC Table Style (Extracted for cleaner re-use) ---
-        kwic_table_style = f"""
-             <style>
-             .dataframe-container-scroll {{
-                 max-height: 400px; /* Fixed height for scrollable view */
-                 overflow-y: auto;
-                 margin-bottom: 1rem;
-             }}
-             .dataframe {{ font-family: monospace; color: white; width: 100%; }}
-             .dataframe table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
-             .dataframe th {{ font-weight: bold; text-align: center; }}
-             .dataframe td:nth-child(2) {{ text-align: right; color: white; }}
-             .dataframe td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
-             .dataframe td:nth-child(4) {{ text-align: left; color: white; }}
-             .dataframe thead th:first-child {{ width: 30px; }}
-             </style>
-        """
-        st.markdown(kwic_table_style, unsafe_allow_html=True)
-        
-        html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
-        scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
-
-        st.markdown(scrollable_html, unsafe_allow_html=True)
-
-        st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
-        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    with col_freq:
-        st.subheader(f"Target Frequency")
-        st.dataframe(results_df, use_container_width=True, hide_index=True)
-
-
 # -----------------------------------------------------
 # COLLOCATION LOGIC (Extracted to reusable function)
 # -----------------------------------------------------
@@ -1119,7 +817,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
     collocate_directional_counts = Counter() 
     
     # FIX: Define PUNCTUATION locally for filtering
-    PUNCTUATION_COLLOCATES = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
+    PUNCTUATION_COLLOCATES = PUNCTUATION # Defined globally
     
     for i in primary_target_positions:
         start_index = max(0, i - coll_window)
@@ -1213,6 +911,539 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
     stats_df_sorted = stats_df_filtered.sort_values("LL", ascending=False)
     
     return (stats_df_sorted, freq, primary_target_mwu)
+
+# ---------------------------
+# UI: header
+# ---------------------------
+st.title("CORTEX - Corpus Texts Explorer v17.14")
+st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
+
+# ---------------------------
+# Panel: upload and corpus info
+# ---------------------------
+corpus_source = None
+corpus_name = "Uploaded File"
+
+# --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
+with st.sidebar:
+    
+    # 1. CORPUS SELECTION (TOP)
+    st.header("1. Corpus Source")
+    
+    selected_corpus_name = st.selectbox(
+        "Select a pre-loaded corpus:", 
+        options=list(BUILT_IN_CORPORA.keys()),
+        key="corpus_select", 
+        on_change=reset_analysis
+    )
+    
+    uploaded_file = st.file_uploader(
+        "OR Upload your own corpus file", 
+        type=["txt","csv"],
+        key="file_upload",
+        on_change=reset_analysis
+    )
+    
+    # Determine the corpus source
+    if uploaded_file is not None:
+        corpus_source = uploaded_file
+        corpus_name = uploaded_file.name
+    elif selected_corpus_name != "Select built-in corpus...":
+        corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
+        # Display download status if it's the initial run
+        if 'initial_load_complete' not in st.session_state or st.session_state['initial_load_complete'] == False:
+            with st.spinner(f"Downloading {selected_corpus_name}..."):
+                corpus_source = download_file_to_bytesio(corpus_url)
+        else:
+             corpus_source = download_file_to_bytesio(corpus_url) 
+        corpus_name = selected_corpus_name
+    
+    
+    # 2. NAVIGATION
+    st.markdown("---")
+    st.subheader("2. Navigation (TOOLS)")
+    
+    is_active_o = st.session_state['view'] == 'overview'
+    st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
+    
+    is_active_d = st.session_state['view'] == 'dictionary' 
+    st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
+    
+    is_active_c = st.session_state['view'] == 'concordance'
+    st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
+    
+    is_active_n = st.session_state['view'] == 'n_gram' # NEW N-GRAM BUTTON
+    st.button("🔢 N-Gram", key='nav_n_gram', on_click=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
+
+    is_active_l = st.session_state['view'] == 'collocation'
+    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
+
+    # Load corpus inside sidebar to get df for filtering logic (safe execution)
+    df_sidebar = load_corpus_file(corpus_source)
+    
+    # Determine tagging mode safely for filter visibility
+    is_raw_mode_sidebar = True
+    if df_sidebar is not None and 'pos' in df_sidebar.columns and len(df_sidebar) > 0:
+        count_of_raw_tags = df_sidebar['pos'].str.contains('##', na=False).sum()
+        is_raw_mode_sidebar = (count_of_raw_tags / len(df_sidebar)) > 0.99
+
+    # 3. TOOL SETTINGS (Conditional Block)
+    if st.session_state['view'] != 'overview':
+        st.markdown("---")
+        st.subheader("3. Tool Settings")
+        
+        # --- CONCORDANCE SETTINGS ---
+        if st.session_state['view'] == 'concordance':
+            st.write("KWIC Context (Display)")
+            kwic_left = st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_left', 7), step=1, help="Number of tokens shown to the left of the node word.", key="concordance_kwic_left")
+            kwic_right = st.number_input("Right Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_right', 7), step=1, help="Number of tokens shown to the right of the node word.", key="concordance_kwic_right")
+            st.session_state['kwic_left'] = kwic_left
+            st.session_state['kwic_right'] = kwic_right
+            
+            st.markdown("---")
+            st.subheader("Pattern Search Filter")
+            
+            st.caption("The **Node Word** is set by the primary search input above.")
+            
+            pattern_search_window = st.number_input(
+                "Search Window (tokens, each side)", 
+                min_value=1, max_value=10, value=st.session_state.get('pattern_search_window', 5), step=1, 
+                key="pattern_search_window_input", 
+                help="The maximum distance (L/R) the collocate can be from the Node Word. This also sets the KWIC display context when active.",
+                on_change=trigger_analysis_callback 
+            )
+            
+            pattern_collocate = st.text_input(
+                "Collocate Word/Pattern (* for wildcard)", 
+                value=st.session_state.get('pattern_collocate_input', ''),
+                key="pattern_collocate_input", 
+                help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
+                on_change=trigger_analysis_callback 
+            )
+            
+            if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
+                pattern_collocate_pos_input = st.text_input(
+                    "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
+                    value=st.session_state.get('pattern_collocate_pos_input', ''),
+                    key="pattern_collocate_pos_input",
+                    help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
+                    on_change=trigger_analysis_callback 
+                )
+                st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
+            else:
+                st.info("POS filtering for collocates requires a tagged corpus.")
+                st.session_state['pattern_collocate_pos'] = ''
+
+            st.session_state['pattern_search_window'] = pattern_search_window
+            st.session_state['pattern_collocate'] = pattern_collocate
+            
+        # --- N-GRAM SETTINGS ---
+        elif st.session_state['view'] == 'n_gram':
+            st.subheader("N-Gram Parameters")
+            
+            # N-Gram size slider
+            n_gram_size = st.slider(
+                "N-Gram Size (N)", 
+                min_value=1, max_value=5, 
+                value=st.session_state.get('n_gram_size', 2), 
+                step=1, 
+                key="n_gram_size_slider",
+                on_change=trigger_n_gram_analysis_callback,
+                help="Select the size of the token sequence (unigram, bigram, trigram, etc.)"
+            )
+            st.session_state['n_gram_size'] = n_gram_size
+            
+            st.markdown("---")
+            st.subheader("Positional Filters")
+
+            # Filter Type Selector
+            filter_options = ['Token']
+            if not is_raw_mode_sidebar:
+                filter_options.append('Lemma')
+                filter_options.append('POS')
+
+            n_gram_filter_type = st.selectbox(
+                "Filter By:", 
+                options=filter_options, 
+                index=filter_options.index(st.session_state.get('n_gram_filter_type', 'Token')),
+                key="n_gram_filter_type_select",
+                on_change=trigger_n_gram_analysis_callback,
+                help="Choose which linguistic level (Token, Lemma, or POS Tag) to apply the filters to."
+            )
+            st.session_state['n_gram_filter_type'] = n_gram_filter_type
+            
+            # Dynamic Positional Filter Boxes
+            current_n_gram_filters = st.session_state.get('n_gram_filters', {})
+            
+            # Create a dictionary for new filters to avoid modifying the list while iterating
+            new_filters = {}
+            for i in range(1, n_gram_size + 1):
+                default_val = current_n_gram_filters.get(str(i), '')
+                
+                # Check if filter type is relevant for the corpus mode
+                is_disabled = (n_gram_filter_type in ('Lemma', 'POS') and is_raw_mode_sidebar) or \
+                              (n_gram_filter_type == 'Lemma' and 'lemma' not in df_sidebar.columns) or \
+                              (n_gram_filter_type == 'POS' and 'pos' not in df_sidebar.columns)
+
+                input_key = f"n_gram_filter_{i}"
+                
+                filter_input = st.text_input(
+                    f"Position {i} Filter (* for wildcard)", 
+                    value=default_val, 
+                    key=input_key,
+                    on_change=trigger_n_gram_analysis_callback,
+                    args=(),
+                    disabled=is_disabled
+                )
+                new_filters[str(i)] = filter_input.strip()
+
+            # Update session state filters
+            st.session_state['n_gram_filters'] = new_filters
+            
+            if is_disabled:
+                st.warning(f"{n_gram_filter_type} filtering requires a tagged corpus.")
+            
+        # --- COLLOCATION SETTINGS ---
+        elif st.session_state['view'] == 'collocation':
+            st.subheader("Collocation Parameters")
+            
+            max_collocates = st.number_input("Max Collocates to Show (Network/Tables)", min_value=5, max_value=100, value=st.session_state.get('max_collocates', 20), step=5, help="Maximum number of collocates displayed.", key="coll_max_collocates")
+            coll_window = st.number_input("Collocation window (tokens each side)", min_value=1, max_value=10, value=st.session_state.get('coll_window', 5), step=1, help="Window used for collocation counting (default ±5).", key="coll_window_input")
+            mi_min_freq = st.number_input("MI minimum observed freq", min_value=1, max_value=100, value=st.session_state.get('mi_min_freq', 1), step=1, key="coll_mi_min_freq")
+            
+            st.session_state['max_collocates'] = max_collocates
+            st.session_state['coll_window'] = coll_window
+            st.session_state['mi_min_freq'] = mi_min_freq
+
+            st.markdown("---")
+            st.subheader("Collocate Filters")
+            
+            collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value=st.session_state.get('collocate_regex_input', ''), key="collocate_regex_input_coll")
+            st.session_state['collocate_regex'] = collocate_regex
+            
+            if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
+                collocate_pos_regex_input = st.text_input(
+                    "Filter by POS Tag Pattern (Wildcard/Concatenation)", 
+                    value=st.session_state.get('collocate_pos_regex_input_coll', ''), 
+                    key="collocate_pos_regex_input_coll_tag",
+                    help="E.g., V* (Verbs), NNS|NNP (Plural/Proper Nouns)."
+                )
+                st.session_state['collocate_pos_regex'] = collocate_pos_regex_input
+                
+                all_pos_tags = sorted([tag for tag in df_sidebar['pos'].unique() if tag != '##' and tag != '###'])
+                if all_pos_tags:
+                    selected_pos_tags = st.multiselect(
+                        "OR Filter by specific POS Tag(s)",
+                        options=all_pos_tags,
+                        default=st.session_state.get('selected_pos_tags_input', None),
+                        key="selected_pos_tags_input",
+                        help="Only shows collocates matching one of the selected POS tags. Ignored if Pattern is also set."
+                    )
+                    st.session_state['selected_pos_tags'] = selected_pos_tags
+                else:
+                    st.session_state['selected_pos_tags'] = None
+            else:
+                st.info("POS filtering requires a tagged corpus.")
+                st.session_state['collocate_pos_regex'] = ''
+                st.session_state['selected_pos_tags'] = None
+
+            if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
+                collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value=st.session_state.get('collocate_lemma_input', ''), key="collocate_lemma_input_coll")
+                st.session_state['collocate_lemma'] = collocate_lemma_input
+            else:
+                st.info("Lemma filtering requires a lemmatized corpus.")
+                st.session_state['collocate_lemma'] = ''
+        
+        # --- DICTIONARY SETTINGS (Placeholder) ---
+        elif st.session_state['view'] == 'dictionary':
+            st.info("Dictionary module currently uses global Collocation Window/Filter settings for collocation analysis, accessible in the Collocation view.")
+
+
+# load corpus (cached) for main body access
+df = load_corpus_file(corpus_source)
+
+# --- Check for initial load failure and display better message ---
+if df is None:
+    st.header("👋 Welcome to CORTEX!")
+    st.markdown("---")
+    st.markdown("## Get Started")
+    st.markdown("**Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
+    st.error(f"❌ **CORPUS LOAD FAILED** or **NO CORPUS SELECTED**. Please check the sidebar selection.")
+    st.stop()
+# ---------------------------------------------------------------------
+
+# --- CRITICAL STATUS MESSAGE FOR DEBUGGING (SUCCESS PATH) ---
+st.info(f"✅ Corpus **'{corpus_name}'** loaded successfully. Total tokens: **{len(df):,}**.")
+st.markdown("---")
+    
+# --- CORPUS STATS CALCULATION (SHARED) ---
+if 'pos' in df.columns and len(df) > 0:
+    count_of_raw_tags = df['pos'].str.contains('##', na=False).sum()
+    is_raw_mode = (count_of_raw_tags / len(df)) > 0.99
+else:
+    is_raw_mode = True 
+
+total_tokens = len(df)
+tokens_lower = df["_token_low"].tolist()
+tokens_lower_filtered = [t for t in tokens_lower if t not in PUNCTUATION and not t.isdigit()]
+token_counts = Counter(tokens_lower) 
+unique_types = len(set(tokens_lower_filtered))
+unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
+
+freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
+if is_raw_mode:
+    freq_df_filtered['pos'] = '##'
+# FIX: Filter freq_df for non-empty tokens before grouping
+freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+
+
+if is_raw_mode:
+    app_mode = f"Analyzing Corpus: {corpus_name} (RAW/LINEAR MODE)"
+else:
+    app_mode = f"Analyzing Corpus: {corpus_name} (TAGGED MODE)"
+st.header(app_mode)
+
+# -----------------------------------------------------
+# MODULE: CORPUS OVERVIEW
+# -----------------------------------------------------
+if st.session_state['view'] == 'overview':
+    
+    col1, col2 = st.columns([2,1])
+    with col1:
+        st.subheader("Corpus Summary")
+        # STTR calculation omitted for brevity but can be easily added back
+        info_df = pd.DataFrame({
+            "Metric": ["Corpus size (tokens)", "Unique types (w/o punc)", "Lemma count"],
+            "Value": [f"{total_tokens:,}", unique_types, unique_lemmas]
+        })
+        st.dataframe(info_df, use_container_width=True, hide_index=True) 
+
+        st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
+        # FIX: Ensure freq_df is not empty before creating word cloud
+        if not freq_df.empty:
+            wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
+            
+            if not is_raw_mode:
+                st.markdown(
+                    """
+                    **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
+                    """
+                , unsafe_allow_html=True)
+                
+            st.pyplot(wordcloud_fig)
+        else:
+            st.info("Not enough tokens to generate a word cloud.")
+
+    with col2:
+        st.subheader("Top frequency")
+        # FIX: Ensure freq_df is not empty before slicing
+        if not freq_df.empty:
+            freq_head = freq_df.head(10).copy()
+            freq_head.insert(0,"No", range(1, len(freq_head)+1))
+            st.dataframe(freq_head, use_container_width=True, hide_index=True) 
+            st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        else:
+             st.info("Frequency data not available.")
+
+    st.markdown("---")
+    
+# -----------------------------------------------------
+# MODULE: SEARCH INPUT (SHARED FOR CONCORDANCE/COLLOCATION)
+# -----------------------------------------------------
+
+if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dictionary' and st.session_state['view'] != 'n_gram':
+    
+    # --- SEARCH INPUT (SHARED) ---
+    st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
+    
+    # The input field that controls analysis for Concordance/Collocation
+    typed_target = st.text_input(
+        "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
+        value=st.session_state.get('typed_target_input', ''), 
+        key="typed_target_input",
+        on_change=trigger_analysis_callback # Triggers analysis on Enter/change
+    )
+    
+    primary_input = typed_target.strip()
+    target_input = primary_input
+    
+    use_pattern_search = False
+    if st.session_state['view'] == 'concordance':
+        if primary_input and (st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('pattern_collocate_pos_input', '').strip()):
+            use_pattern_search = True
+
+    if not target_input and not use_pattern_search and st.session_state['view'] not in ('dictionary', 'n_gram'):
+        st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis.")
+    
+    # The explicit button for manual initiation
+    analyze_btn_explicit = st.button("🔎 Analyze")
+    
+    analyze_btn = analyze_btn_explicit or st.session_state['trigger_analyze']
+    st.session_state['trigger_analyze'] = False
+    
+    st.markdown("---")
+
+
+# -----------------------------------------------------
+# MODULE: N-GRAM LOGIC
+# -----------------------------------------------------
+if st.session_state['view'] == 'n_gram':
+    
+    st.subheader(f"🔢 N-Gram Frequency Analysis (N={st.session_state['n_gram_size']})")
+    
+    # Check if a rerun was triggered by changing a filter/size
+    analyze_n_gram = st.session_state['n_gram_trigger_analyze'] or st.session_state['n_gram_results_df'].empty
+    st.session_state['n_gram_trigger_analyze'] = False
+    
+    # Force re-analysis if manual button is pressed
+    manual_analyze_btn = st.button("🔎 Re-Analyze N-Grams")
+    if manual_analyze_btn:
+        analyze_n_gram = True
+    
+    if analyze_n_gram:
+        with st.spinner(f"Generating and filtering {st.session_state['n_gram_size']}-grams..."):
+            n_gram_df = generate_n_grams(
+                df, 
+                st.session_state['n_gram_size'],
+                st.session_state['n_gram_filter_type'],
+                st.session_state['n_gram_filters'],
+                is_raw_mode
+            )
+            st.session_state['n_gram_results_df'] = n_gram_df.copy()
+            
+    n_gram_df = st.session_state['n_gram_results_df']
+    
+    if n_gram_df.empty:
+        st.warning("No N-grams found matching the criteria. Adjust the N-Gram size or clear filters in the sidebar.")
+        st.stop()
+        
+    st.success(f"Found **{len(n_gram_df):,}** unique {st.session_state['n_gram_size']}-grams matching the criteria.")
+    
+    # --- Display Table ---
+    st.markdown("---")
+    st.subheader(f"Top N-Grams (Showing {min(100, len(n_gram_df))})")
+    
+    n_gram_display_df = n_gram_df.head(100).copy()
+    
+    # Custom CSS for scrollable tables (Max 100 entries)
+    scroll_style = f"""
+    <style>
+    .scrollable-table {{
+        max-height: 400px; /* Fixed height for 100 entries max */
+        overflow-y: auto;
+    }}
+    </style>
+    """
+    st.markdown(scroll_style, unsafe_allow_html=True)
+    
+    # Use a scrollable container
+    html_table = n_gram_display_df.to_html(index=False, classes=['n-gram-table'])
+    st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+
+    # --- Download Button ---
+    st.markdown("---")
+    st.subheader("Download Full Results")
+    
+    # Download button tied to the latest analysis result
+    st.download_button(
+        f"⬇ Download Full {st.session_state['n_gram_size']}-Gram List ({len(n_gram_df):,} entries) (xlsx)", 
+        data=df_to_excel_bytes(n_gram_df), 
+        file_name=f"{st.session_state['n_gram_size']}-gram_full_list.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+# -----------------------------------------------------
+# MODULE: CONCORDANCE LOGIC
+# -----------------------------------------------------
+if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_btn', False) and st.session_state.get('typed_target_input'):
+    
+    # Get current parameters
+    kwic_left = st.session_state.get('kwic_left', 7)
+    kwic_right = st.session_state.get('kwic_right', 7)
+    # Use the session_state from the input keys
+    pattern_collocate = st.session_state.get('pattern_collocate_input', '').lower().strip()
+    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos_input', '').strip() 
+    pattern_window = st.session_state.get('pattern_search_window', 0)
+    
+    is_pattern_search_active = pattern_collocate or pattern_collocate_pos
+    
+    # Generate KWIC lines using the reusable function
+    with st.spinner("Searching corpus and generating concordance..."):
+        kwic_rows, total_matches, raw_target_input, literal_freq = generate_kwic(
+            df, st.session_state['typed_target_input'], kwic_left, kwic_right, 
+            pattern_collocate if is_pattern_search_active else "", 
+            pattern_collocate_pos if is_pattern_search_active else "", 
+            pattern_window if is_pattern_search_active else 0,
+            limit=KWIC_MAX_DISPLAY_LINES
+        )
+    
+    if total_matches == 0:
+        st.warning(f"Target '{raw_target_input}' not found or matched 0 instances after filtering.")
+        st.stop()
+        
+    # Prepare metadata for display
+    rel_freq = (literal_freq / total_tokens) * 1_000_000
+    wildcard_freq_df = pd.DataFrame([{"Query Result": raw_target_input, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
+    results_df = wildcard_freq_df.rename(columns={"Relative Frequency": "Expected Frequency"})
+
+    # --- KWIC Display ---
+    st.subheader("📚 Concordance Results")
+    
+    if is_pattern_search_active:
+        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{raw_target_input}' co-occurring with the specified criteria.")
+    else:
+        st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
+    
+    # --- LLM INTERPRETATION BUTTON/EXPANDER ---
+    if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
+        kwic_df_for_llm = pd.DataFrame(kwic_rows).head(10).copy().drop(columns=['Collocate'])
+        interpret_results_llm(raw_target_input, "Concordance", "KWIC Context Sample (Max 10 lines)", kwic_df_for_llm)
+
+    if st.session_state['llm_interpretation_result']:
+        with st.expander("LLM Interpretation (Feature Disabled)", expanded=True):
+            st.markdown(st.session_state['llm_interpretation_result'])
+        st.markdown("---")
+    # ----------------------------------------
+    
+    col_kwic, col_freq = st.columns([3, 2], gap="large")
+
+    with col_kwic:
+        st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
+        
+        kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
+        kwic_preview = kwic_df.copy().reset_index(drop=True)
+        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        
+        # --- KWIC Table Style (Extracted for cleaner re-use) ---
+        kwic_table_style = f"""
+             <style>
+             .dataframe-container-scroll {{
+                 max-height: 400px; /* Fixed height for scrollable view */
+                 overflow-y: auto;
+                 margin-bottom: 1rem;
+             }}
+             .dataframe {{ font-family: monospace; color: white; width: 100%; }}
+             .dataframe table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+             .dataframe th {{ font-weight: bold; text-align: center; }}
+             .dataframe td:nth-child(2) {{ text-align: right; color: white; }}
+             .dataframe td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
+             .dataframe td:nth-child(4) {{ text-align: left; color: white; }}
+             .dataframe thead th:first-child {{ width: 30px; }}
+             </style>
+        """
+        st.markdown(kwic_table_style, unsafe_allow_html=True)
+        
+        html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
+        scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
+
+        st.markdown(scrollable_html, unsafe_allow_html=True)
+
+        st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
+        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_df), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    with col_freq:
+        st.subheader(f"Target Frequency")
+        st.dataframe(results_df, use_container_width=True, hide_index=True)
 
 
 # -----------------------------------------------------
@@ -1377,7 +1608,7 @@ if st.session_state['view'] == 'dictionary':
 # -----------------------------------------------------
 # MODULE: COLLOCATION LOGIC
 # -----------------------------------------------------
-if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
+if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_btn', False) and st.session_state.get('typed_target_input'):
     
     # Get Collocation Settings
     coll_window = st.session_state.get('coll_window', 5)
@@ -1390,7 +1621,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     selected_pos_tags = st.session_state.get('selected_pos_tags_input', [])
     collocate_lemma = st.session_state.get('collocate_lemma_input', '').lower().strip()
     
-    raw_target_input = target_input
+    raw_target_input = st.session_state.get('typed_target_input')
     
     with st.spinner("Running collocation analysis..."):
         stats_df_sorted, freq, primary_target_mwu = generate_collocation_results(
