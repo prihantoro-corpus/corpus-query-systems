@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.8 - Direct KWIC Collocation Examples
+# CORTEX Corpus Explorer v17.9 - KWIC Examples up to 100 Collocates
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,12 +18,12 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.8", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.9", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
-KWIC_COLLOC_DISPLAY_LIMIT = 10 # New limit for KWIC examples below collocation tables
+KWIC_COLLOC_DISPLAY_LIMIT = 100 # UPDATED: New limit for KWIC examples below collocation tables
 
 # ---------------------------
 # Initializing Session State
@@ -229,7 +229,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 
     total_matches = len(final_positions)
     if total_matches == 0:
-        return ([], 0, raw_target_input, literal_freq)
+        return ([], 0, raw_target_input, 0)
 
     # --- Sample Positions ---
     if random_sample:
@@ -611,7 +611,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.8")
+st.title("CORTEX - Corpus Texts Explorer v17.9")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
