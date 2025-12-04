@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.10 - Dictionary Word Forms & Collocation KWIC Limit
+# CORTEX Corpus Explorer v17.11 - Automatic Dictionary Analysis & Consolidated Word Forms
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,12 +18,12 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.10", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.11", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
-KWIC_COLLOC_DISPLAY_LIMIT = 20 # UPDATED: Limit for KWIC examples below collocation tables (was 100)
+KWIC_COLLOC_DISPLAY_LIMIT = 20 # Limit for KWIC examples below collocation tables
 
 # ---------------------------
 # Initializing Session State
@@ -91,9 +91,55 @@ def trigger_analysis_callback():
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
 
-# --- Dictionary Input Callback ---
-def trigger_dict_analysis_callback():
-    st.session_state['dict_word_triggered'] = True
+# --- Dictionary Helper: Get all forms by lemma ---
+@st.cache_data
+def get_all_lemma_forms_details(df_corpus, target_word):
+    """Finds all unique tokens/POS pairs sharing the target word's lemma(s)."""
+    target_lower = target_word.lower()
+    matching_rows = df_corpus[df_corpus['token'].str.lower() == target_lower]
+    
+    if matching_rows.empty or 'lemma' not in df_corpus.columns:
+        return pd.DataFrame(), [], []
+        
+    unique_lemmas = matching_rows['lemma'].unique()
+    
+    # Filter out nonsense tags
+    valid_lemmas = [l for l in unique_lemmas if l not in ('##', '###')]
+    if not valid_lemmas:
+        return pd.DataFrame(), [], []
+
+    # Get all forms sharing these valid lemmas
+    all_forms_df = df_corpus[df_corpus['lemma'].isin(valid_lemmas)][['token', 'pos', 'lemma']].copy()
+    
+    # Keep only unique token-pos-lemma combinations, sorted by token name
+    forms_list = all_forms_df.drop_duplicates().sort_values('token').reset_index(drop=True)
+    
+    # Also return the unique POS and Lemma lists for the summary header (re-using old logic)
+    return forms_list, all_forms_df['pos'].unique(), valid_lemmas
+
+# --- Regex Forms Helper ---
+@st.cache_data
+def get_related_forms_by_regex(df_corpus, target_word):
+    # Construct a broad regex for related forms: .*<target_word>.* (case insensitive)
+    # Escape the target_word in case it contains regex special characters
+    pattern_str = f".*{re.escape(target_word)}.*"
+    # Use re.IGNORECASE for case-insensitive matching
+    pattern = re.compile(pattern_str, re.IGNORECASE)
+    
+    # Search all unique tokens
+    all_unique_tokens = df_corpus['token'].unique()
+    
+    related_forms = []
+    for token in all_unique_tokens:
+        if pattern.fullmatch(token):
+            related_forms.append(token)
+            
+    # Remove the target word itself from the list (case insensitive comparison)
+    target_lower = target_word.lower()
+    final_forms = [w for w in related_forms if w.lower() != target_lower]
+    
+    # Use set for uniqueness (in case of case variations)
+    return sorted(list(set(final_forms)))
 
 # --- LLM PLACEHOLDER ---
 def interpret_results_llm(target_word, analysis_type, data_description, data):
@@ -311,53 +357,6 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         })
         
     return (kwic_rows, total_matches, raw_target_input, literal_freq)
-
-# --- Word Forms Helper ---
-@st.cache_data
-def get_word_forms_by_lemma(df_corpus, target_word):
-    # 1. Find the lemma(s) of the target word
-    target_lower = target_word.lower()
-    matching_rows = df_corpus[df_corpus['token'].str.lower() == target_lower]
-    
-    if matching_rows.empty or 'lemma' not in df_corpus.columns:
-        return []
-        
-    unique_lemmas = matching_rows['lemma'].unique()
-    
-    # Filter out nonsense tags
-    valid_lemmas = [l for l in unique_lemmas if l not in ('##', '###')]
-    if not valid_lemmas:
-        return []
-        
-    # 2. Find all tokens sharing those lemmas
-    all_related_forms = df_corpus[df_corpus['lemma'].isin(valid_lemmas)]['token'].unique()
-    
-    # Return as a sorted list, removing the exact user input word (case insensitive)
-    return sorted([w for w in all_related_forms if w.lower() != target_lower])
-
-# --- Regex Forms Helper ---
-@st.cache_data
-def get_related_forms_by_regex(df_corpus, target_word):
-    # Construct a broad regex for related forms: .*<target_word>.* (case insensitive)
-    # Escape the target_word in case it contains regex special characters
-    pattern_str = f".*{re.escape(target_word)}.*"
-    # Use re.IGNORECASE for case-insensitive matching
-    pattern = re.compile(pattern_str, re.IGNORECASE)
-    
-    # Search all unique tokens
-    all_unique_tokens = df_corpus['token'].unique()
-    
-    related_forms = []
-    for token in all_unique_tokens:
-        if pattern.fullmatch(token):
-            related_forms.append(token)
-            
-    # Remove the target word itself from the list (case insensitive comparison)
-    target_lower = target_word.lower()
-    final_forms = [w for w in related_forms if w.lower() != target_lower]
-    
-    # Use set for uniqueness (in case of case variations)
-    return sorted(list(set(final_forms)))
 
 # --- Word Cloud Function ---
 @st.cache_data
@@ -658,7 +657,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.10")
+st.title("CORTEX - Corpus Texts Explorer v17.11")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -1219,62 +1218,48 @@ if st.session_state['view'] == 'dictionary':
     
     st.subheader("📘 Dictionary Lookup")
     
-    # --- Input and Analysis Trigger (Implicit Enter/change) ---
-    dict_word = st.text_input(
+    # --- Input and Analysis Trigger (Automatic on Change) ---
+    current_dict_word = st.text_input(
         "Enter a Token/Word to lookup (e.g., 'sessions'):", 
         value=st.session_state.get('dict_word_input_main', ''),
         key="dict_word_input_main",
-        on_change=trigger_dict_analysis_callback # Triggers analysis on Enter/change
+        # Note: Changing this input triggers a rerun automatically, enabling automatic analysis below.
     ).strip()
     
-    # Check if Enter was pressed or if it was triggered from session state
-    analyze_btn = st.session_state.get('dict_word_triggered', False) or st.button("🔎 Analyze")
-    st.session_state['dict_word_triggered'] = False
-    
-    current_dict_word = st.session_state['dict_word_input_main']
-    
-    if not current_dict_word or not analyze_btn:
-        st.info("Enter a word to view its linguistic summary, examples, and collocates.")
+    if not current_dict_word:
+        st.info("Enter a word to view its linguistic summary, examples, and collocates. Analysis runs automatically.")
+        # Keep a manual button as a fallback/re-analyze option
+        st.button("🔎 Manual Re-Analyze", key="manual_dict_analyze_disabled", disabled=True)
         st.stop()
+    
+    # Manual button for re-analysis, though the input change handles most cases
+    st.button("🔎 Manual Re-Analyze", key="manual_dict_analyze")
         
     st.markdown("---")
     
-    # --- 1. Linguistic Summary ---
-    summary_df = df[df['token'].str.lower() == current_dict_word.lower()].head(10)
+    # --- 1. Consolidated Word Forms by Lemma (Replacing old Linguistic Summary) ---
     
-    if summary_df.empty:
-        st.warning(f"Token **'{current_dict_word}'** not found in the corpus.")
-        st.stop()
-        
-    st.subheader(f"Summary for: {current_dict_word}")
-    
-    # Extracting unique POS and Lemma
-    unique_pos = ', '.join(sorted(summary_df['pos'].unique()))
-    unique_lemma = ', '.join(sorted(summary_df['lemma'].unique()))
-
-    summary_data = {
-        "Token": [current_dict_word],
-        "Token POS Tag(s)": [unique_pos],
-        "Headword (Lemma)": [unique_lemma]
-    }
-    st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
-
-    # --- 4. Word Forms (by Lemma) ---
-    st.markdown("---")
-    st.subheader("Word Forms (by Lemma)")
-
     if is_raw_mode or 'lemma' not in df.columns:
-        st.info("Lemma analysis requires a tagged and lemmatized corpus.")
+        st.warning("Lemma and POS analysis requires a tagged and lemmatized corpus.")
+        forms_list = pd.DataFrame()
+        unique_lemma_list = []
     else:
-        related_forms = get_word_forms_by_lemma(df, current_dict_word)
-        if related_forms:
-            st.markdown(f"**Related forms whose lemma is one of the following: `{unique_lemma}`**")
-            st.text_area("Related Word Forms", ", ".join(related_forms), height=100, key="lemma_forms_output")
-        else:
-            st.info(f"No other word forms found with the same lemma(s) ({unique_lemma}).")
+        forms_list, unique_pos_list, unique_lemma_list = get_all_lemma_forms_details(df, current_dict_word)
 
+    st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
-    # --- 5. Related Forms (by Regex) ---
+    if forms_list.empty:
+        st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
+        st.stop()
+    
+    # Display the consolidated forms table
+    st.dataframe(
+        forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}),
+        hide_index=True,
+        use_container_width=True
+    )
+    
+    # --- 2. Related Forms (by Regex) ---
     st.markdown("---")
     st.subheader("Related Forms (by Regex)")
     
@@ -1288,7 +1273,7 @@ if st.session_state['view'] == 'dictionary':
         
     st.markdown("---")
     
-    # --- 2. Random Concordance Examples (Moved down) ---
+    # --- 3. Random Concordance Examples (Was Section 2) ---
     st.subheader("Random Examples (Concordance)")
     
     kwic_left = st.session_state.get('kwic_left', 7)
@@ -1334,7 +1319,7 @@ if st.session_state['view'] == 'dictionary':
         
     st.markdown("---")
 
-    # --- 3. Collocates and Collocate Examples ---
+    # --- 4. Collocates and Collocate Examples (Was Section 3) ---
     st.subheader("Collocation Analysis")
     
     coll_window = st.session_state.get('coll_window', 5)
