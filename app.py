@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.0 - Cross-Reference & Dictionary Module
+# CORTEX Corpus Explorer v17.1 - Fixes & Implicit Analyze
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.0", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.1", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -52,9 +52,8 @@ if 'cross_ref_target' not in st.session_state:
     st.session_state['cross_ref_target'] = ''
 if 'cross_ref_collocate' not in st.session_state:
     st.session_state['cross_ref_collocate'] = ''
-if 'dict_word_input' not in st.session_state:
-    st.session_state['dict_word_input'] = ''
-
+if 'dict_word_input_main' not in st.session_state: # Use the key from the dictionary input
+    st.session_state['dict_word_input_main'] = ''
 
 # ---------------------------
 # Built-in Corpus Configuration
@@ -95,18 +94,26 @@ def reset_analysis():
     st.session_state['cross_ref_target'] = ''
     st.session_state['cross_ref_collocate'] = ''
     
-# --- Analysis Trigger Callback ---
+# --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
     # Only clear LLM result when the input changes
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
     st.session_state['cross_ref_target'] = '' # Clear cross-ref if manually triggering
 
+# --- Cross-Reference Handler ---
+def handle_collocate_click(target_word, collocate_word):
+    # This function is called by the Collocation table buttons
+    st.session_state['cross_ref_target'] = target_word
+    st.session_state['cross_ref_collocate'] = collocate_word
+    st.session_state['view'] = 'concordance'
+    st.session_state['trigger_analyze'] = True # Force re-run of the concordance module
+    st.rerun()
+
 # --- LLM PLACEHOLDER ---
 def interpret_results_llm(target_word, analysis_type, data_description, data):
     """
-    Placeholder for LLM function. Replace this with actual API code 
-    (Gemini, Hugging Face, etc.) if reliable access becomes available.
+    Placeholder for LLM function. 
     """
     mock_response = f"""
     ### 🧠 Feature Currently Unavailable
@@ -125,7 +132,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
     
 # --- KWIC/Concordance Helper Function (Reusable by Dictionary) ---
 @st.cache_data(show_spinner=False)
-def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_collocate="", pattern_collocate_pos="", pattern_window=0, limit=KWIC_MAX_DISPLAY_LINES, random_sample=False):
+def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=KWIC_MAX_DISPLAY_LINES, random_sample=False):
     """
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq)
@@ -199,15 +206,17 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
 
     # --- Apply Pattern Filtering ---
     final_positions = all_target_positions
-    is_pattern_search_active = pattern_collocate or pattern_collocate_pos
+    
+    # Check if a pattern filter is provided
+    is_pattern_search_active = pattern_collocate_input or pattern_collocate_pos_input
 
     if is_pattern_search_active and pattern_window > 0:
         final_positions = []
-        collocate_word_regex = re.compile(re.escape(pattern_collocate).replace(r'\*', '.*')) if pattern_collocate else None
-        collocate_pos_regex = None
+        collocate_word_regex = re.compile(re.escape(pattern_collocate_input).replace(r'\*', '.*')) if pattern_collocate_input else None
+        collocate_pos_regex = None # IMPORTANT FIX: Initialize scope locally
         
-        if pattern_collocate_pos and not is_raw_mode:
-            pos_patterns = [p.strip() for p in pattern_collocate_pos.split('|') if p.strip()]
+        if pattern_collocate_pos_input and not is_raw_mode:
+            pos_patterns = [p.strip() for p in pattern_collocate_pos_input.split('|') if p.strip()]
             if pos_patterns:
                 full_pos_regex = re.compile("^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$")
                 collocate_pos_regex = full_pos_regex
@@ -224,7 +233,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 token_pos = df_corpus["pos"].iloc[j]
                 
                 word_matches = collocate_word_regex is None or collocate_word_regex.fullmatch(token_lower)
-                pos_matches = collocate_pos_regex is None or collocate_pos_regex.fullmatch(token_pos)
+                pos_matches = collocate_pos_regex is None or (collocate_pos_regex.fullmatch(token_pos) if not is_raw_mode else False)
                 
                 if word_matches and pos_matches:
                     found_collocate = True
@@ -253,6 +262,17 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     current_kwic_left = pattern_window if is_pattern_search_active and pattern_window > 0 else kwic_left
     current_kwic_right = pattern_window if is_pattern_search_active and pattern_window > 0 else kwic_right
     
+    # Re-initialize regex for highlighting purposes (needs to be local)
+    collocate_word_regex_highlight = re.compile(re.escape(pattern_collocate_input).replace(r'\*', '.*')) if pattern_collocate_input else None
+    
+    # Re-generate POS regex if necessary
+    collocate_pos_regex_highlight = None
+    if pattern_collocate_pos_input and not is_raw_mode:
+        pos_patterns = [p.strip() for p in pattern_collocate_pos_input.split('|') if p.strip()]
+        if pos_patterns:
+            full_pos_regex = re.compile("^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$")
+            collocate_pos_regex_highlight = full_pos_regex
+    
     for i in display_positions:
         kwic_start = max(0, i - current_kwic_left)
         kwic_end = min(total_tokens, i + primary_target_len + current_kwic_right)
@@ -262,8 +282,6 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         node_orig_tokens = []
         collocate_to_display = ""
 
-        collocate_word_regex_highlight = re.compile(re.escape(pattern_collocate).replace(r'\*', '.*')) if pattern_collocate else None
-        collocate_pos_regex_highlight = collocate_pos_regex # Re-use if generated above
         
         for k, token in enumerate(full_line_tokens):
             token_index_in_corpus = kwic_start + k
@@ -275,7 +293,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
             is_collocate_match = False
             if is_pattern_search_active and not is_node_word:
                  word_matches_highlight = collocate_word_regex_highlight is None or collocate_word_regex_highlight.fullmatch(token_lower)
-                 pos_matches_highlight = collocate_pos_regex_highlight is None or collocate_pos_regex_highlight.fullmatch(token_pos)
+                 pos_matches_highlight = collocate_pos_regex_highlight is None or (collocate_pos_regex_highlight.fullmatch(token_pos) if not is_raw_mode else False)
                  
                  if word_matches_highlight and pos_matches_highlight:
                     is_collocate_match = True
@@ -311,8 +329,12 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
 
 
 # ---------------------------
-# Helpers: stats, IO utilities, Pyvis, Corpus Loading
+# Helpers: stats, IO utilities, Pyvis, Corpus Loading (omitted for brevity)
 # ---------------------------
+
+# Helper functions (safe_log, compute_ll, compute_mi, significance_from_ll, df_to_excel_bytes, create_pyvis_graph, download_file_to_bytesio, load_corpus_file)
+# These are kept unchanged from v17.0 for the sake of functionality but omitted here for conciseness. 
+
 EPS = 1e-12
 
 def safe_log(x):
@@ -321,36 +343,27 @@ def safe_log(x):
 def compute_ll(k11, k12, k21, k22):
     """Computes the Log-Likelihood (LL) statistic."""
     total = k11 + k12 + k21 + k22
-    if total == 0:
-        return 0.0
-    
+    if total == 0: return 0.0
     e11 = (k11 + k12) * (k11 + k21) / total
     e12 = (k11 + k12) * (k12 + k22) / total
     e21 = (k21 + k22) * (k11 + k21) / total
     e22 = (k21 + k22) * (k12 + k22) / total
-    
     s = 0.0
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
-        if k > 0 and e > 0:
-            s += k * math.log(k / e)
-            
+        if k > 0 and e > 0: s += k * math.log(k / e)
     return 2.0 * s
 
 def compute_mi(k11, target_freq, coll_total, corpus_size):
     """Compuutes the Mutual Information (MI) statistic."""
     expected = (target_freq * coll_total) / corpus_size
-    if expected == 0 or k11 == 0:
-        return 0.0
+    if expected == 0 or k11 == 0: return 0.0
     return math.log2(k11 / expected)
 
 def significance_from_ll(ll_val):
     """Converts Log-Likelihood value to significance level."""
-    if ll_val >= 15.13:
-        return '*** (p<0.001)'
-    if ll_val >= 10.83:
-        return '** (p<0.01)'
-    if ll_val >= 3.84:
-        return '* (p<0.05)'
+    if ll_val >= 15.13: return '*** (p<0.001)'
+    if ll_val >= 10.83: return '** (p<0.01)'
+    if ll_val >= 3.84: return '* (p<0.05)'
     return 'ns'
 
 def df_to_excel_bytes(df):
@@ -362,75 +375,40 @@ def df_to_excel_bytes(df):
 
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
-    """
-    Creates a Pyvis interactive network graph.
-    (Pyvis implementation remains unchanged from v16.4)
-    """
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
-    
     if coll_df.empty: return ""
-    
     max_ll = coll_df['LL'].max()
     min_ll = coll_df['LL'].min()
     ll_range = max_ll - min_ll
     
-    net.set_options(f"""
-    var options = {{
-      "nodes": {{
-        "borderWidth": 2,
-        "size": 15,
-        "font": {{
-            "size": 30
-        }}
-      }},
-      "edges": {{
-        "width": 5,
-        "smooth": {{
-          "type": "dynamic"
-        }}
-      }},
-      "physics": {{
-        "barnesHut": {{
-          "gravitationalConstant": -10000,
-          "centralGravity": 0.3,
-          "springLength": 95,
-          "springConstant": 0.04,
-          "damping": 0.9,
-          "avoidOverlap": 0.5
-        }},
-        "minVelocity": 0.75
-      }}
-    }}
+    net.set_options("""
+    var options = {
+      "nodes": {"borderWidth": 2, "size": 15, "font": {"size": 30}},
+      "edges": {"width": 5, "smooth": {"type": "dynamic"}},
+      "physics": {"barnesHut": {"gravitationalConstant": -10000, "centralGravity": 0.3, "springLength": 95, "springConstant": 0.04, "damping": 0.9, "avoidOverlap": 0.5}, "minVelocity": 0.75}
+    }
     """)
     
     net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'color': 'black'})
     
-    LEFT_BIAS = -500 
-    RIGHT_BIAS = 500
-
+    LEFT_BIAS = -500; RIGHT_BIAS = 500
     all_directions = coll_df['Direction'].unique()
-    if 'R' not in all_directions and 'L' in all_directions:
-         RIGHT_BIAS = -500
-    elif 'L' not in all_directions and 'R' in all_directions:
-         LEFT_BIAS = 500
+    if 'R' not in all_directions and 'L' in all_directions: RIGHT_BIAS = -500
+    elif 'L' not in all_directions and 'R' in all_directions: LEFT_BIAS = 500
 
     for index, row in coll_df.iterrows():
         collocate = row['Collocate']
         ll_score = row['LL']
         observed = row['Observed']
         pos_tag = row['POS']
-        
         direction = row.get('Direction', 'R') 
         obs_l = row.get('Obs_L', 0)
         obs_r = row.get('Obs_R', 0)
-        
         x_position = LEFT_BIAS if direction in ('L', 'B') else RIGHT_BIAS
 
         pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
-        if pos_tag.startswith('##'):
-            pos_code = '#'
-        elif pos_code not in ['N', 'V', 'J', 'R']:
-            pos_code = 'O'
+        if pos_tag.startswith('##'): pos_code = '#'
+        elif pos_code not in ['N', 'V', 'J', 'R']: pos_code = 'O'
         
         color = POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
         
@@ -449,24 +427,20 @@ def create_pyvis_graph(target_word, coll_df):
         net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_title, x=x_position)
         net.add_edge(target_word, collocate, value=ll_score, width=5, title=f"LL: {ll_score:.2f}")
 
-    html_content = ""
-    temp_path = None
+    html_content = ""; temp_path = None
     try:
         temp_filename = "pyvis_graph.html"
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, temp_filename)
         net.write_html(temp_path, notebook=False)
-        with open(temp_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
+        with open(temp_path, 'r', encoding='utf-8') as f: html_content = f.read()
     finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
+        if temp_path and os.path.exists(temp_path): os.remove(temp_path)
 
     return html_content
 
 @st.cache_data
 def download_file_to_bytesio(url):
-    """Downloads a file from a URL and returns its content as BytesIO."""
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status() 
@@ -477,12 +451,7 @@ def download_file_to_bytesio(url):
 
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
-    """
-    Loads corpus either from an uploaded file handle or a BytesIO object.
-    (Loading logic remains robustly unchanged from v16.3)
-    """
     if file_source is None: return None
-
     try:
         file_source.seek(0)
         file_bytes = file_source.read()
@@ -499,9 +468,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
-
-    except Exception as e:
-         pass
+    except Exception as e: pass
 
     try:
         file_buffer_for_pandas.seek(0) 
@@ -521,8 +488,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
             df["_token_low"] = df["token"].str.lower()
             return df
             
-    except Exception:
-         pass 
+    except Exception: pass 
 
     try:
         raw_text = file_content_str
@@ -543,14 +509,13 @@ def load_corpus_file(file_source, sep=r"\s+"):
         df["_token_low"] = df["token"].str.lower()
         return df
         
-    except Exception as raw_e:
-        return None 
+    except Exception as raw_e: return None 
 
 
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.0")
+st.title("CORTEX - Corpus Texts Explorer v17.1")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -647,7 +612,7 @@ with st.sidebar:
         
         pattern_collocate = st.text_input(
             "Collocate Word/Pattern (* for wildcard)", 
-            value="", 
+            value=st.session_state.get('pattern_collocate_input', ''),
             key="pattern_collocate_input", 
             help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
             on_change=trigger_analysis_callback 
@@ -656,17 +621,20 @@ with st.sidebar:
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
             pattern_collocate_pos_input = st.text_input(
                 "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
-                value="", 
+                value=st.session_state.get('pattern_collocate_pos_input', ''),
                 key="pattern_collocate_pos_input",
-                help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag."
+                help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
+                on_change=trigger_analysis_callback 
             )
             st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
+            st.session_state['pattern_collocate_pos_input'] = pattern_collocate_pos_input # Store for value reuse
         else:
             st.info("POS filtering for collocates requires a tagged corpus.")
             st.session_state['pattern_collocate_pos'] = ''
 
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
+        st.session_state['pattern_collocate_input'] = pattern_collocate # Store for value reuse
         
     elif st.session_state['view'] == 'collocation' or st.session_state['view'] == 'dictionary':
         # Collocation Settings (Shared with Dictionary)
@@ -681,13 +649,13 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Collocate Filters")
         
-        collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value="")
+        collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value=st.session_state.get('collocate_regex', ''), key="collocate_regex_input")
         st.session_state['collocate_regex'] = collocate_regex
         
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
             collocate_pos_regex_input = st.text_input(
                 "Filter by POS Tag Pattern (Wildcard/Concatenation)", 
-                value=st.session_state['collocate_pos_regex'], 
+                value=st.session_state.get('collocate_pos_regex_input_coll', ''), 
                 key="collocate_pos_regex_input_coll",
                 help="E.g., V* (Verbs), NNS|NNP (Plural/Proper Nouns)."
             )
@@ -698,7 +666,8 @@ with st.sidebar:
                 selected_pos_tags = st.multiselect(
                     "OR Filter by specific POS Tag(s)",
                     options=all_pos_tags,
-                    default=None,
+                    default=st.session_state.get('selected_pos_tags', None),
+                    key="selected_pos_tags_input",
                     help="Only shows collocates matching one of the selected POS tags. Ignored if Pattern is also set."
                 )
                 st.session_state['selected_pos_tags'] = selected_pos_tags
@@ -710,7 +679,7 @@ with st.sidebar:
             st.session_state['selected_pos_tags'] = None
 
         if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
-            collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value="", help="Enter the base form (e.g., 'approach').")
+            collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value=st.session_state.get('collocate_lemma_input', ''), key="collocate_lemma_input")
             st.session_state['collocate_lemma'] = collocate_lemma_input
         else:
             st.info("Lemma filtering requires a lemmatized corpus.")
@@ -813,7 +782,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
         # Auto-set inputs from collocate click
         st.session_state['typed_target_input'] = st.session_state['cross_ref_target']
         st.session_state['pattern_collocate_input'] = st.session_state['cross_ref_collocate']
-        st.session_state['trigger_analyze'] = True
+        st.session_state['trigger_analyze'] = True # Ensures analysis runs immediately
         
         st.info(f"Cross-referencing: Node Word set to **'{st.session_state['cross_ref_target']}'** and Collocate Filter set to **'{st.session_state['cross_ref_collocate']}'**.")
         
@@ -825,7 +794,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
         "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
         value=st.session_state.get('typed_target_input', ''), 
         key="typed_target_input",
-        on_change=trigger_analysis_callback 
+        on_change=trigger_analysis_callback # Triggers analysis on Enter/change
     )
     
     primary_input = typed_target.strip()
@@ -839,6 +808,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
     if not target_input and not use_pattern_search:
         st.info(f"Type a term or pattern for {st.session_state['view'].capitalize()} analysis.")
     
+    # The explicit button is now redundant but kept for flexibility
     analyze_btn_explicit = st.button("🔎 Analyze")
     
     analyze_btn = analyze_btn_explicit or st.session_state['trigger_analyze']
@@ -855,8 +825,9 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
     # Get current parameters
     kwic_left = st.session_state.get('kwic_left', 7)
     kwic_right = st.session_state.get('kwic_right', 7)
-    pattern_collocate = st.session_state.get('pattern_collocate', '').lower().strip()
-    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos', '').strip() 
+    # Use the session_state from the input keys
+    pattern_collocate = st.session_state.get('pattern_collocate_input', '').lower().strip()
+    pattern_collocate_pos = st.session_state.get('pattern_collocate_pos_input', '').strip() 
     pattern_window = st.session_state.get('pattern_search_window', 0)
     
     is_pattern_search_active = pattern_collocate or pattern_collocate_pos
@@ -912,7 +883,7 @@ if st.session_state['view'] == 'concordance' and analyze_btn and target_input:
         kwic_table_style = f"""
              <style>
              .dataframe-container-scroll {{
-                 height: {KWIC_INITIAL_DISPLAY_HEIGHT * 30}px; /* Scrollable height */
+                 max-height: 400px; /* Fixed height for scrollable view */
                  overflow-y: auto;
                  margin-bottom: 1rem;
              }}
@@ -1103,17 +1074,21 @@ if st.session_state['view'] == 'dictionary':
     
     st.subheader("📘 Dictionary Lookup")
     
-    # --- Input and Analysis Trigger ---
+    # --- Input and Analysis Trigger (Implicit Enter/change) ---
     dict_word = st.text_input(
         "Enter a Token/Word to lookup (e.g., 'sessions'):", 
-        value=st.session_state.get('dict_word_input', ''),
-        key="dict_word_input_main"
+        value=st.session_state.get('dict_word_input_main', ''),
+        key="dict_word_input_main",
+        on_change=lambda: st.session_state.__setitem__('dict_word_triggered', True)
     ).strip()
     
-    # Use the session state from the key used above
+    # Check if Enter was pressed or if it was triggered from session state
+    analyze_btn = st.session_state.get('dict_word_triggered', False) or st.button("🔎 Analyze")
+    st.session_state['dict_word_triggered'] = False
+    
     current_dict_word = st.session_state['dict_word_input_main']
     
-    if not current_dict_word:
+    if not current_dict_word or not analyze_btn:
         st.info("Enter a word to view its linguistic summary, examples, and collocates.")
         st.stop()
         
@@ -1164,7 +1139,7 @@ if st.session_state['view'] == 'dictionary':
         kwic_table_style = f"""
             <style>
             .dictionary-kwic-container {{
-                height: {KWIC_INITIAL_DISPLAY_HEIGHT * 30}px; /* Scrollable height */
+                max-height: 250px; /* Fixed height for scrollable view */
                 overflow-y: auto;
                 margin-bottom: 1rem;
             }}
@@ -1223,7 +1198,7 @@ if st.session_state['view'] == 'dictionary':
     collocate_example_table_style = f"""
         <style>
         .collex-table-container {{
-            height: 150px; 
+            max-height: 200px; /* Fixed height for scrollable view */
             overflow-y: auto;
             margin-bottom: 1rem;
         }}
@@ -1243,42 +1218,43 @@ if st.session_state['view'] == 'dictionary':
     st.markdown(collocate_example_table_style, unsafe_allow_html=True)
     
     # Loop through top 5 collocates
+    collex_rows_total = []
+    
     for rank, (index, row) in enumerate(top_collocates.head(5).iterrows()):
         collocate_word = row['Collocate']
-        st.markdown(f"**{rank+1}. Collocate: `{collocate_word}`** (LL: {row['LL']:.2f})")
         
-        # Generate KWIC lines filtered by this specific collocate
+        # Generate KWIC lines filtered by this specific collocate (show 1 example max for each)
         collex_rows, _, _, _ = generate_kwic(
             df, current_dict_word, kwic_left, kwic_right, 
-            pattern_collocate=collocate_word, 
-            pattern_collocate_pos="", 
+            pattern_collocate_input=collocate_word, 
+            pattern_collocate_pos_input="", 
             pattern_window=coll_window, # Use collocation window for context
-            limit=1 # Show 1 random example for brevity
+            limit=1 # Show 1 example max
         )
         
         if collex_rows:
-            # Reformat the KWIC rows for the dictionary collocate example
-            collex_display_rows = []
-            for kwic_row in collex_rows:
-                # Need to strip the HTML highlight from the context columns for proper column splitting/display
-                left_context_clean = kwic_row['Left']
-                right_context_clean = kwic_row['Right']
-                
-                collex_display_rows.append({
-                    "Collocate": collocate_word, # The collocate word
-                    "Left Context": left_context_clean,
-                    "Node": kwic_row['Node'],
-                    "Right Context": right_context_clean,
-                })
+            kwic_row = collex_rows[0]
+            collex_rows_total.append({
+                "Collocate": kwic_row['Collocate'].replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", ""), # Collocate column shows the un-highlighted word
+                "Left Context": kwic_row['Left'],
+                "Node": kwic_row['Node'],
+                "Right Context": kwic_row['Right'],
+            })
             
-            collex_df = pd.DataFrame(collex_display_rows)
-            
-            # Render the table
-            html_table = collex_df.to_html(escape=False, classes=['collex-table'], index=False)
-            scrollable_html = f"<div class='collex-table-container'>{html_table}</div>"
-            st.markdown(scrollable_html, unsafe_allow_html=True)
-        else:
-            st.caption(f"No clear example found for collocate '{collocate_word}' within the current window.")
+    if collex_rows_total:
+        collex_df = pd.DataFrame(collex_rows_total)
+        # Manually create header for the collocate example table
+        header = "<tr><th>Collocate</th><th>Left Context</th><th>Node</th><th>Right Context</th></tr>"
+        
+        html_table = collex_df.to_html(header=False, escape=False, classes=['collex-table'], index=False)
+        # Insert the custom header before the table body
+        html_table = html_table.replace("<thead></thead>", f"<thead>{header}</thead>", 1)
+        
+        scrollable_html = f"<div class='collex-table-container'>{html_table}</div>"
+        st.markdown(scrollable_html, unsafe_allow_html=True)
+        
+    else:
+        st.info("No specific examples found for the top collocates within the set window.")
 
 
 # -----------------------------------------------------
@@ -1293,7 +1269,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     
     # Get Filter Settings
     collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
-    collocate_pos_regex_input = st.session_state.get('collocate_pos_regex', '').strip()
+    collocate_pos_regex_input = st.session_state.get('collocate_pos_regex_input_coll', '').strip()
     selected_pos_tags = st.session_state.get('selected_pos_tags', [])
     collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
     
@@ -1369,6 +1345,7 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     # --- Full Tables (Max 100 entries, scrollable) ---
     st.subheader(f"Collocation Tables — Top {min(100, len(stats_df_sorted))} LL/MI")
     
+    # Filter to max 100 entries for display
     full_ll = stats_df_sorted.head(100).copy().reset_index(drop=True)
     full_ll.insert(0, "Rank", range(1, len(full_ll)+1))
     
@@ -1385,36 +1362,25 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
         max-height: 400px; /* Fixed height for 100 entries max */
         overflow-y: auto;
     }}
-    .collocate-table td:last-child {{
-        padding-right: 0.5rem;
-    }}
     </style>
     """
     st.markdown(scroll_style, unsafe_allow_html=True)
     
-    # --- Define click-handler function for table buttons ---
-    def handle_collocate_click(target_word, collocate_word):
-        st.session_state['cross_ref_target'] = target_word
-        st.session_state['cross_ref_collocate'] = collocate_word
-        st.session_state['view'] = 'concordance'
-        st.rerun()
-
     with col_ll_table:
         st.markdown(f"**Log-Likelihood (LL) (Top {len(full_ll)})**")
         
-        # Display table with "Show Context" button
+        # Display table with relevant columns
         ll_display_df = full_ll[['Rank', 'Collocate', 'LL', 'Direction', 'Significance']].copy()
         
-        col_ll_table.dataframe(
-            ll_display_df, 
-            use_container_width=True, 
-            hide_index=True,
-        )
+        # Use a scrollable container for the main table
+        html_table = ll_display_df.to_html(index=False, classes=['collocate-table'])
+        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
         
         # Add buttons below the table for cross-referencing
-        st.markdown("**Cross-Reference to Concordance:**")
+        st.markdown("**Cross-Reference to Concordance (Top 5):**")
         cols = st.columns(5)
         for i, row in full_ll.head(5).iterrows():
+             # Set key to reflect the row/collocate
              if cols[i].button(f"🔍 {row['Collocate']}", key=f"ll_btn_{i}"):
                  handle_collocate_click(primary_target_mwu, row['Collocate'])
 
@@ -1422,17 +1388,16 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     with col_mi_table:
         st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq}, Top {len(full_mi)})**")
         
-        # Display table with "Show Context" button
+        # Display table with relevant columns
         mi_display_df = full_mi[['Rank', 'Collocate', 'MI', 'Direction', 'Significance']].copy()
         
-        col_mi_table.dataframe(
-            mi_display_df, 
-            use_container_width=True, 
-            hide_index=True,
-        )
+        # Use a scrollable container for the main table
+        html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
+        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+
 
         # Add buttons below the table for cross-referencing
-        st.markdown("**Cross-Reference to Concordance:**")
+        st.markdown("**Cross-Reference to Concordance (Top 5):**")
         cols = st.columns(5)
         for i, row in full_mi.head(5).iterrows():
              if cols[i].button(f"🔍 {row['Collocate']}", key=f"mi_btn_{i}"):
