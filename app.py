@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.15 - N-Gram Structural Filters Unlocked & Syntax Fix
+# CORTEX Corpus Explorer v17.16 - N-Gram Relative Frequency
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.15", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.16", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -590,7 +590,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception as raw_e: return None 
 
 # -----------------------------------------------------
-# N-GRAM LOGIC (UPDATED FOR STRUCTURAL FILTERING)
+# N-GRAM LOGIC (UPDATED FOR STRUCTURAL FILTERING & RELATIVE FREQUENCY)
 # -----------------------------------------------------
 @st.cache_data(show_spinner=False)
 def generate_n_grams(df_corpus, n, positional_filters, is_raw_mode, max_display_lines=10000):
@@ -678,8 +678,17 @@ def generate_n_grams(df_corpus, n, positional_filters, is_raw_mode, max_display_
 
     # 4. Format Output
     n_gram_list = []
+    total_tokens_float = float(total_tokens) # Use float for accurate calculation
+    
     for n_gram, freq in n_gram_counts.most_common(max_display_lines):
-        n_gram_list.append({'N-Gram': n_gram, 'Frequency': freq})
+        # Calculate Relative Frequency per million tokens
+        rel_freq = (freq / total_tokens_float) * 1_000_000
+        
+        n_gram_list.append({
+            'N-Gram': n_gram, 
+            'Frequency': freq,
+            'Relative Frequency (per mil)': round(rel_freq, 4) # Round to 4 decimal places
+        })
 
     df_n_gram = pd.DataFrame(n_gram_list)
     df_n_gram.insert(0, 'Rank', range(1, len(df_n_gram) + 1))
@@ -931,7 +940,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.15")
+st.title("CORTEX - Corpus Texts Explorer v17.16")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -1139,11 +1148,9 @@ with st.sidebar:
                     )
                     st.session_state['selected_pos_tags'] = selected_pos_tags
                 else:
+                    st.info("POS filtering requires a tagged corpus.")
+                    st.session_state['collocate_pos_regex'] = ''
                     st.session_state['selected_pos_tags'] = None
-            else:
-                st.info("POS filtering requires a tagged corpus.")
-                st.session_state['collocate_pos_regex'] = ''
-                st.session_state['selected_pos_tags'] = None
 
             if df_sidebar is not None and 'lemma' in df_sidebar.columns and not is_raw_mode_sidebar:
                 collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value=st.session_state.get('collocate_lemma_input', ''), key="collocate_lemma_input_coll")
