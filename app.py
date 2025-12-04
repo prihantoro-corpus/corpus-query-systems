@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.1 - Fixes & Implicit Analyze
+# CORTEX Corpus Explorer v17.2 - Final Fixes & Dictionary Expansion
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.1", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.2", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -52,8 +52,15 @@ if 'cross_ref_target' not in st.session_state:
     st.session_state['cross_ref_target'] = ''
 if 'cross_ref_collocate' not in st.session_state:
     st.session_state['cross_ref_collocate'] = ''
-if 'dict_word_input_main' not in st.session_state: # Use the key from the dictionary input
+if 'dict_word_input_main' not in st.session_state: 
     st.session_state['dict_word_input_main'] = ''
+if 'collocate_regex_input' not in st.session_state: # Explicitly initialized filter inputs
+    st.session_state['collocate_regex_input'] = ''
+if 'pattern_collocate_input' not in st.session_state:
+    st.session_state['pattern_collocate_input'] = ''
+if 'pattern_collocate_pos_input' not in st.session_state:
+     st.session_state['pattern_collocate_pos_input'] = ''
+
 
 # ---------------------------
 # Built-in Corpus Configuration
@@ -96,10 +103,15 @@ def reset_analysis():
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
-    # Only clear LLM result when the input changes
+    # This is used by the primary text input field in Concordance/Collocation
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
     st.session_state['cross_ref_target'] = '' # Clear cross-ref if manually triggering
+
+# --- Dictionary Input Callback ---
+def trigger_dict_analysis_callback():
+    # This is used by the Dictionary text input field
+    st.session_state['dict_word_triggered'] = True
 
 # --- Cross-Reference Handler ---
 def handle_collocate_click(target_word, collocate_word):
@@ -213,7 +225,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     if is_pattern_search_active and pattern_window > 0:
         final_positions = []
         collocate_word_regex = re.compile(re.escape(pattern_collocate_input).replace(r'\*', '.*')) if pattern_collocate_input else None
-        collocate_pos_regex = None # IMPORTANT FIX: Initialize scope locally
+        collocate_pos_regex = None 
         
         if pattern_collocate_pos_input and not is_raw_mode:
             pos_patterns = [p.strip() for p in pattern_collocate_pos_input.split('|') if p.strip()]
@@ -515,7 +527,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.1")
+st.title("CORTEX - Corpus Texts Explorer v17.2")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -612,6 +624,7 @@ with st.sidebar:
         
         pattern_collocate = st.text_input(
             "Collocate Word/Pattern (* for wildcard)", 
+            # FIX: Use .get() and update with the key value
             value=st.session_state.get('pattern_collocate_input', ''),
             key="pattern_collocate_input", 
             help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
@@ -621,20 +634,21 @@ with st.sidebar:
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
             pattern_collocate_pos_input = st.text_input(
                 "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
+                # FIX: Use .get() and update with the key value
                 value=st.session_state.get('pattern_collocate_pos_input', ''),
                 key="pattern_collocate_pos_input",
                 help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
                 on_change=trigger_analysis_callback 
             )
             st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
-            st.session_state['pattern_collocate_pos_input'] = pattern_collocate_pos_input # Store for value reuse
+            # st.session_state['pattern_collocate_pos_input'] = pattern_collocate_pos_input # Not needed if reading directly from key
         else:
             st.info("POS filtering for collocates requires a tagged corpus.")
             st.session_state['pattern_collocate_pos'] = ''
 
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
-        st.session_state['pattern_collocate_input'] = pattern_collocate # Store for value reuse
+        # st.session_state['pattern_collocate_input'] = pattern_collocate # Not needed if reading directly from key
         
     elif st.session_state['view'] == 'collocation' or st.session_state['view'] == 'dictionary':
         # Collocation Settings (Shared with Dictionary)
@@ -649,7 +663,7 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Collocate Filters")
         
-        collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value=st.session_state.get('collocate_regex', ''), key="collocate_regex_input")
+        collocate_regex = st.text_input("Filter by Word/Regex (* for wildcard)", value=st.session_state.get('collocate_regex_input', ''), key="collocate_regex_input")
         st.session_state['collocate_regex'] = collocate_regex
         
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
@@ -721,7 +735,9 @@ unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
 freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
 if is_raw_mode:
     freq_df_filtered['pos'] = '##'
-freq_df = freq_df_filtered.groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+# FIX: Filter freq_df for non-empty tokens before grouping
+freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+
 
 if is_raw_mode:
     app_mode = f"Analyzing Corpus: {corpus_name} (RAW/LINEAR MODE)"
@@ -745,6 +761,7 @@ if st.session_state['view'] == 'overview':
         st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
+        # FIX: Ensure freq_df is not empty before creating word cloud
         if not freq_df.empty:
             wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
             
@@ -761,10 +778,14 @@ if st.session_state['view'] == 'overview':
 
     with col2:
         st.subheader("Top frequency")
-        freq_head = freq_df.head(10).copy()
-        freq_head.insert(0,"No", range(1, len(freq_head)+1))
-        st.dataframe(freq_head, use_container_width=True, hide_index=True) 
-        st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        # FIX: Ensure freq_df is not empty before slicing
+        if not freq_df.empty:
+            freq_head = freq_df.head(10).copy()
+            freq_head.insert(0,"No", range(1, len(freq_head)+1))
+            st.dataframe(freq_head, use_container_width=True, hide_index=True) 
+            st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        else:
+             st.info("Frequency data not available.")
 
     st.markdown("---")
     
@@ -802,7 +823,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
     
     use_pattern_search = False
     if st.session_state['view'] == 'concordance':
-        if primary_input and (st.session_state.get('pattern_collocate', '').strip() or st.session_state.get('pattern_collocate_pos', '').strip()):
+        if primary_input and (st.session_state.get('pattern_collocate_input', '').strip() or st.session_state.get('pattern_collocate_pos_input', '').strip()):
             use_pattern_search = True
 
     if not target_input and not use_pattern_search:
@@ -978,6 +999,10 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 
     # --- COLLOCATION COUNTING ---
     collocate_directional_counts = Counter() 
+    
+    # FIX: Define PUNCTUATION locally for filtering
+    PUNCTUATION_COLLOCATES = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
+    
     for i in primary_target_positions:
         start_index = max(0, i - coll_window)
         end_index = min(total_tokens, i + primary_target_len + coll_window) 
@@ -986,6 +1011,11 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
             if i <= j < i + primary_target_len: continue
             
             w = tokens_lower[j]
+            
+            # FIX: Filter out punctuation collocates here
+            if w in PUNCTUATION_COLLOCATES or w.isdigit():
+                 continue
+                 
             p = df_corpus["pos"].iloc[j]
             l = df_corpus["lemma"].iloc[j].lower() if "lemma" in df_corpus.columns else "##"
             direction = 'L' if j < i else 'R'
@@ -1079,7 +1109,7 @@ if st.session_state['view'] == 'dictionary':
         "Enter a Token/Word to lookup (e.g., 'sessions'):", 
         value=st.session_state.get('dict_word_input_main', ''),
         key="dict_word_input_main",
-        on_change=lambda: st.session_state.__setitem__('dict_word_triggered', True)
+        on_change=trigger_dict_analysis_callback # Triggers analysis on Enter/change
     ).strip()
     
     # Check if Enter was pressed or if it was triggered from session state
@@ -1169,36 +1199,40 @@ if st.session_state['view'] == 'dictionary':
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
     max_collocates = st.session_state.get('max_collocates', 20)
     
+    # Collocation filter settings must be read from session state keys
+    collocate_regex = st.session_state.get('collocate_regex_input', '').lower().strip()
+    collocate_pos_regex_input = st.session_state.get('collocate_pos_regex_input_coll', '').strip()
+    selected_pos_tags = st.session_state.get('selected_pos_tags_input', [])
+    collocate_lemma = st.session_state.get('collocate_lemma_input', '').lower().strip()
+    
     with st.spinner(f"Running collocation analysis (window ±{coll_window})..."):
         stats_df_sorted, freq, primary_target_mwu = generate_collocation_results(
             df, current_dict_word, coll_window, mi_min_freq, max_collocates, is_raw_mode,
-            st.session_state.get('collocate_regex', ''), 
-            st.session_state.get('collocate_pos_regex', ''), 
-            st.session_state.get('selected_pos_tags'), 
-            st.session_state.get('collocate_lemma', '')
+            collocate_regex, collocate_pos_regex_input, selected_pos_tags, collocate_lemma
         )
     
     if stats_df_sorted.empty:
         st.warning("No collocates found matching the criteria.")
         st.stop()
         
-    top_collocates = stats_df_sorted.head(max_collocates)
+    # Get top 20 collocates for display/examples
+    top_collocates = stats_df_sorted.head(20)
     
     # 3a. Top Collocates List
     collocate_list = ", ".join(top_collocates['Collocate'].tolist())
     st.markdown(f"**Top {len(top_collocates)} Collocates (LL-ranked):**")
     st.text_area("Collocate List", collocate_list, height=100)
     
-    # 3b. Collocate Examples (Top 5 Collocates)
+    # 3b. Collocate Examples (Top 20 Collocates)
     st.markdown("---")
-    st.subheader("Collocate Examples (Top 5 LL Collocates)")
+    st.subheader(f"Collocate Examples (Top {len(top_collocates)} LL Collocates)")
     
     
     # Custom KWIC table style for 4 columns (Collocate, Left, Node, Right)
     collocate_example_table_style = f"""
         <style>
         .collex-table-container {{
-            max-height: 200px; /* Fixed height for scrollable view */
+            max-height: 400px; /* Fixed height for scrollable view */
             overflow-y: auto;
             margin-bottom: 1rem;
         }}
@@ -1217,30 +1251,31 @@ if st.session_state['view'] == 'dictionary':
     """
     st.markdown(collocate_example_table_style, unsafe_allow_html=True)
     
-    # Loop through top 5 collocates
+    # Loop through top 20 collocates
     collex_rows_total = []
     
-    for rank, (index, row) in enumerate(top_collocates.head(5).iterrows()):
-        collocate_word = row['Collocate']
-        
-        # Generate KWIC lines filtered by this specific collocate (show 1 example max for each)
-        collex_rows, _, _, _ = generate_kwic(
-            df, current_dict_word, kwic_left, kwic_right, 
-            pattern_collocate_input=collocate_word, 
-            pattern_collocate_pos_input="", 
-            pattern_window=coll_window, # Use collocation window for context
-            limit=1 # Show 1 example max
-        )
-        
-        if collex_rows:
-            kwic_row = collex_rows[0]
-            collex_rows_total.append({
-                "Collocate": kwic_row['Collocate'].replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", ""), # Collocate column shows the un-highlighted word
-                "Left Context": kwic_row['Left'],
-                "Node": kwic_row['Node'],
-                "Right Context": kwic_row['Right'],
-            })
+    with st.spinner(f"Generating concordance examples for top {len(top_collocates)} collocates..."):
+        for rank, (index, row) in enumerate(top_collocates.iterrows()):
+            collocate_word = row['Collocate']
             
+            # Generate KWIC lines filtered by this specific collocate (show 1 example max for each)
+            collex_rows, _, _, _ = generate_kwic(
+                df, current_dict_word, kwic_left, kwic_right, 
+                pattern_collocate_input=collocate_word, 
+                pattern_collocate_pos_input="", 
+                pattern_window=coll_window, # Use collocation window for context
+                limit=1 # Show 1 example max
+            )
+            
+            if collex_rows:
+                kwic_row = collex_rows[0]
+                collex_rows_total.append({
+                    "Collocate": f"{rank+1}. {collocate_word}", # Collocate column shows the rank and word
+                    "Left Context": kwic_row['Left'],
+                    "Node": kwic_row['Node'],
+                    "Right Context": kwic_row['Right'],
+                })
+                
     if collex_rows_total:
         collex_df = pd.DataFrame(collex_rows_total)
         # Manually create header for the collocate example table
@@ -1268,10 +1303,10 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
     max_collocates = st.session_state.get('max_collocates', 20) 
     
     # Get Filter Settings
-    collocate_regex = st.session_state.get('collocate_regex', '').lower().strip()
+    collocate_regex = st.session_state.get('collocate_regex_input', '').lower().strip()
     collocate_pos_regex_input = st.session_state.get('collocate_pos_regex_input_coll', '').strip()
-    selected_pos_tags = st.session_state.get('selected_pos_tags', [])
-    collocate_lemma = st.session_state.get('collocate_lemma', '').lower().strip()
+    selected_pos_tags = st.session_state.get('selected_pos_tags_input', [])
+    collocate_lemma = st.session_state.get('collocate_lemma_input', '').lower().strip()
     
     raw_target_input = target_input
     
