@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.2 - Final Fixes & Dictionary Expansion
+# CORTEX Corpus Explorer v17.3 - Final Flow & Overview Fixes
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,14 +11,14 @@ import os
 import re       
 import requests 
 import matplotlib.pyplot as plt 
-from wordcloud import WordCloud 
+from wordcloud import WordCloud # WordCloud is imported
 from pyvis.network import Network
 import streamlit.components.v1 as components 
 
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.2", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.3", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -119,7 +119,7 @@ def handle_collocate_click(target_word, collocate_word):
     st.session_state['cross_ref_target'] = target_word
     st.session_state['cross_ref_collocate'] = collocate_word
     st.session_state['view'] = 'concordance'
-    st.session_state['trigger_analyze'] = True # Force re-run of the concordance module
+    st.session_state['trigger_analyze'] = True # IMPORTANT FIX: Force analysis run
     st.rerun()
 
 # --- LLM PLACEHOLDER ---
@@ -523,11 +523,54 @@ def load_corpus_file(file_source, sep=r"\s+"):
         
     except Exception as raw_e: return None 
 
+# --- Word Cloud Function (Restored) ---
+@st.cache_data
+def create_word_cloud(freq_data, is_tagged_mode):
+    """Generates a word cloud from frequency data with conditional POS coloring."""
+    
+    # Filter out multi-word units for visualization stability
+    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
+    if single_word_freq_data.empty:
+        return None
+
+    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
+    word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
+    
+    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
+    
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color='black',
+        colormap='viridis', 
+        stopwords=stopwords,
+        min_font_size=10
+    )
+    
+    wordcloud = wc.generate_from_frequencies(word_freq_dict)
+
+    if is_tagged_mode:
+        def final_color_func(word, *args, **kwargs):
+            pos_tag = word_to_pos.get(word, 'O')
+            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
+            if pos_code not in POS_COLOR_MAP:
+                pos_code = 'O'
+            return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
+
+        wordcloud = wordcloud.recolor(color_func=final_color_func)
+        
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    
+    return fig
+
 
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.2")
+st.title("CORTEX - Corpus Texts Explorer v17.3")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -634,21 +677,19 @@ with st.sidebar:
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
             pattern_collocate_pos_input = st.text_input(
                 "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
-                # FIX: Use .get() and update with the key value
+                # FIX: Use .get() for safe initial access
                 value=st.session_state.get('pattern_collocate_pos_input', ''),
                 key="pattern_collocate_pos_input",
                 help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
                 on_change=trigger_analysis_callback 
             )
             st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
-            # st.session_state['pattern_collocate_pos_input'] = pattern_collocate_pos_input # Not needed if reading directly from key
         else:
             st.info("POS filtering for collocates requires a tagged corpus.")
             st.session_state['pattern_collocate_pos'] = ''
 
         st.session_state['pattern_search_window'] = pattern_search_window
         st.session_state['pattern_collocate'] = pattern_collocate
-        # st.session_state['pattern_collocate_input'] = pattern_collocate # Not needed if reading directly from key
         
     elif st.session_state['view'] == 'collocation' or st.session_state['view'] == 'dictionary':
         # Collocation Settings (Shared with Dictionary)
@@ -680,7 +721,7 @@ with st.sidebar:
                 selected_pos_tags = st.multiselect(
                     "OR Filter by specific POS Tag(s)",
                     options=all_pos_tags,
-                    default=st.session_state.get('selected_pos_tags', None),
+                    default=st.session_state.get('selected_pos_tags_input', None),
                     key="selected_pos_tags_input",
                     help="Only shows collocates matching one of the selected POS tags. Ignored if Pattern is also set."
                 )
@@ -811,6 +852,7 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
         st.session_state['cross_ref_target'] = ''
         st.session_state['cross_ref_collocate'] = ''
 
+    # The input field that controls analysis for Concordance/Collocation
     typed_target = st.text_input(
         "Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*)", 
         value=st.session_state.get('typed_target_input', ''), 
