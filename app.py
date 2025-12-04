@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.13 - Conditional Sidebar Settings
+# CORTEX Corpus Explorer v17.13 - Conditional Sidebar & Dictionary Forms
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1244,7 +1244,7 @@ if st.session_state['view'] == 'dictionary':
     # --- 1. Consolidated Word Forms by Lemma ---
     
     if is_raw_mode or 'lemma' not in df.columns:
-        st.warning("Lemma and POS analysis requires a tagged and lemmatized corpus.")
+        st.warning("Lemma and POS analysis is disabled because the corpus is not tagged/lemmatized.")
         forms_list = pd.DataFrame()
         unique_lemma_list = []
     else:
@@ -1252,16 +1252,16 @@ if st.session_state['view'] == 'dictionary':
 
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
-    if forms_list.empty:
+    if forms_list.empty and not is_raw_mode: # If not raw mode, failure to find forms is a significant issue
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
         st.stop()
-    
-    # Display the consolidated forms table
-    st.dataframe(
-        forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}),
-        hide_index=True,
-        use_container_width=True
-    )
+    elif not forms_list.empty:
+        # Display the consolidated forms table
+        st.dataframe(
+            forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}),
+            hide_index=True,
+            use_container_width=True
+        )
     
     # --- 2. Related Forms (by Regex) ---
     st.markdown("---")
@@ -1336,7 +1336,7 @@ if st.session_state['view'] == 'dictionary':
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
     max_collocates = st.session_state.get('max_collocates', 20)
     
-    # Collocation filter settings must be read from session state keys
+    # Collocation filter settings must be read from session state keys (even if empty in raw mode)
     collocate_regex = st.session_state.get('collocate_regex_input', '').lower().strip()
     collocate_pos_regex_input = st.session_state.get('collocate_pos_regex_input_coll', '').strip()
     selected_pos_tags = st.session_state.get('selected_pos_tags_input', [])
