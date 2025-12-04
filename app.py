@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.11 - Automatic Dictionary Analysis & Consolidated Word Forms
+# CORTEX Corpus Explorer v17.12 - Regex Forms Fix & Automatic Dictionary
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.11", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.12", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -117,8 +117,8 @@ def get_all_lemma_forms_details(df_corpus, target_word):
     # Also return the unique POS and Lemma lists for the summary header (re-using old logic)
     return forms_list, all_forms_df['pos'].unique(), valid_lemmas
 
-# --- Regex Forms Helper ---
-@st.cache_data
+# --- Regex Forms Helper (Caching Removed for Bug Fix) ---
+# Removed @st.cache_data to ensure this runs and updates every time the input word changes.
 def get_related_forms_by_regex(df_corpus, target_word):
     # Construct a broad regex for related forms: .*<target_word>.* (case insensitive)
     # Escape the target_word in case it contains regex special characters
@@ -606,7 +606,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
         /* Left Context Column */
         .collex-table-inner td:nth-child(2) {{ text-align: right; color: white; width: 40%; }}
         /* Node Column */
-        .collex-table-inner td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; width: 10%; }} 
+        .collex-table-inner td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }} 
         /* Right Context Column */
         .collex-table-inner td:nth-child(4) {{ text-align: left; color: white; width: 35%; }}
         </style>
@@ -657,7 +657,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.11")
+st.title("CORTEX - Corpus Texts Explorer v17.12")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -1223,7 +1223,7 @@ if st.session_state['view'] == 'dictionary':
         "Enter a Token/Word to lookup (e.g., 'sessions'):", 
         value=st.session_state.get('dict_word_input_main', ''),
         key="dict_word_input_main",
-        # Note: Changing this input triggers a rerun automatically, enabling automatic analysis below.
+        # Reruns automatically on change, triggering analysis below.
     ).strip()
     
     if not current_dict_word:
@@ -1232,7 +1232,7 @@ if st.session_state['view'] == 'dictionary':
         st.button("🔎 Manual Re-Analyze", key="manual_dict_analyze_disabled", disabled=True)
         st.stop()
     
-    # Manual button for re-analysis, though the input change handles most cases
+    # Manual button for re-analysis
     st.button("🔎 Manual Re-Analyze", key="manual_dict_analyze")
         
     st.markdown("---")
@@ -1244,6 +1244,7 @@ if st.session_state['view'] == 'dictionary':
         forms_list = pd.DataFrame()
         unique_lemma_list = []
     else:
+        # This function is cached, but its inputs change, so it reruns correctly.
         forms_list, unique_pos_list, unique_lemma_list = get_all_lemma_forms_details(df, current_dict_word)
 
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
@@ -1263,11 +1264,18 @@ if st.session_state['view'] == 'dictionary':
     st.markdown("---")
     st.subheader("Related Forms (by Regex)")
     
+    # No caching on this call, so it should run fresh every time.
     related_regex_forms = get_related_forms_by_regex(df, current_dict_word)
     
     if related_regex_forms:
         st.markdown(f"**Tokens matching the pattern `*.{current_dict_word}.*` (case insensitive):**")
-        st.text_area("Related Forms (by regex)", ", ".join(related_regex_forms), height=100, key="regex_forms_output")
+        # Use a dynamic key based on the word to ensure the widget itself is updated.
+        st.text_area(
+            "Related Forms (by regex)", 
+            ", ".join(related_regex_forms), 
+            height=100, 
+            key=f"regex_forms_output_{current_dict_word}" 
+        )
     else:
         st.info(f"No related tokens found matching the regex pattern.")
         
