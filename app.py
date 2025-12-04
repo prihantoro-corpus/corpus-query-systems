@@ -23,7 +23,7 @@ st.set_page_config(page_title="CORTEX - Corpus Explorer v17.9", layout="wide")
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
 KWIC_INITIAL_DISPLAY_HEIGHT = 10 
-KWIC_COLLOC_DISPLAY_LIMIT = 100 # UPDATED: New limit for KWIC examples below collocation tables
+KWIC_COLLOC_DISPLAY_LIMIT = 30 # UPDATED: New limit for KWIC examples below collocation tables
 
 # ---------------------------
 # Initializing Session State
@@ -1482,3 +1482,4 @@ if st.session_state['view'] == 'collocation' and analyze_btn and target_input:
 
 
 st.caption("Tip: This app handles both pre-tagged vertical corpora and raw linear text.")
+
