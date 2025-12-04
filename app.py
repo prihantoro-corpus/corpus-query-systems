@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.5 - Guaranteed View Switch
+# CORTEX Corpus Explorer v17.6 - Guaranteed Manual Cross-Reference
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.5", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.6", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -47,11 +47,9 @@ if 'collocate_lemma' not in st.session_state:
     st.session_state['collocate_lemma'] = ''
 if 'llm_interpretation_result' not in st.session_state:
     st.session_state['llm_interpretation_result'] = None
-# --- NEW: Cross-referencing State ---
-if 'cross_ref_target' not in st.session_state:
-    st.session_state['cross_ref_target'] = ''
-if 'cross_ref_collocate' not in st.session_state:
-    st.session_state['cross_ref_collocate'] = ''
+# --- NEW: Cross-referencing State (Used for message flag only) ---
+if 'show_cross_ref_message' not in st.session_state:
+    st.session_state['show_cross_ref_message'] = False
 if 'dict_word_input_main' not in st.session_state: 
     st.session_state['dict_word_input_main'] = ''
 if 'collocate_regex_input' not in st.session_state: 
@@ -60,6 +58,8 @@ if 'pattern_collocate_input' not in st.session_state:
     st.session_state['pattern_collocate_input'] = ''
 if 'pattern_collocate_pos_input' not in st.session_state:
      st.session_state['pattern_collocate_pos_input'] = ''
+if 'typed_target_input' not in st.session_state:
+     st.session_state['typed_target_input'] = ''
 
 
 # ---------------------------
@@ -86,9 +86,7 @@ def set_view(view_name):
     # Clear LLM result and cross-reference state on navigation change
     st.session_state['view'] = view_name
     st.session_state['llm_interpretation_result'] = None
-    if view_name != 'concordance':
-        st.session_state['cross_ref_target'] = ''
-        st.session_state['cross_ref_collocate'] = ''
+    st.session_state['show_cross_ref_message'] = False # Clear cross-ref flag
     
 def reset_analysis():
     st.cache_data.clear()
@@ -98,15 +96,13 @@ def reset_analysis():
     st.session_state['trigger_analyze'] = False
     st.session_state['initial_load_complete'] = False
     st.session_state['llm_interpretation_result'] = None
-    st.session_state['cross_ref_target'] = ''
-    st.session_state['cross_ref_collocate'] = ''
+    st.session_state['show_cross_ref_message'] = False
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
     # This is used by the primary text input field in Concordance/Collocation
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
-    st.session_state['cross_ref_target'] = '' # Clear cross-ref if manually triggering
 
 # --- Dictionary Input Callback ---
 def trigger_dict_analysis_callback():
@@ -115,15 +111,14 @@ def trigger_dict_analysis_callback():
 
 # --- Cross-Reference Handler (MANUAL FLOW) ---
 def handle_collocate_click(target_word, collocate_word):
-    # 1. Set the exact keys used by the text inputs
+    # 1. Set the explicit input widget values. These are sticky.
     st.session_state['typed_target_input'] = target_word
     st.session_state['pattern_collocate_input'] = collocate_word
     
-    # 2. Set the cross-ref state to trigger the info message in the next run
-    st.session_state['cross_ref_target'] = target_word
-    st.session_state['cross_ref_collocate'] = collocate_word
+    # 2. Set the temporary flag to show the pre-population message.
+    st.session_state['show_cross_ref_message'] = True
     
-    # 3. Clear the explicit analysis flag, ensuring NO auto-analysis runs.
+    # 3. Clear the general auto-analyze flag.
     st.session_state['trigger_analyze'] = False
     
     # 4. Switch the view
@@ -266,7 +261,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 
     total_matches = len(final_positions)
     if total_matches == 0:
-        return ([], 0, raw_target_input, literal_freq)
+        return ([], 0, raw_target_input, 0)
 
     # --- Sample Positions ---
     if random_sample:
@@ -580,7 +575,7 @@ def create_word_cloud(freq_data, is_tagged_mode):
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.5")
+st.title("CORTEX - Corpus Texts Explorer v17.6")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**.")
 
 # ---------------------------
@@ -677,7 +672,6 @@ with st.sidebar:
         
         pattern_collocate = st.text_input(
             "Collocate Word/Pattern (* for wildcard)", 
-            # FIX: Use .get() for safe initial access
             value=st.session_state.get('pattern_collocate_input', ''),
             key="pattern_collocate_input", 
             help="The specific word or pattern required to be in the context window (e.g., 'approach' or '*ly'). Press Enter/Click Away to search.",
@@ -687,7 +681,6 @@ with st.sidebar:
         if df_sidebar is not None and 'pos' in df_sidebar.columns and not is_raw_mode_sidebar:
             pattern_collocate_pos_input = st.text_input(
                 "Collocate POS Tag Pattern (Wildcard/Concatenation)", 
-                # FIX: Use .get() for safe initial access
                 value=st.session_state.get('pattern_collocate_pos_input', ''),
                 key="pattern_collocate_pos_input",
                 help="E.g., V* (Verbs), *G (Gerunds), NNS|NNP (Plural/Proper Nouns). Filters collocates by POS tag.",
@@ -850,13 +843,12 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
     st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
     
     # --- CROSS-REFERENCE LOGIC (FOR INFO MESSAGE DISPLAY ONLY) ---
-    if st.session_state['view'] == 'concordance' and st.session_state['cross_ref_target']:
+    if st.session_state['view'] == 'concordance' and st.session_state.get('show_cross_ref_message'):
         # This message shows after a click from Collocation
-        st.info(f"Cross-reference loaded: Node Word: **'{st.session_state['cross_ref_target']}'**, Collocate Filter: **'{st.session_state['pattern_collocate_input']}'**. Click **'🔎 Analyze'** below to run the search.")
+        st.info(f"Cross-reference loaded: Node Word: **'{st.session_state['typed_target_input']}'**, Collocate Filter: **'{st.session_state['pattern_collocate_input']}'**. Click **'🔎 Analyze'** below to run the search.")
         
-        # Clear the cross-ref state so it doesn't trigger again on subsequent manual re-runs
-        st.session_state['cross_ref_target'] = ''
-        st.session_state['cross_ref_collocate'] = ''
+        # Clear the flag immediately after displaying the message.
+        st.session_state['show_cross_ref_message'] = False
 
     # The input field that controls analysis for Concordance/Collocation
     typed_target = st.text_input(
