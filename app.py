@@ -100,6 +100,10 @@ POS_COLOR_MAP = {
 
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
 
+# --- GLOBAL CORPUS VARIABLES (FIX for NameError: initialized to None) ---
+df = None
+df_sidebar = None
+
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
     st.session_state['view'] = view_name
@@ -1168,6 +1172,9 @@ with st.sidebar:
 # ---------------------------
 @st.cache_data
 def get_main_corpus_df(corpus_source, is_parallel_load, parallel_df_source_tokens):
+    # Use the globally initialized df and df_sidebar
+    global df, df_sidebar 
+    
     if is_parallel_load and parallel_df_source_tokens is not None:
         return parallel_df_source_tokens # Use the tokenized source from the parallel file
     
@@ -1183,11 +1190,13 @@ def get_main_corpus_df(corpus_source, is_parallel_load, parallel_df_source_token
 # --- Handle Parallel Corpus Load (NEW) ---
 uploaded_parallel_file_obj = st.session_state.get('parallel_file_upload_ui')
 
+is_parallel_mode = False
+df_source_tokens = None # Ensure this is defined for the loader
+
 # Ensure session state is reset if no parallel file is present in the current run
 if uploaded_parallel_file_obj is None:
     st.session_state['sentence_map'] = {}
     st.session_state['parallel_corpus_df'] = None
-    is_parallel_mode = False
 else:
     # Load and process parallel data
     with st.spinner("Processing parallel corpus..."):
