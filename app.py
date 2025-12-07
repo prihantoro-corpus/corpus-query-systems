@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.17 - XML ID Attribute Fix
+# CORTEX Corpus Explorer v17.18 - XML Structure Moved to Overview
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.17 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.18 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -84,6 +84,9 @@ if 'target_sent_map' not in st.session_state:
 # --- Monolingual XML state ---
 if 'monolingual_xml_file_upload' not in st.session_state:
     st.session_state['monolingual_xml_file_upload'] = None
+# --- XML Structure Cache ---
+if 'xml_structure_data' not in st.session_state:
+     st.session_state['xml_structure_data'] = None
 
 
 # ---------------------------
@@ -128,6 +131,7 @@ def reset_analysis():
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
+    st.session_state['xml_structure_data'] = None # Clear structure data
     
     # --- Force a complete script rerun directly inside the callback ---
     st.rerun()
@@ -685,12 +689,16 @@ def extract_xml_structure(file_source, max_values=20):
     if file_source is None:
         return None
     
+    # Must clone the file object before parsing to avoid modifying the original stream 
+    file_source.seek(0)
+    file_copy = BytesIO(file_source.read())
+
     try:
-        file_source.seek(0)
-        tree = ET.parse(file_source)
+        file_copy.seek(0)
+        tree = ET.parse(file_copy)
         root = tree.getroot()
     except Exception as e:
-        # Note: We display this error in the UI only if the user explicitly opens this tool
+        # Silently fail structure extraction if the file isn't well-formed XML
         return None
 
     # Structure: {tag_name: {attr_name: set_of_values, ...}, ...}
@@ -717,6 +725,43 @@ def extract_xml_structure(file_source, max_values=20):
     process_element(root)
     
     return structure
+
+# Helper to format structure data into a presentable DataFrame for Overview
+def format_structure_data_for_display(structure_data, file_label="Corpus"):
+    if not structure_data:
+        return None
+
+    table_data = []
+    
+    header = ["Tag", "Attribute"] + [f"Value {i+1}" for i in range(5)] # Limit to top 5 for brevity
+    
+    # Iterate through tags to build rows
+    for tag in sorted(structure_data.keys()):
+        tag_data = structure_data[tag]
+        
+        # Get unique attributes and sort them
+        sorted_tag_attributes = sorted(tag_data.keys())
+
+        for attr_idx, attr in enumerate(sorted_tag_attributes):
+            value_list = sorted(list(tag_data.get(attr, set()))) 
+            
+            # Only show Tag name on the first attribute row
+            tag_cell = tag if attr_idx == 0 else ""
+            
+            row = [tag_cell, attr] 
+            
+            # Add sampled values (up to 5)
+            row.extend(value_list[:5])
+            
+            # Pad with empty strings if fewer than 5 values
+            row.extend([""] * (5 - len(value_list))) 
+                
+            table_data.append(row)
+
+    # Convert to DataFrame
+    structure_df_final = pd.DataFrame(table_data, columns=header)
+    return structure_df_final.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[:, ['Tag', 'Attribute']])
+
 
 # Core function to parse XML and extract tokens (used by both monolingual and parallel loaders)
 def parse_xml_content_to_df(file_source):
@@ -747,6 +792,7 @@ def parse_xml_content_to_df(file_source):
             lang_code = lang_code.upper()
             
     except Exception as e:
+        # Critical failure: XML is not well-formed
         st.error(f"Error reading or parsing XML file {file_source.name}: {e}")
         return None
 
@@ -758,7 +804,6 @@ def parse_xml_content_to_df(file_source):
     if not sent_tags: # Fallback to looking at direct children if <sent> is missing (e.g., if the user uses <p>)
         sent_tags = list(root)
     
-    # Check if we successfully found any tags that could represent a sentence/paragraph
     if not sent_tags:
         # Try to process raw content in root if present (as a fallback for very simple XML)
         if root.text and root.text.strip():
@@ -778,7 +823,7 @@ def parse_xml_content_to_df(file_source):
 
     for sent_elem in sent_tags:
         
-        # --- CRITICAL FIX: Prioritize 'n' for parallel/legacy, then fallback to 'id' for modern XML ---
+        # --- ID Extraction: Prioritize 'n' > 'id' > Sequential Counter ---
         sent_id_str = sent_elem.get('n') or sent_elem.get('id')
         
         sent_id = None
@@ -789,8 +834,6 @@ def parse_xml_content_to_df(file_source):
                 sent_id = int(sent_id_str)
             except ValueError:
                 # If the ID is a string (e.g., "s1.2") or simply non-numeric, use sequential
-                # IMPORTANT: Keep the warning for debugging parallel corpus issues later.
-                # st.warning(f"Non-integer ID found ({sent_id_str}). Using sequential ID instead.") 
                 sequential_id_counter += 1
                 sent_id = sequential_id_counter
         else:
@@ -799,7 +842,7 @@ def parse_xml_content_to_df(file_source):
             sent_id = sequential_id_counter
 
         if sent_id is None: 
-            continue # Should only happen if sequential counter fails, highly unlikely
+            continue
 
         # --- Check for nested <w> tags (Vertical/Tagged Format) ---
         word_tags = sent_elem.findall('.//w') # Use findall('.//w') to search recursively
@@ -870,7 +913,7 @@ def parse_xml_content_to_df(file_source):
 
 
 # ---------------------------------------------------------------------
-# Monolingual XML Loader (NEW)
+# Monolingual XML Loader 
 # ---------------------------------------------------------------------
 @st.cache_data
 def load_monolingual_xml_corpus(file_source):
@@ -879,7 +922,8 @@ def load_monolingual_xml_corpus(file_source):
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
-    
+    st.session_state['xml_structure_data'] = None # Reset old structure
+
     file_source.seek(0)
     result = parse_xml_content_to_df(file_source)
     
@@ -894,14 +938,15 @@ def load_monolingual_xml_corpus(file_source):
 
     df_src["_token_low"] = df_src["token"].str.lower()
     
-    # Store the file object itself in session state for Corpus Structure to access later
+    # --- XML Structure Extraction for Overview ---
+    st.session_state['xml_structure_data'] = extract_xml_structure(file_source)
     st.session_state['monolingual_xml_file_upload'] = file_source
     
     return df_src
 
 
 # ---------------------------------------------------------------------
-# Parallel XML Loader (Uses parse_xml_content_to_df)
+# Parallel XML Loader
 # ---------------------------------------------------------------------
 @st.cache_data
 def load_xml_parallel_corpus(src_file, tgt_file):
@@ -911,6 +956,7 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None # Clear mono XML state
+    st.session_state['xml_structure_data'] = None # Reset old structure
     
     if src_file is None or tgt_file is None: return None
 
@@ -952,12 +998,30 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     
     st.session_state['parallel_mode'] = True
     st.session_state['df_target_lang'] = df_tgt
-    # Target sent map stores the raw sentence for alignment lookup
     st.session_state['target_sent_map'] = tgt_result['sent_map'] 
     
-    # Store parallel files in session state for Corpus Structure to access later
-    st.session_state['xml_src_file_upload'] = src_file
-    st.session_state['xml_tgt_file_upload'] = tgt_file
+    # --- XML Structure Extraction for Overview (Combining structures) ---
+    src_structure = extract_xml_structure(src_file)
+    tgt_structure = extract_xml_structure(tgt_file)
+    
+    combined_structure = {}
+    if src_structure:
+        combined_structure.update(src_structure)
+    if tgt_structure:
+        # Merge target structure, prioritizing source if tags clash, but merging attributes
+        for tag, attrs in tgt_structure.items():
+            if tag not in combined_structure:
+                combined_structure[tag] = attrs
+            else:
+                for attr, values in attrs.items():
+                    if attr not in combined_structure[tag]:
+                        combined_structure[tag][attr] = values
+                    else:
+                        combined_structure[tag][attr].update(values)
+                        # Keep only 20 unique samples
+                        combined_structure[tag][attr] = set(list(combined_structure[tag][attr])[:20])
+
+    st.session_state['xml_structure_data'] = combined_structure
     
     return df_src
 
@@ -971,6 +1035,7 @@ def load_excel_parallel_corpus_file(file_source):
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None # Clear mono XML state
+    st.session_state['xml_structure_data'] = None # Clear structure data
     
     if file_source is None: return None
     
@@ -1038,6 +1103,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
+    st.session_state['xml_structure_data'] = None # Clear structure data
          
     if file_source is None: return None
     
@@ -1377,7 +1443,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.17 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.18 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1414,13 +1480,13 @@ with st.sidebar:
     # --- C. PARALLEL CORPUS UPLOAD (XML) ---
     st.markdown("##### 🔗 Upload Unlinked XML Parallel Corpus")
     xml_src_file = st.file_uploader(
-        f"Source Language XML (Must use `<sent n='ID'>` or `<sent id='ID'>`)", 
+        f"Source Language XML (Must use aligned IDs)", 
         type=["xml"],
         key="xml_src_file_upload",
         on_change=reset_analysis
     )
     xml_tgt_file = st.file_uploader(
-        f"Target Language XML (Must use `<sent n='ID'>` or `<sent id='ID'>`)", 
+        f"Target Language XML (Must use aligned IDs)", 
         type=["xml"],
         key="xml_tgt_file_upload",
         on_change=reset_analysis
@@ -1485,10 +1551,7 @@ with st.sidebar:
     is_active_o = st.session_state['view'] == 'overview'
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
     
-    # --- CORPUS STRUCTURE BUTTON ---
-    is_active_s = st.session_state['view'] == 'corpus_structure' 
-    st.button("📊 Corpus Structure", key='nav_structure', on_click=set_view, args=('corpus_structure',), use_container_width=True, type="primary" if is_active_s else "secondary")
-    # -----------------------------
+    # Removed Corpus Structure Navigation Button
     
     is_active_d = st.session_state['view'] == 'dictionary' 
     st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
@@ -1503,7 +1566,7 @@ with st.sidebar:
     st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
 
     # 3. TOOL SETTINGS (Conditional Block)
-    if st.session_state['view'] != 'overview' and st.session_state['view'] != 'corpus_structure':
+    if st.session_state['view'] != 'overview':
         st.markdown("---")
         st.subheader("3. Tool Settings")
         
@@ -1774,102 +1837,40 @@ if st.session_state['view'] == 'overview':
              st.info("Frequency data not available.")
 
     st.markdown("---")
-
-# -----------------------------------------------------
-# MODULE: CORPUS STRUCTURE (NEW)
-# -----------------------------------------------------
-if st.session_state['view'] == 'corpus_structure':
-    st.subheader("📊 Corpus Structure Analysis (XML Tag & Attribute View)")
     
-    # Check if any XML file is loaded
-    is_any_xml_loaded = st.session_state.get('parallel_mode', False) or is_monolingual_xml_loaded
-    
-    if not is_any_xml_loaded:
-        st.warning("This feature requires an XML corpus. Please upload a **Monolingual XML** file or a **Parallel XML** pair in the sidebar.")
-    else:
-        # Determine files available for analysis
-        available_files = {}
-        if is_monolingual_xml_loaded:
-             available_files[f"{SOURCE_LANG_CODE} (Monolingual)"] = st.session_state['monolingual_xml_file_upload']
-        if st.session_state.get('parallel_mode', False):
-             available_files[f"Source ({SOURCE_LANG_CODE})"] = st.session_state.get('xml_src_file_upload')
-             available_files[f"Target ({TARGET_LANG_CODE})"] = st.session_state.get('xml_tgt_file_upload')
-
+    # --- XML CORPUS STRUCTURE DISPLAY (NEW LOCATION) ---
+    structure_data = st.session_state.get('xml_structure_data')
+    if structure_data:
+        st.subheader("📊 XML Corpus Structure (Tags & Sample Attributes)")
         
-        st.markdown("---")
+        # Determine the label based on the mode
+        file_label = f"Source ({SOURCE_LANG_CODE})" if is_parallel_mode_active else f"Monolingual ({SOURCE_LANG_CODE})"
+        if is_parallel_mode_active:
+             file_label = f"Combined Structure ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
         
-        analysis_choice_key = st.selectbox(
-            "Select XML file to analyze structure:",
-            options=list(available_files.keys()),
-            key="structure_file_choice"
-        )
-        
-        file_to_analyze = available_files.get(analysis_choice_key)
-        
-        if file_to_analyze:
-            with st.spinner(f"Extracting structure from {analysis_choice_key}..."):
-                # Must clone the file object before parsing to avoid modifying the original stream 
-                file_to_analyze.seek(0)
-                file_copy = BytesIO(file_to_analyze.read())
-                
-                # Max 20 unique values per attribute
-                structure_data = extract_xml_structure(file_copy, max_values=20)
-                
-            if structure_data:
-                st.success(f"Structure extracted successfully for {analysis_choice_key}.")
-                
-                # --- Generate and Display Matrix Table ---
-                table_data = []
-                all_attributes = set()
-                
-                for tag in structure_data:
-                    for attr in structure_data[tag]:
-                        all_attributes.add(attr)
-                
-                header = ["Tag", "Attribute"] + [f"Value {i+1}" for i in range(20)]
-                
-                # Iterate through tags to build rows
-                for tag in sorted(structure_data.keys()):
-                    tag_data = structure_data[tag]
-                    
-                    # Get unique attributes and sort them
-                    sorted_tag_attributes = sorted(tag_data.keys())
+        structure_df_styled = format_structure_data_for_display(structure_data, file_label)
 
-                    for attr_idx, attr in enumerate(sorted_tag_attributes):
-                        value_list = sorted(list(tag_data.get(attr, set()))) # Max 20 values already enforced in extraction
-                        
-                        # Only show Tag name on the first attribute row
-                        tag_cell = tag if attr_idx == 0 else ""
-                        
-                        row = [tag_cell, attr] 
-                        
-                        # Add sampled values (up to 20)
-                        row.extend(value_list)
-                        
-                        # Pad with empty strings if fewer than 20 values
-                        row.extend([""] * (20 - len(value_list))) 
-                            
-                        table_data.append(row)
-
-                # Convert to DataFrame
-                structure_df_final = pd.DataFrame(table_data, columns=header)
-                
-                st.markdown(f"#### XML Tags and Sampled Attribute Values for {analysis_choice_key}")
-                st.dataframe(structure_df_final.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[:, ['Tag', 'Attribute']]), 
-                             hide_index=True, 
-                             use_container_width=True)
-
-            else:
-                st.error(f"Could not process the XML file structure for {analysis_choice_key}.")
+        if structure_df_styled is not None:
+            st.caption(f"Showing structure from: **{file_label}**. Note: Only up to 5 unique values per attribute are displayed for brevity.")
+            st.dataframe(structure_df_styled, 
+                         hide_index=True, 
+                         use_container_width=True)
         else:
-            st.info("Select a file from the dropdown above.")
-            
+            st.info("Could not extract well-formed XML structure data.")
+    # -----------------------------------------------------
+
     st.markdown("---")
+
+# -----------------------------------------------------
+# MODULE: CORPUS STRUCTURE (REMOVED)
+# -----------------------------------------------------
+# The content of the old Corpus Structure module is now incorporated into the Overview.
+
 # -----------------------------------------------------
 # MODULE: SEARCH INPUT (SHARED FOR CONCORDANCE/COLLOCATION)
 # -----------------------------------------------------
 
-if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dictionary' and st.session_state['view'] != 'n_gram' and st.session_state['view'] != 'corpus_structure':
+if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dictionary' and st.session_state['view'] != 'n_gram':
     
     # --- SEARCH INPUT (SHARED) ---
     # FIX: Use conditional language suffix
