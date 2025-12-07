@@ -397,6 +397,49 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         
     return (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids) # Added sent_ids
 
+# --- Word Cloud Function ---
+@st.cache_data
+def create_word_cloud(freq_data, is_tagged_mode):
+    """Generates a word cloud from frequency data with conditional POS coloring."""
+    
+    # Filter out multi-word units for visualization stability
+    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
+    if single_word_freq_data.empty:
+        return None # SAFE EXIT 1
+
+    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
+    word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
+    
+    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
+    
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color='black',
+        colormap='viridis', 
+        stopwords=stopwords,
+        min_font_size=10
+    )
+    
+    wordcloud = wc.generate_from_frequencies(word_freq_dict)
+
+    if is_tagged_mode:
+        def final_color_func(word, *args, **kwargs):
+            pos_tag = word_to_pos.get(word, 'O')
+            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
+            if pos_code not in POS_COLOR_MAP:
+                pos_code = 'O'
+            return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
+
+        wordcloud = wordcloud.recolor(color_func=final_color_func)
+        
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    
+    return fig
+
 # --- Statistical Helpers ---
 EPS = 1e-12
 def safe_log(x):
@@ -1256,10 +1299,10 @@ if st.session_state['view'] == 'overview':
 
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         
+        # --- FIX: Ensure we handle the potential None return from create_word_cloud safely ---
         if not freq_df.empty:
             wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
             
-            # --- START OF FIX ---
             if wordcloud_fig is not None: 
                 if not is_raw_mode:
                     st.markdown(
@@ -1274,7 +1317,7 @@ if st.session_state['view'] == 'overview':
 
         else:
             st.info("Not enough tokens to generate a word cloud.")
-            # --- END OF FIX ---
+        # ---------------------------------------------------------------------------------
 
     with col2:
         st.subheader("Top frequency")
