@@ -720,7 +720,6 @@ def parse_xml_file(file_source):
         inner_content = sent_elem.text.strip() if sent_elem.text else ""
         
         # Check for verticalization/tagging
-        # Normalize the content for line processing (important if file contains mixed LF/CRLF)
         normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
         lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
         
@@ -728,7 +727,6 @@ def parse_xml_file(file_source):
              continue 
 
         # Heuristic: Check if the content suggests vertical/tagged format (multiple columns/tabs)
-        # Check if most lines have at least two whitespaces (suggesting three columns: token POS lemma) or contain a tab
         is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
         
         if is_vertical_format:
@@ -753,9 +751,10 @@ def parse_xml_file(file_source):
             raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
             
             # --- FIXED TOKENIZATION ---
-            # Pattern: matches 1. sequences of letters/numbers ([\w]+) or 2. punctuation/symbols ([^\w\s])
-            # This is more robust for separating words and attached punctuation marks.
-            tokens = [t.strip() for t in re.findall(r'[\w]+|[^\w\s]', raw_sentence_text) if t.strip()]
+            # 1. Add spaces around punctuation/symbols ([^\w\s] captures non-word, non-whitespace characters)
+            cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
+            # 2. Split by any whitespace that remains
+            tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
             # --------------------------
 
             for token in tokens:
@@ -863,7 +862,10 @@ def load_excel_parallel_corpus_file(file_source):
         src_text = str(row.iloc[0]).strip()
         tgt_text = str(row.iloc[1]).strip()
         
-        src_tokens = [t.strip() for t in re.findall(r'[\w]+|[^\w\s]', src_text) if t.strip()]
+        # --- FIXED TOKENIZATION ---
+        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', src_text)
+        src_tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+        # --------------------------
         
         target_sent_map[sent_id_counter] = tgt_text 
         
@@ -947,7 +949,10 @@ def load_corpus_file(file_source, sep=r"\s+"):
     # Fallback to Raw Text Processing
     try:
         raw_text = file_content_str
-        tokens = [t.strip() for t in re.findall(r'[\w]+|[^\w\s]', raw_text) if t.strip()] 
+        # --- FIXED TOKENIZATION ---
+        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
+        tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
+        # --------------------------
         nonsense_tag = "##"
         nonsense_lemma = "##"
         
@@ -1758,7 +1763,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         st.stop()
         
     # Prepare metadata for display
-    rel_freq = (literal_freq / total_tokens) * 1_000_000
+    rel_freq = (literal_freq / total_tokens) * 1_000_100
     wildcard_freq_df = pd.DataFrame([{"Query Result": raw_target_input, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
     results_df = wildcard_freq_df.rename(columns={"Relative Frequency": "Expected Frequency"})
 
@@ -2022,7 +2027,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         st.warning(f"Target '{raw_target_input}' not found in corpus.")
         st.stop()
         
-    primary_rel_freq = (freq / total_tokens) * 1_000_000
+    primary_rel_freq = (freq / total_tokens) * 1_000_100
     
     # FIX: Use conditional language suffix
     st.subheader(f"🔗 Collocation Analysis Results{lang_display_suffix}")
