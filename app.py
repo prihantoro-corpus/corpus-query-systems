@@ -672,6 +672,49 @@ def download_file_to_bytesio(url):
 # XML Parallel Corpus Parsing
 # ---------------------------------------------------------------------
 
+def extract_xml_structure(file_source, max_values=20):
+    """
+    Parses an XML file and extracts all unique tags, their attributes,
+    and a sample of their unique attribute values.
+    Returns: {tag_name: {attr_name: set_of_values, ...}, ...}
+    """
+    if file_source is None:
+        return None
+    
+    try:
+        file_source.seek(0)
+        tree = ET.parse(file_source)
+        root = tree.getroot()
+    except Exception as e:
+        # Note: We display this error in the UI only if the user explicitly opens this tool
+        return None
+
+    # Structure: {tag_name: {attr_name: set_of_values, ...}, ...}
+    structure = {}
+    
+    def process_element(element):
+        tag = element.tag
+        if tag not in structure:
+            structure[tag] = {}
+        
+        # Process attributes
+        for attr_name, attr_value in element.attrib.items():
+            if attr_name not in structure[tag]:
+                structure[tag][attr_name] = set()
+            
+            # Sample unique values up to max_values
+            if len(structure[tag][attr_name]) < max_values:
+                structure[tag][attr_name].add(attr_value)
+
+        # Recurse through children
+        for child in element:
+            process_element(child)
+
+    process_element(root)
+    
+    return structure
+
+
 def parse_xml_file(file_source):
     """
     Parses a single XML file, extracts sentences and IDs, and tokenizes/verticalizes if needed.
@@ -1339,6 +1382,11 @@ with st.sidebar:
     is_active_o = st.session_state['view'] == 'overview'
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
     
+    # --- NEW CORPUS STRUCTURE BUTTON ---
+    is_active_s = st.session_state['view'] == 'corpus_structure' 
+    st.button("📊 Corpus Structure", key='nav_structure', on_click=set_view, args=('corpus_structure',), use_container_width=True, type="primary" if is_active_s else "secondary")
+    # -----------------------------------
+    
     is_active_d = st.session_state['view'] == 'dictionary' 
     st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
     
@@ -1615,12 +1663,109 @@ if st.session_state['view'] == 'overview':
              st.info("Frequency data not available.")
 
     st.markdown("---")
+
+# -----------------------------------------------------
+# MODULE: CORPUS STRUCTURE (NEW)
+# -----------------------------------------------------
+if st.session_state['view'] == 'corpus_structure':
+    st.subheader("📊 Corpus Structure Analysis (XML Tag & Attribute View)")
     
+    # Check if a file is loaded and if it's XML (only parallel mode supports XML directly)
+    if not st.session_state.get('parallel_mode', False):
+        st.warning("This feature is designed for XML corpus files. Please upload parallel XML files in the sidebar.")
+    else:
+        # Determine which file to analyze (Source or Target)
+        st.markdown("---")
+        st.markdown(f"**Loaded Parallel Corpus:** Source ({SOURCE_LANG_CODE}) and Target ({TARGET_LANG_CODE})")
+        
+        analysis_choice = st.radio(
+            "Select XML file to analyze structure:",
+            [SOURCE_LANG_CODE, TARGET_LANG_CODE],
+            key="structure_file_choice"
+        )
+        
+        file_to_analyze = None
+        file_name_for_display = ""
+
+        # Retrieve file objects from session state (where they were stored by the uploader)
+        xml_src_file = st.session_state.get('xml_src_file_upload')
+        xml_tgt_file = st.session_state.get('xml_tgt_file_upload')
+        
+        if analysis_choice == SOURCE_LANG_CODE and xml_src_file:
+            file_to_analyze = xml_src_file
+            file_name_for_display = f"Source ({SOURCE_LANG_CODE})"
+        elif analysis_choice == TARGET_LANG_CODE and xml_tgt_file:
+            file_to_analyze = xml_tgt_file
+            file_name_for_display = f"Target ({TARGET_LANG_CODE})"
+            
+        if file_to_analyze:
+            with st.spinner(f"Extracting structure from {file_name_for_display}..."):
+                # Must clone the file object before parsing to avoid modifying the original stream 
+                file_to_analyze.seek(0)
+                file_copy = BytesIO(file_to_analyze.read())
+                
+                # Max 20 unique values per attribute
+                structure_data = extract_xml_structure(file_copy, max_values=20)
+                
+            if structure_data:
+                st.success(f"Structure extracted successfully for {file_name_for_display}.")
+                
+                # --- Generate and Display Matrix Table ---
+                table_data = []
+                all_attributes = set()
+                
+                for tag in structure_data:
+                    for attr in structure_data[tag]:
+                        all_attributes.add(attr)
+                
+                sorted_attributes = sorted(list(all_attributes))
+                header = ["Tag", "Attribute"] + [f"Value {i+1}" for i in range(20)]
+                
+                # Iterate through tags to build rows
+                for tag in sorted(structure_data.keys()):
+                    tag_data = structure_data[tag]
+                    
+                    # 1. First row for the tag itself (if it has attributes)
+                    # Get unique attributes and sort them
+                    sorted_tag_attributes = sorted(tag_data.keys())
+
+                    for attr_idx, attr in enumerate(sorted_tag_attributes):
+                        value_list = sorted(list(tag_data.get(attr, set()))) # Max 20 values already enforced in extraction
+                        
+                        # Only show Tag name on the first attribute row
+                        tag_cell = tag if attr_idx == 0 else ""
+                        
+                        row = [tag_cell, attr] 
+                        
+                        # Add sampled values (up to 20)
+                        row.extend(value_list)
+                        
+                        # Pad with empty strings if fewer than 20 values
+                        row.extend([""] * (20 - len(value_list))) 
+                            
+                        table_data.append(row)
+                        
+                    # Add a visual separator (optional, but helps readability)
+                    # table_data.append(["---"] * len(header))
+
+                # Convert to DataFrame
+                structure_df_final = pd.DataFrame(table_data, columns=header)
+                
+                st.markdown(f"#### XML Tags and Sampled Attribute Values for {file_name_for_display}")
+                st.dataframe(structure_df_final.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[:, ['Tag', 'Attribute']]), 
+                             hide_index=True, 
+                             use_container_width=True)
+
+            else:
+                st.error("Could not process the XML file structure.")
+        else:
+            st.info("Please upload both XML files in the sidebar to view their structure.")
+    st.markdown("---")
 # -----------------------------------------------------
 # MODULE: SEARCH INPUT (SHARED FOR CONCORDANCE/COLLOCATION)
 # -----------------------------------------------------
 
-if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dictionary' and st.session_state['view'] != 'n_gram':
+if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dictionary' and st.session_state['view'] != 'n_gram' and st.session_state['view'] != 'corpus_structure':
     
     # --- SEARCH INPUT (SHARED) ---
     # FIX: Use conditional language suffix
