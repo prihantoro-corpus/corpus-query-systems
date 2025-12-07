@@ -109,11 +109,12 @@ def set_view(view_name):
     st.session_state['llm_interpretation_result'] = None
     
 def reset_analysis():
-    # Clear all data caches to ensure a clean start with new corpus data
+    # Clear all cached functions related to old data.
     st.cache_data.clear()
+    
+    # Reset view and flags
     st.session_state['view'] = 'overview'
     st.session_state['trigger_analyze'] = False
-    # Explicitly force N-gram analysis/reset when corpus changes
     st.session_state['n_gram_trigger_analyze'] = True 
     st.session_state['n_gram_results_df'] = pd.DataFrame()
     st.session_state['initial_load_complete'] = False
@@ -122,6 +123,10 @@ def reset_analysis():
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
+    
+    # --- FIX: Force a complete script rerun to ensure all state is re-initialized ---
+    # This addresses the persistent caching issue when switching corpus files.
+    st.rerun()
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
@@ -1505,7 +1510,7 @@ if st.session_state['view'] == 'n_gram':
                 st.session_state['n_gram_size'],
                 st.session_state['n_gram_filters'],
                 is_raw_mode,
-                corpus_name # <-- New required argument for cache key
+                corpus_name # <-- Unique ID for cache invalidation
             )
             st.session_state['n_gram_results_df'] = n_gram_df.copy()
             
