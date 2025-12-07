@@ -1244,18 +1244,11 @@ st.header(app_mode)
 if st.session_state['view'] == 'overview':
     
     col1, col2 = st.columns([2,1])
+# --- Find this section around line 1261 in app.py ---
     with col1:
         st.subheader("Corpus Summary")
         # STTR calculation omitted for brevity but can be easily added back
-        info_data = {
-            "Metric": [f"Corpus size ({SOURCE_LANG_CODE} tokens)", "Unique types (w/o punc)", "Lemma count"],
-            "Value": [f"{total_tokens:,}", unique_types, unique_lemmas]
-        }
-        if st.session_state.get('parallel_mode', False):
-            info_data["Metric"].append("Aligned Sentences")
-            info_data["Value"].append(f"{len(st.session_state['target_sent_map']):,}")
-
-        info_df = pd.DataFrame(info_data)
+        # ... (info_df definition) ...
         st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
@@ -1263,14 +1256,20 @@ if st.session_state['view'] == 'overview':
         if not freq_df.empty:
             wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
             
-            if not is_raw_mode:
-                st.markdown(
-                    """
-                    **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
-                    """
-                , unsafe_allow_html=True)
-                
-            st.pyplot(wordcloud_fig)
+            # --- START OF MODIFICATION ---
+            if wordcloud_fig is not None: 
+                if not is_raw_mode:
+                    st.markdown(
+                        """
+                        **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
+                        """
+                    , unsafe_allow_html=True)
+                    
+                st.pyplot(wordcloud_fig)
+            else:
+                # This catches the case where freq_df was not empty, but filtering inside create_word_cloud emptied it.
+                st.info("Not enough single tokens remaining to generate a word cloud.")
+
         else:
             st.info("Not enough tokens to generate a word cloud.")
 
@@ -1844,3 +1843,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
