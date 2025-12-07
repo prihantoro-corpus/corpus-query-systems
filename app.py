@@ -678,16 +678,18 @@ def parse_xml_file(file_source):
     Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
     """
     try:
+        # 1. Read full content as string first, for safety and regex fallback
         file_source.seek(0)
+        xml_content = file_source.read().decode('utf-8')
+        file_source.seek(0)
+        
+        # Use ElementTree for robust XML structure parsing
         tree = ET.parse(file_source)
         root = tree.getroot()
         
-        # 1. Extract Language Code
+        # 2. Extract Language Code
         lang_code = root.get('lang')
         if not lang_code:
-            # Fallback to regex on raw content if ElementTree doesn't capture it easily
-            file_source.seek(0)
-            xml_content = file_source.read().decode('utf-8')
             lang_match = re.search(r'<text\s+lang="([^"]+)">', xml_content)
             if lang_match:
                 lang_code = lang_match.group(1).upper()
@@ -704,7 +706,7 @@ def parse_xml_file(file_source):
     df_data = []
     sent_map = {}
     
-    # Iterate over <sent n="ID"> tags
+    # 3. Iterate over <sent n="ID"> tags
     for sent_elem in root.findall('sent'):
         sent_id_str = sent_elem.get('n')
         if not sent_id_str: continue 
@@ -715,7 +717,6 @@ def parse_xml_file(file_source):
             st.warning(f"Skipping sentence with non-integer ID: {sent_id_str}")
             continue
 
-        # Get all text content inside the <sent> tag, including tail text from internal elements
         inner_content = sent_elem.text.strip() if sent_elem.text else ""
         
         # Check for verticalization/tagging
@@ -724,15 +725,14 @@ def parse_xml_file(file_source):
         if not lines:
              continue 
 
-        # Heuristic: Check if the lines suggest vertical/tagged format (multiple columns/tabs)
-        # Check if most lines have at least two whitespaces (suggesting three columns: token POS lemma)
-        is_vertical_format = sum(line.count('\t') > 0 or len(line.split()) >= 3 for line in lines) / len(lines) > 0.5
+        # Heuristic: Check if the content suggests vertical/tagged format (multiple columns/tabs)
+        is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
         
         if is_vertical_format:
             # Already verticalized (TrETagger format or similar)
             raw_tokens = []
             for line in lines:
-                # Use split by any whitespace
+                # Use split by any whitespace, max 2 times (to ensure we get T P L)
                 parts = re.split(r'\s+', line.strip(), 2) 
                 token = parts[0]
                 pos = parts[1] if len(parts) > 1 and parts[1] else "##"
@@ -748,9 +748,13 @@ def parse_xml_file(file_source):
         else:
             # Horizontal text (raw) - requires tokenization
             raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
-            # Standard tokenization: find sequences of word characters or non-word/non-space characters
-            tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', raw_sentence_text) if t.strip()]
             
+            # --- FIX: IMPROVED TOKENIZATION REGEX for raw text ---
+            # Pattern: matches 1. sequences of letters/numbers (\w+) or 2. punctuation/symbols ([\S]) that are NOT whitespace (\s)
+            tokens = [t.strip() for t in re.findall(r'[\w]+|[^\w\s]', raw_sentence_text) if t.strip()]
+            # This is more robust than the previous pattern for separating words and punctuation marks (like the trailing period/full stop).
+            # -----------------------------------------------------
+
             for token in tokens:
                 df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
         
@@ -765,6 +769,8 @@ def parse_xml_file(file_source):
 
 @st.cache_data
 def load_xml_parallel_corpus(src_file, tgt_file):
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
@@ -802,7 +808,6 @@ def load_xml_parallel_corpus(src_file, tgt_file):
         return None
         
     # 2. Finalize Session State
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
     SOURCE_LANG_CODE = src_result['lang_code']
     TARGET_LANG_CODE = tgt_result['lang_code']
 
@@ -939,7 +944,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     # Fallback to Raw Text Processing
     try:
         raw_text = file_content_str
-        tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', raw_text) if t.strip()] 
+        tokens = [t.strip() for t in re.findall(r'[\w]+|[^\w\s]', raw_text) if t.strip()] 
         nonsense_tag = "##"
         nonsense_lemma = "##"
         
@@ -2115,7 +2120,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         
         # Use a scrollable container for the main table
         html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
-        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div classs='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
 
     # ---------- Download Buttons ----------
     st.markdown("---")
