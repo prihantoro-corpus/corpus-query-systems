@@ -80,6 +80,9 @@ if 'df_target_lang' not in st.session_state:
     st.session_state['df_target_lang'] = pd.DataFrame()
 if 'target_sent_map' not in st.session_state:
     st.session_state['target_sent_map'] = {}
+# --- RERUN Flag (NEW for warning suppression) ---
+if 'corpus_changed_flag' not in st.session_state:
+    st.session_state['corpus_changed_flag'] = False
 
 
 # ---------------------------
@@ -112,6 +115,9 @@ def reset_analysis():
     # Clear all cached functions related to old data.
     st.cache_data.clear()
     
+    # Set the flag to trigger st.rerun outside of the callback
+    st.session_state['corpus_changed_flag'] = True 
+
     # Reset view and flags
     st.session_state['view'] = 'overview'
     st.session_state['trigger_analyze'] = False
@@ -123,10 +129,6 @@ def reset_analysis():
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
-    
-    # --- FIX: Force a complete script rerun to ensure all state is re-initialized ---
-    # This addresses the persistent caching issue when switching corpus files.
-    st.rerun()
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
@@ -1185,10 +1187,10 @@ with st.sidebar:
     st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
     
     is_active_n = st.session_state['view'] == 'n_gram' # NEW N-GRAM BUTTON
-    st.button("🔢 N-Gram", key='nav_n_gram', on_click=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
+    st.button("🔢 N-Gram", key='nav_n_gram', on_change=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
 
     is_active_l = st.session_state['view'] == 'collocation'
-    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
+    st.button("🔗 Collocation", key='nav_collocation', on_change=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
 
     # 3. TOOL SETTINGS (Conditional Block)
     if st.session_state['view'] != 'overview':
@@ -1340,6 +1342,14 @@ with st.sidebar:
         # --- DICTIONARY SETTINGS (Placeholder) ---
         elif st.session_state['view'] == 'dictionary':
             st.info("Dictionary module currently uses global Collocation Window/Filter settings for collocation analysis, accessible in the Collocation view.")
+
+
+# --- RERUN CHECK (MOVED OUTSIDE OF CALLBACK) ---
+# Check if a corpus switch was requested and force rerun.
+if st.session_state['corpus_changed_flag']:
+    st.session_state['corpus_changed_flag'] = False # Reset the flag
+    st.rerun()
+# ---------------------------------------------
 
 
 # load corpus (cached) for main body access - Use the result from the sidebar
