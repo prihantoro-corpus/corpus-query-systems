@@ -410,7 +410,8 @@ def create_word_cloud(freq_data, is_tagged_mode):
     word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
     word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
     
-    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are"])
+    # Simple list of English stopwords; can be expanded.
+    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are", "have", "not", "will", "i", "we", "you"])
     
     wc = WordCloud(
         width=800,
@@ -421,7 +422,10 @@ def create_word_cloud(freq_data, is_tagged_mode):
         min_font_size=10
     )
     
-    wordcloud = wc.generate_from_frequencies(word_freq_dict)
+    try:
+        wordcloud = wc.generate_from_frequencies(word_freq_dict)
+    except ValueError:
+        return None # SAFE EXIT 2: If the dictionary is empty after stopwords filtering
 
     if is_tagged_mode:
         def final_color_func(word, *args, **kwargs):
@@ -439,6 +443,109 @@ def create_word_cloud(freq_data, is_tagged_mode):
     plt.tight_layout(pad=0)
     
     return fig
+
+# --- N-GRAM LOGIC FUNCTION (FIXED: WAS MISSING) ---
+@st.cache_data(show_spinner=False)
+def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode):
+    """
+    Generates N-grams, applies positional filters (token, POS, lemma), and calculates frequencies.
+    """
+    total_tokens = len(df_corpus)
+    if total_tokens < n_size or n_size < 1:
+        return pd.DataFrame()
+    
+    # Pre-extract lists for faster lookup
+    tokens = df_corpus["token"].tolist()
+    tokens_low = df_corpus["_token_low"].tolist()
+    pos = df_corpus["pos"].tolist() if "pos" in df_corpus.columns else ["##"] * total_tokens
+    lemma = df_corpus["lemma"].tolist() if "lemma" in df_corpus.columns else ["##"] * total_tokens
+
+    def matches_filter(token, token_low, pos_tag, lemma_tag, pattern_str, is_raw_mode):
+        """Checks if a single token/tag set matches a positional pattern string."""
+        if not pattern_str:
+            return True
+
+        pattern_str = pattern_str.strip()
+        
+        # 1. Structural/Lemma Query ([lemma*])
+        lemma_match_re = re.search(r"\[(.*?)\]", pattern_str)
+        if lemma_match_re and not is_raw_mode:
+            lemma_pattern = re.escape(lemma_match_re.group(1).lower()).replace(r'\*', '.*')
+            return re.fullmatch(f"^{lemma_pattern}$", lemma_tag.lower())
+
+        # 2. POS Query (_POS*)
+        pos_match_re = re.search(r"\_([\w\*|]+)", pattern_str)
+        if pos_match_re and not is_raw_mode:
+            pos_input = pos_match_re.group(1).strip()
+            pos_patterns = [p.strip() for p in pos_input.split('|') if p.strip()]
+            full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
+            full_pos_regex = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
+            return full_pos_regex.fullmatch(pos_tag)
+
+        # 3. Simple Token/Word Query (word*)
+        pattern = re.escape(pattern_str).replace(r'\*', '.*')
+        return re.fullmatch(f"^{pattern}$", token_low)
+
+        
+    matched_n_grams_list = []
+    
+    for i in range(total_tokens - n_size + 1):
+        current_tokens = tokens[i:i + n_size]
+        current_tokens_low = tokens_low[i:i + n_size]
+        current_pos = pos[i:i + n_size]
+        current_lemma = lemma[i:i + n_size]
+        
+        is_match = True
+        
+        # Apply positional filters
+        for pos_idx, pattern_str in n_gram_filters.items():
+            pos_int = int(pos_idx) - 1 # Convert 1-based UI index to 0-based Python index
+            if pos_int < 0 or pos_int >= n_size: continue
+            
+            if not matches_filter(
+                current_tokens[pos_int], 
+                current_tokens_low[pos_int], 
+                current_pos[pos_int], 
+                current_lemma[pos_int], 
+                pattern_str, 
+                is_raw_mode
+            ):
+                is_match = False
+                break
+        
+        if is_match:
+            matched_n_grams_list.append(tuple(current_tokens))
+            
+    if not matched_n_grams_list:
+        return pd.DataFrame()
+        
+    # Count frequencies
+    n_gram_counts = Counter(matched_n_grams_list)
+    
+    data = []
+    for n_gram, freq in n_gram_counts.items():
+        n_gram_str = " ".join(n_gram)
+        # Calculate relative frequency per million tokens
+        rel_freq = (freq / total_tokens) * 1_000_000
+        
+        data.append({
+            "N-Gram": n_gram_str,
+            "Frequency": freq,
+            "Relative Frequency (per M)": round(rel_freq, 4)
+        })
+        
+    n_gram_df = pd.DataFrame(data)
+    
+    def is_only_punc_or_digit(n_gram_str):
+        for token in n_gram_str.split():
+            if token.lower() not in PUNCTUATION and not token.isdigit():
+                return False
+        return True
+        
+    n_gram_df = n_gram_df[~n_gram_df["N-Gram"].apply(is_only_punc_or_digit)]
+    
+    return n_gram_df.sort_values("Frequency", ascending=False).reset_index(drop=True)
+# -----------------------------
 
 # --- Statistical Helpers ---
 EPS = 1e-12
