@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.16 - N-Gram Relative Frequency - MODIFIED FOR PARALLEL CORPUS
+# CORTEX Corpus Explorer v17.17 - XML ID Attribute Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.16 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.17 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -753,66 +753,14 @@ def parse_xml_content_to_df(file_source):
     df_data = []
     sent_map = {}
     
-    # 3. Iterate over <sent n="ID"> tags
-    for sent_elem in root.findall('sent'):
-        sent_id_str = sent_elem.get('n')
-        if not sent_id_str: continue 
-
-        try:
-            sent_id = int(sent_id_str)
-        except ValueError:
-            st.warning(f"Skipping sentence with non-integer ID: {sent_id_str}")
-            continue
-
-        inner_content = sent_elem.text.strip() if sent_elem.text else ""
-        
-        # Check for verticalization/tagging
-        normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
-        lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
-        
-        if not lines:
-             continue 
-
-        # Heuristic: Check if the content suggests vertical/tagged format (multiple columns/tabs)
-        is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
-        
-        if is_vertical_format:
-            # Already verticalized (TrETagger format or similar)
-            raw_tokens = []
-            for line in lines:
-                # Use split by any whitespace, max 2 times (to ensure we get T P L)
-                parts = re.split(r'\s+', line.strip(), 2) 
-                token = parts[0]
-                pos = parts[1] if len(parts) > 1 and parts[1] else "##"
-                lemma = parts[2] if len(parts) > 2 and parts[2] else "##"
-                
-                if not token: continue
-                
-                df_data.append({"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id})
-                raw_tokens.append(token)
-            
-            raw_sentence_text = " ".join(raw_tokens)
-
-        else:
-            # Horizontal text (raw) - requires tokenization
-            raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
-            
-            # --- FIXED TOKENIZATION ---
-            # 1. Add spaces around punctuation/symbols ([^\w\s] captures non-word, non-whitespace characters)
-            cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
-            # 2. Split by any whitespace that remains
-            tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
-            # --------------------------
-
-            for token in tokens:
-                df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
-        
-        # Store raw sentence for the target map
-        sent_map[sent_id] = raw_sentence_text.strip()
-        
-    if not df_data:
-        # If no <sent> tags found, try to process raw content if present. 
-        # This is primarily for structural inspection, but we try to tokenize if possible.
+    # 3. Iterate over <sent> tags (or similar, like <p> if no <sent> is found)
+    sent_tags = root.findall('sent')
+    if not sent_tags: # Fallback to looking at direct children if <sent> is missing (e.g., if the user uses <p>)
+        sent_tags = list(root)
+    
+    # Check if we successfully found any tags that could represent a sentence/paragraph
+    if not sent_tags:
+        # Try to process raw content in root if present (as a fallback for very simple XML)
         if root.text and root.text.strip():
              raw_text = root.text.strip()
              cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text) 
@@ -821,12 +769,102 @@ def parse_xml_content_to_df(file_source):
                 for token in tokens:
                     df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
                 sent_map[1] = raw_text
-             else:
-                st.warning(f"No parseable content found in corpus file: {file_source.name}.")
-                return None
+             return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
+        st.warning(f"No parseable content found in corpus file: {file_source.name}.")
+        return None
+
+    # --- Use a counter for missing/non-integer IDs for robustness ---
+    sequential_id_counter = 0
+
+    for sent_elem in sent_tags:
+        
+        # --- CRITICAL FIX: Prioritize 'n' for parallel/legacy, then fallback to 'id' for modern XML ---
+        sent_id_str = sent_elem.get('n') or sent_elem.get('id')
+        
+        sent_id = None
+        
+        if sent_id_str:
+            try:
+                # Try to convert to integer (required for alignment checks)
+                sent_id = int(sent_id_str)
+            except ValueError:
+                # If the ID is a string (e.g., "s1.2") or simply non-numeric, use sequential
+                # IMPORTANT: Keep the warning for debugging parallel corpus issues later.
+                # st.warning(f"Non-integer ID found ({sent_id_str}). Using sequential ID instead.") 
+                sequential_id_counter += 1
+                sent_id = sequential_id_counter
         else:
-            st.warning(f"No parseable content found in corpus file: {file_source.name}.")
-            return None
+            # If no 'n' or 'id' attribute found, use sequential ID.
+            sequential_id_counter += 1
+            sent_id = sequential_id_counter
+
+        if sent_id is None: 
+            continue # Should only happen if sequential counter fails, highly unlikely
+
+        # --- Check for nested <w> tags (Vertical/Tagged Format) ---
+        word_tags = sent_elem.findall('.//w') # Use findall('.//w') to search recursively
+        
+        raw_sentence_text = ""
+        
+        if word_tags:
+            # Tagged XML format (e.g., TreeTagger/TEI-like)
+            raw_tokens = []
+            for w_elem in word_tags:
+                token = w_elem.text.strip() if w_elem.text else ""
+                pos = w_elem.get('pos') or w_elem.get('type') or "##"
+                lemma = w_elem.get('lemma') or "##"
+                
+                if not token: continue
+                
+                df_data.append({"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id})
+                raw_tokens.append(token)
+            
+            raw_sentence_text = " ".join(raw_tokens)
+            
+        else:
+            # Raw Text XML format (Linear) - content is inside the <sent> tag itself
+            inner_content = sent_elem.text.strip() if sent_elem.text else ""
+            
+            # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
+            normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
+            lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
+            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
+            
+            if is_vertical_format:
+                raw_tokens = []
+                for line in lines:
+                    parts = re.split(r'\s+', line.strip(), 2) 
+                    token = parts[0]
+                    pos = parts[1] if len(parts) > 1 and parts[1] else "##"
+                    lemma = parts[2] if len(parts) > 2 and parts[2] else "##"
+                    
+                    if not token: continue
+                    
+                    df_data.append({"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id})
+                    raw_tokens.append(token)
+                raw_sentence_text = " ".join(raw_tokens)
+            
+            else:
+                # Pure Horizontal text (raw) - requires tokenization
+                raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
+                
+                # --- FIXED TOKENIZATION ---
+                # 1. Add spaces around punctuation/symbols 
+                cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
+                # 2. Split by any whitespace that remains
+                tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
+                # --------------------------
+
+                for token in tokens:
+                    df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
+        
+        # Store raw sentence for the target map
+        if raw_sentence_text:
+            sent_map[sent_id] = raw_sentence_text.strip()
+        
+    if not df_data:
+        st.warning(f"No tokenized data was extracted from the XML file: {file_source.name}.")
+        return None
         
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
 
@@ -1339,7 +1377,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.16 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.17 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1376,13 +1414,13 @@ with st.sidebar:
     # --- C. PARALLEL CORPUS UPLOAD (XML) ---
     st.markdown("##### 🔗 Upload Unlinked XML Parallel Corpus")
     xml_src_file = st.file_uploader(
-        f"Source Language XML (e.g., <text lang='EN'>)", 
+        f"Source Language XML (Must use `<sent n='ID'>` or `<sent id='ID'>`)", 
         type=["xml"],
         key="xml_src_file_upload",
         on_change=reset_analysis
     )
     xml_tgt_file = st.file_uploader(
-        f"Target Language XML (Must match sent n=IDs)", 
+        f"Target Language XML (Must use `<sent n='ID'>` or `<sent id='ID'>`)", 
         type=["xml"],
         key="xml_tgt_file_upload",
         on_change=reset_analysis
