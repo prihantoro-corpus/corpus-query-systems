@@ -109,10 +109,13 @@ def set_view(view_name):
     st.session_state['llm_interpretation_result'] = None
     
 def reset_analysis():
+    # Clear all data caches to ensure a clean start with new corpus data
     st.cache_data.clear()
     st.session_state['view'] = 'overview'
     st.session_state['trigger_analyze'] = False
-    st.session_state['n_gram_trigger_analyze'] = False
+    # Explicitly force N-gram analysis/reset when corpus changes
+    st.session_state['n_gram_trigger_analyze'] = True 
+    st.session_state['n_gram_results_df'] = pd.DataFrame()
     st.session_state['initial_load_complete'] = False
     st.session_state['llm_interpretation_result'] = None
     # Reset parallel corpus state
@@ -444,11 +447,12 @@ def create_word_cloud(freq_data, is_tagged_mode):
     
     return fig
 
-# --- N-GRAM LOGIC FUNCTION (FIXED: WAS MISSING) ---
+# --- N-GRAM LOGIC FUNCTION (FIXED: Added corpus_id argument for better caching) ---
 @st.cache_data(show_spinner=False)
-def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode):
+def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
     """
     Generates N-grams, applies positional filters (token, POS, lemma), and calculates frequencies.
+    corpus_id is included in the signature to ensure cache invalidation when the corpus changes.
     """
     total_tokens = len(df_corpus)
     if total_tokens < n_size or n_size < 1:
@@ -1484,9 +1488,9 @@ if st.session_state['view'] == 'n_gram':
     
     st.subheader(f"🔢 N-Gram Frequency Analysis (N={st.session_state['n_gram_size']}) in **{SOURCE_LANG_CODE}**")
     
-    # Check if a rerun was triggered by changing a filter/size
+    # Check if a rerun was triggered by changing a filter/size, OR if the analysis was reset due to corpus change.
     analyze_n_gram = st.session_state['n_gram_trigger_analyze'] or st.session_state['n_gram_results_df'].empty
-    st.session_state['n_gram_trigger_analyze'] = False
+    st.session_state['n_gram_trigger_analyze'] = False # Reset the trigger immediately
     
     # Force re-analysis if manual button is pressed
     manual_analyze_btn = st.button("🔎 Re-Analyze N-Grams")
@@ -1495,11 +1499,13 @@ if st.session_state['view'] == 'n_gram':
     
     if analyze_n_gram:
         with st.spinner(f"Generating and filtering {st.session_state['n_gram_size']}-grams..."):
+            # FIX: Passed corpus_name as a unique ID to break the cache when corpus changes
             n_gram_df = generate_n_grams(
                 df, 
                 st.session_state['n_gram_size'],
                 st.session_state['n_gram_filters'],
-                is_raw_mode
+                is_raw_mode,
+                corpus_name # <-- New required argument for cache key
             )
             st.session_state['n_gram_results_df'] = n_gram_df.copy()
             
