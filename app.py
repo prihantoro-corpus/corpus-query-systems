@@ -26,8 +26,8 @@ KWIC_INITIAL_DISPLAY_HEIGHT = 10
 KWIC_COLLOC_DISPLAY_LIMIT = 20 # Limit for KWIC examples below collocation tables
 
 # Define global names for parallel mode
-SOURCE_LANG_CODE = 'EN'
-TARGET_LANG_CODE = 'ID'
+SOURCE_LANG_CODE = 'EN' # Default source language code
+TARGET_LANG_CODE = 'ID' # Default target language code
 DEFAULT_LANG_CODE = 'RAW'
 
 # ---------------------------
@@ -1355,8 +1355,15 @@ if df is None:
     st.stop()
 # ---------------------------------------------------------------------
 
+# --- Define Language Suffix for Headers (FIX IMPLEMENTATION) ---
+is_parallel_mode_active = st.session_state.get('parallel_mode', False)
+lang_display_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
+lang_input_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
+# ---------------------------------------------------------------
+
+
 # --- CRITICAL STATUS MESSAGE FOR DEBUGGING (SUCCESS PATH) ---
-if st.session_state.get('parallel_mode', False):
+if is_parallel_mode_active:
     app_mode = f"Analyzing Parallel Corpus: {corpus_name} (Source: {SOURCE_LANG_CODE})"
     st.info(f"✅ Parallel Corpus loaded successfully. Total tokens ({SOURCE_LANG_CODE}): **{len(df):,}**. Total sentences: **{len(st.session_state['target_sent_map']):,}**.")
 else:
@@ -1455,11 +1462,13 @@ if st.session_state['view'] == 'overview':
 if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dictionary' and st.session_state['view'] != 'n_gram':
     
     # --- SEARCH INPUT (SHARED) ---
-    st.subheader(f"Search Input: {st.session_state['view'].capitalize()}")
+    # FIX: Use conditional language suffix
+    st.subheader(f"Search Input: {st.session_state['view'].capitalize()}{lang_display_suffix}")
     
     # The input field that controls analysis for Concordance/Collocation
+    # FIX: Use conditional language suffix
     typed_target = st.text_input(
-        f"Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*) in **{SOURCE_LANG_CODE}**", 
+        f"Type a primary token/MWU (word* or 'in the') or Structural Query ([lemma*]_POS*){lang_input_suffix}", 
         value=st.session_state.get('typed_target_input', ''), 
         key="typed_target_input",
         on_change=trigger_analysis_callback # Triggers analysis on Enter/change
@@ -1491,7 +1500,8 @@ if st.session_state['view'] != 'overview' and st.session_state['view'] != 'dicti
 # -----------------------------------------------------
 if st.session_state['view'] == 'n_gram':
     
-    st.subheader(f"🔢 N-Gram Frequency Analysis (N={st.session_state['n_gram_size']}) in **{SOURCE_LANG_CODE}**")
+    # FIX: Use conditional language suffix
+    st.subheader(f"🔢 N-Gram Frequency Analysis (N={st.session_state['n_gram_size']}){lang_display_suffix}")
     
     # Check if a rerun was triggered by changing a filter/size, OR if the analysis was reset due to corpus change.
     analyze_n_gram = st.session_state['n_gram_trigger_analyze'] or st.session_state['n_gram_results_df'].empty
@@ -1658,7 +1668,8 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     with col_freq:
-        st.subheader(f"Target Frequency ({SOURCE_LANG_CODE})")
+        # FIX: Remove hardcoded language code
+        st.subheader(f"Target Frequency")
         st.dataframe(results_df, use_container_width=True, hide_index=True)
 
 
@@ -1667,11 +1678,13 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
 # -----------------------------------------------------
 if st.session_state['view'] == 'dictionary':
     
-    st.subheader(f"📘 Dictionary Lookup in **{SOURCE_LANG_CODE}**")
+    # FIX: Use conditional language suffix
+    st.subheader(f"📘 Dictionary Lookup{lang_display_suffix}")
     
     # --- Input and Analysis Trigger (Automatic on Change) ---
+    # FIX: Use conditional language suffix
     current_dict_word = st.text_input(
-        f"Enter a Token/Word to lookup (e.g., 'sessions') in **{SOURCE_LANG_CODE}**:", 
+        f"Enter a Token/Word to lookup (e.g., 'sessions'){lang_input_suffix}:", 
         value=st.session_state.get('dict_word_input_main', ''),
         key="dict_word_input_main",
     ).strip()
@@ -1725,7 +1738,8 @@ if st.session_state['view'] == 'dictionary':
     st.markdown("---")
     
     # --- 3. Random Concordance Examples ---
-    st.subheader(f"Random Examples (Concordance in {SOURCE_LANG_CODE})")
+    # FIX: Use conditional language suffix
+    st.subheader(f"Random Examples (Concordance{lang_display_suffix})")
     
     kwic_left = st.session_state.get('kwic_left', 7)
     kwic_right = st.session_state.get('kwic_right', 7)
@@ -1781,7 +1795,8 @@ if st.session_state['view'] == 'dictionary':
     st.markdown("---")
 
     # --- 4. Collocates and Collocate Examples ---
-    st.subheader(f"Collocation Analysis in **{SOURCE_LANG_CODE}**")
+    # FIX: Use conditional language suffix
+    st.subheader(f"Collocation Analysis{lang_display_suffix}")
     
     coll_window = st.session_state.get('coll_window', 5)
     mi_min_freq = st.session_state.get('mi_min_freq', 1)
@@ -1854,7 +1869,8 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         
     primary_rel_freq = (freq / total_tokens) * 1_000_000
     
-    st.subheader(f"🔗 Collocation Analysis Results in **{SOURCE_LANG_CODE}**")
+    # FIX: Use conditional language suffix
+    st.subheader(f"🔗 Collocation Analysis Results{lang_display_suffix}")
     st.success(f"Analyzing target '{primary_target_mwu}'. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
 
     if stats_df_sorted.empty:
