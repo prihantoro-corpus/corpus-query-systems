@@ -124,7 +124,7 @@ def reset_analysis():
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     
-    # --- REVERT: Force a complete script rerun directly inside the callback ---
+    # --- Force a complete script rerun directly inside the callback ---
     st.rerun()
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
@@ -670,6 +670,7 @@ def download_file_to_bytesio(url):
 # ---------------------------------------------------------------------
 # NEW: XML Parallel Corpus Parsing
 # ---------------------------------------------------------------------
+import xml.etree.ElementTree as ET
 
 def parse_xml_file(file_source):
     """
@@ -677,50 +678,62 @@ def parse_xml_file(file_source):
     Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
     """
     try:
-        xml_content = file_source.read().decode('utf-8')
+        # Use ElementTree for robust XML parsing
+        tree = ET.parse(file_source)
+        root = tree.getroot()
+        
+        # 1. Extract Language Code from the root tag (<text lang="EN">)
+        # Using a fixed namespace if needed, but assuming simple attributes here
+        lang_code = root.get('lang')
+        if not lang_code:
+            # Fallback to regex on raw content if ElementTree doesn't capture it easily
+            file_source.seek(0)
+            xml_content = file_source.read().decode('utf-8')
+            lang_match = re.search(r'<text\s+lang="([^"]+)">', xml_content)
+            if lang_match:
+                lang_code = lang_match.group(1).upper()
+            else:
+                st.error(f"XML parsing failed: Could not find required <text lang=\"...\"> tag in {file_source.name}.")
+                return None
+        else:
+            lang_code = lang_code.upper()
+            
     except Exception as e:
-        st.error(f"Error reading XML file: {e}")
-        return None
-
-    # 1. Extract Language Code
-    lang_match = re.search(r'<text\s+lang="([^"]+)">', xml_content)
-    if not lang_match:
-        st.error(f"XML parsing failed: Could not find required <text lang=\"...\"> tag in {file_source.name}.")
-        return None
-    lang_code = lang_match.group(1).upper()
-    
-    # Clean up content: remove all <text> tags and normalize whitespace for easier processing
-    cleaned_content = re.sub(r'</?text[^>]*>', '', xml_content)
-    
-    # 2. Extract Sentences
-    # Regex captures the <sent n="ID"> tag, content, and the closing </sent> or <sent>
-    sent_blocks = re.findall(r'(<sent\s+n="(\d+)">)(.*?)(</?sent[^>]*>)', cleaned_content, re.DOTALL)
-
-    if not sent_blocks:
-        st.error(f"XML parsing failed: Could not find any required <sent n=\"...\"> tags in {file_source.name}.")
+        st.error(f"Error reading or parsing XML file {file_source.name}: {e}")
         return None
 
     df_data = []
     sent_map = {}
     
-    for _, sent_id_str, inner_content, _ in sent_blocks:
-        sent_id = int(sent_id_str)
+    # Iterate over <sent n="ID"> tags
+    for sent_elem in root.findall('sent'):
+        sent_id_str = sent_elem.get('n')
+        if not sent_id_str: continue # Skip if no sentence number
+
+        try:
+            sent_id = int(sent_id_str)
+        except ValueError:
+            st.warning(f"Skipping sentence with non-integer ID: {sent_id_str}")
+            continue
+
+        inner_content = sent_elem.text.strip() if sent_elem.text else ""
         
-        # Remove any stray newlines or tabs before checking content format
-        clean_inner_content = inner_content.strip()
-        
-        # Check for verticalization (TrETagger format: token\tPOS\tlemma)
-        lines = [line.strip() for line in clean_inner_content.split('\n') if line.strip()]
+        # Check for verticalization/tagging
+        lines = [line.strip() for line in inner_content.split('\n') if line.strip()]
         
         if not lines:
-            continue # Skip empty sentences
+            # Check for self-closing <sent> tags that might be used as closure (like <sent n="1">content<sent>).
+            # If ElementTree missed content, check if text is stored as tail on the tag or an adjacent element.
+            # However, for the provided XML schema, text should be .text or inner_content is empty. 
+            # We stick to parsing the content of the XML block.
+             continue 
 
-        # Heuristic check for vertical/tagged format: look for lines with more than one token (separated by tab/space)
-        is_vertical_format = any(len(line.split('\t')) > 1 or len(line.split()) > 1 and line.count('\t') > 0 for line in lines)
+        # Heuristic: Check if the lines suggest vertical/tagged format (multiple columns/tabs)
+        # We need a strict check for the required format: token \t POS \t lemma
+        is_vertical_format = all(len(re.split(r'\s+', line.strip())) >= 3 for line in lines)
         
         if is_vertical_format:
             # Already verticalized (TrETagger format or similar)
-            # Reconstruct raw horizontal sentence by taking only the first column (token)
             raw_tokens = []
             for line in lines:
                 parts = re.split(r'\s+', line.strip(), 2) # Split by any whitespace, max 2 times
@@ -728,32 +741,42 @@ def parse_xml_file(file_source):
                 pos = parts[1] if len(parts) > 1 and parts[1] else "##"
                 lemma = parts[2] if len(parts) > 2 and parts[2] else "##"
                 
-                # Check for vertical lines that are malformed (e.g., lines containing only one column)
                 if not token: continue
                 
                 df_data.append({"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id})
                 raw_tokens.append(token)
             
-            # The raw sentence for the map is the reconstruction from the first column
             raw_sentence_text = " ".join(raw_tokens)
 
         else:
             # Horizontal text (raw) - requires tokenization
-            raw_sentence_text = clean_inner_content 
+            raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
             tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', raw_sentence_text) if t.strip()]
             
             for token in tokens:
                 df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
-
-        # Store raw sentence for the target map (only needed for target language, but stored here for consistency)
-        sent_map[sent_id] = raw_sentence_text.replace('\t', ' ') # Clean up tabs in the raw sentence
+        
+        # Store raw sentence for the target map
+        sent_map[sent_id] = raw_sentence_text.strip()
+        
+    if not df_data:
+        st.warning(f"No tokens found in corpus file: {file_source.name}.")
+        return None
         
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
 
 @st.cache_data
 def load_xml_parallel_corpus(src_file, tgt_file):
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    st.session_state['parallel_mode'] = False
+    st.session_state['df_target_lang'] = pd.DataFrame()
+    st.session_state['target_sent_map'] = {}
+    
+    if src_file is None or tgt_file is None: return None
 
+    # Reset file pointers before parsing
+    src_file.seek(0)
+    tgt_file.seek(0)
+    
     src_result = parse_xml_file(src_file)
     tgt_result = parse_xml_file(tgt_file)
     
@@ -773,14 +796,15 @@ def load_xml_parallel_corpus(src_file, tgt_file):
         
         error_msg = f"Alignment Check Failed: Sentence IDs mismatch."
         if missing_in_tgt:
-            error_msg += f" Source ({src_result['lang_code']}) has IDs missing in Target ({tgt_result['lang_code']}): {sorted(list(missing_in_tgt))[:5]}..."
+            error_msg += f" Source ({src_result['lang_code']}) is missing sentence IDs: {sorted(list(missing_in_tgt))[:5]}..."
         if missing_in_src:
-            error_msg += f" Target ({tgt_result['lang_code']}) has IDs missing in Source ({src_result['lang_code']}): {sorted(list(missing_in_src))[:5]}..."
+            error_msg += f" Target ({tgt_result['lang_code']}) is missing sentence IDs: {sorted(list(missing_in_src))[:5]}..."
         
         st.error(error_msg)
         return None
         
     # 2. Finalize Session State
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
     SOURCE_LANG_CODE = src_result['lang_code']
     TARGET_LANG_CODE = tgt_result['lang_code']
 
@@ -788,7 +812,8 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     
     st.session_state['parallel_mode'] = True
     st.session_state['df_target_lang'] = df_tgt
-    st.session_state['target_sent_map'] = tgt_result['sent_map']
+    # Target sent map stores the raw sentence for alignment lookup
+    st.session_state['target_sent_map'] = tgt_result['sent_map'] 
     
     return df_src
 
@@ -805,6 +830,8 @@ def load_excel_parallel_corpus_file(file_source):
     if file_source is None: return None
     
     try:
+        # Reset file pointer
+        file_source.seek(0)
         df_raw = pd.read_excel(file_source, engine='openpyxl')
     except Exception as e:
         st.error(f"Failed to read Excel file: {e}")
@@ -1303,16 +1330,20 @@ with st.sidebar:
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
     
     is_active_d = st.session_state['view'] == 'dictionary' 
-    st.button("📘 Dictionary", key='nav_dictionary', on_change=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
+    # FIX: Changed on_change to on_click for st.button
+    st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
     
     is_active_c = st.session_state['view'] == 'concordance'
-    st.button("📚 Concordance", key='nav_concordance', on_change=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
+    # FIX: Changed on_change to on_click for st.button
+    st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
     
     is_active_n = st.session_state['view'] == 'n_gram' # NEW N-GRAM BUTTON
-    st.button("🔢 N-Gram", key='nav_n_gram', on_change=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
+    # FIX: Changed on_change to on_click for st.button
+    st.button("🔢 N-Gram", key='nav_n_gram', on_click=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
 
     is_active_l = st.session_state['view'] == 'collocation'
-    st.button("🔗 Collocation", key='nav_collocation', on_change=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
+    # FIX: Changed on_change to on_click for st.button
+    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
 
     # 3. TOOL SETTINGS (Conditional Block)
     if st.session_state['view'] != 'overview':
