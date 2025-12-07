@@ -720,12 +720,15 @@ def parse_xml_file(file_source):
         inner_content = sent_elem.text.strip() if sent_elem.text else ""
         
         # Check for verticalization/tagging
-        lines = [line.strip() for line in inner_content.split('\n') if line.strip()]
+        # Normalize the content for line processing (important if file contains mixed LF/CRLF)
+        normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
+        lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
         
         if not lines:
              continue 
 
         # Heuristic: Check if the content suggests vertical/tagged format (multiple columns/tabs)
+        # Check if most lines have at least two whitespaces (suggesting three columns: token POS lemma) or contain a tab
         is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
         
         if is_vertical_format:
@@ -749,11 +752,11 @@ def parse_xml_file(file_source):
             # Horizontal text (raw) - requires tokenization
             raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
             
-            # --- FIX: IMPROVED TOKENIZATION REGEX for raw text ---
-            # Pattern: matches 1. sequences of letters/numbers (\w+) or 2. punctuation/symbols ([\S]) that are NOT whitespace (\s)
+            # --- FIXED TOKENIZATION ---
+            # Pattern: matches 1. sequences of letters/numbers ([\w]+) or 2. punctuation/symbols ([^\w\s])
+            # This is more robust for separating words and attached punctuation marks.
             tokens = [t.strip() for t in re.findall(r'[\w]+|[^\w\s]', raw_sentence_text) if t.strip()]
-            # This is more robust than the previous pattern for separating words and punctuation marks (like the trailing period/full stop).
-            # -----------------------------------------------------
+            # --------------------------
 
             for token in tokens:
                 df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
@@ -860,7 +863,7 @@ def load_excel_parallel_corpus_file(file_source):
         src_text = str(row.iloc[0]).strip()
         tgt_text = str(row.iloc[1]).strip()
         
-        src_tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', src_text) if t.strip()]
+        src_tokens = [t.strip() for t in re.findall(r'[\w]+|[^\w\s]', src_text) if t.strip()]
         
         target_sent_map[sent_id_counter] = tgt_text 
         
@@ -2120,7 +2123,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         
         # Use a scrollable container for the main table
         html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
-        st.markdown(f"<div classs='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
 
     # ---------- Download Buttons ----------
     st.markdown("---")
