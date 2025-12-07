@@ -124,8 +124,7 @@ def reset_analysis():
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     
-    # --- FIX: Force a complete script rerun to ensure all state is re-initialized ---
-    # This addresses the persistent caching issue when switching corpus files.
+    # --- REVERT: Force a complete script rerun directly inside the callback ---
     st.rerun()
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
@@ -667,10 +666,138 @@ def download_file_to_bytesio(url):
     except Exception as e:
         st.error(f"Failed to download built-in corpus from {url}. Ensure the file is public and the URL is a RAW content link.")
         return None
+        
+# ---------------------------------------------------------------------
+# NEW: XML Parallel Corpus Parsing
+# ---------------------------------------------------------------------
 
-# --- NEW: Function to tokenize and index parallel corpus from Excel ---
+def parse_xml_file(file_source):
+    """
+    Parses a single XML file, extracts sentences and IDs, and tokenizes/verticalizes if needed.
+    Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
+    """
+    try:
+        xml_content = file_source.read().decode('utf-8')
+    except Exception as e:
+        st.error(f"Error reading XML file: {e}")
+        return None
+
+    # 1. Extract Language Code
+    lang_match = re.search(r'<text\s+lang="([^"]+)">', xml_content)
+    if not lang_match:
+        st.error(f"XML parsing failed: Could not find required <text lang=\"...\"> tag in {file_source.name}.")
+        return None
+    lang_code = lang_match.group(1).upper()
+    
+    # Clean up content: remove all <text> tags and normalize whitespace for easier processing
+    cleaned_content = re.sub(r'</?text[^>]*>', '', xml_content)
+    
+    # 2. Extract Sentences
+    # Regex captures the <sent n="ID"> tag, content, and the closing </sent> or <sent>
+    sent_blocks = re.findall(r'(<sent\s+n="(\d+)">)(.*?)(</?sent[^>]*>)', cleaned_content, re.DOTALL)
+
+    if not sent_blocks:
+        st.error(f"XML parsing failed: Could not find any required <sent n=\"...\"> tags in {file_source.name}.")
+        return None
+
+    df_data = []
+    sent_map = {}
+    
+    for _, sent_id_str, inner_content, _ in sent_blocks:
+        sent_id = int(sent_id_str)
+        
+        # Remove any stray newlines or tabs before checking content format
+        clean_inner_content = inner_content.strip()
+        
+        # Check for verticalization (TrETagger format: token\tPOS\tlemma)
+        lines = [line.strip() for line in clean_inner_content.split('\n') if line.strip()]
+        
+        if not lines:
+            continue # Skip empty sentences
+
+        # Heuristic check for vertical/tagged format: look for lines with more than one token (separated by tab/space)
+        is_vertical_format = any(len(line.split('\t')) > 1 or len(line.split()) > 1 and line.count('\t') > 0 for line in lines)
+        
+        if is_vertical_format:
+            # Already verticalized (TrETagger format or similar)
+            # Reconstruct raw horizontal sentence by taking only the first column (token)
+            raw_tokens = []
+            for line in lines:
+                parts = re.split(r'\s+', line.strip(), 2) # Split by any whitespace, max 2 times
+                token = parts[0]
+                pos = parts[1] if len(parts) > 1 and parts[1] else "##"
+                lemma = parts[2] if len(parts) > 2 and parts[2] else "##"
+                
+                # Check for vertical lines that are malformed (e.g., lines containing only one column)
+                if not token: continue
+                
+                df_data.append({"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id})
+                raw_tokens.append(token)
+            
+            # The raw sentence for the map is the reconstruction from the first column
+            raw_sentence_text = " ".join(raw_tokens)
+
+        else:
+            # Horizontal text (raw) - requires tokenization
+            raw_sentence_text = clean_inner_content 
+            tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', raw_sentence_text) if t.strip()]
+            
+            for token in tokens:
+                df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
+
+        # Store raw sentence for the target map (only needed for target language, but stored here for consistency)
+        sent_map[sent_id] = raw_sentence_text.replace('\t', ' ') # Clean up tabs in the raw sentence
+        
+    return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
+
 @st.cache_data
-def load_parallel_corpus_file(file_source):
+def load_xml_parallel_corpus(src_file, tgt_file):
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+
+    src_result = parse_xml_file(src_file)
+    tgt_result = parse_xml_file(tgt_file)
+    
+    if src_result is None or tgt_result is None:
+        return None
+        
+    df_src = pd.DataFrame(src_result['df_data'])
+    df_tgt = pd.DataFrame(tgt_result['df_data'])
+
+    # 1. Check for Alignment (Sentence IDs)
+    src_sent_ids = set(df_src['sent_id'].unique())
+    tgt_sent_ids = set(df_tgt['sent_id'].unique())
+    
+    if src_sent_ids != tgt_sent_ids:
+        missing_in_tgt = src_sent_ids - tgt_sent_ids
+        missing_in_src = tgt_sent_ids - src_sent_ids
+        
+        error_msg = f"Alignment Check Failed: Sentence IDs mismatch."
+        if missing_in_tgt:
+            error_msg += f" Source ({src_result['lang_code']}) has IDs missing in Target ({tgt_result['lang_code']}): {sorted(list(missing_in_tgt))[:5]}..."
+        if missing_in_src:
+            error_msg += f" Target ({tgt_result['lang_code']}) has IDs missing in Source ({src_result['lang_code']}): {sorted(list(missing_in_src))[:5]}..."
+        
+        st.error(error_msg)
+        return None
+        
+    # 2. Finalize Session State
+    SOURCE_LANG_CODE = src_result['lang_code']
+    TARGET_LANG_CODE = tgt_result['lang_code']
+
+    df_src["_token_low"] = df_src["token"].str.lower()
+    
+    st.session_state['parallel_mode'] = True
+    st.session_state['df_target_lang'] = df_tgt
+    st.session_state['target_sent_map'] = tgt_result['sent_map']
+    
+    return df_src
+
+
+# ---------------------------------------------------------------------
+# EXISTING: Excel Parallel Corpus Loading (Renamed)
+# ---------------------------------------------------------------------
+@st.cache_data
+def load_excel_parallel_corpus_file(file_source):
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
@@ -678,29 +805,23 @@ def load_parallel_corpus_file(file_source):
     if file_source is None: return None
     
     try:
-        # Read the Excel file
         df_raw = pd.read_excel(file_source, engine='openpyxl')
     except Exception as e:
         st.error(f"Failed to read Excel file: {e}")
         return None
 
-    # Determine language columns (first two headers)
     if df_raw.shape[1] < 2:
         st.error("Excel file must contain at least two columns for source and target language.")
         return None
     
-    # Use headers as language codes
     src_lang = df_raw.columns[0]
     tgt_lang = df_raw.columns[1]
     
-    # Use global constants for consistency
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
     SOURCE_LANG_CODE = src_lang
     TARGET_LANG_CODE = tgt_lang
     
-    # Tokenization and Indexing
     data_src = []
-    data_tgt = []
     target_sent_map = {}
     sent_id_counter = 0
     
@@ -709,15 +830,10 @@ def load_parallel_corpus_file(file_source):
         src_text = str(row.iloc[0]).strip()
         tgt_text = str(row.iloc[1]).strip()
         
-        # Simple tokenization: find sequences of word characters or non-word/non-space characters
         src_tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', src_text) if t.strip()]
-        # tgt_tokens is generated but currently unused in analysis DF, kept for completeness
-        tgt_tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', tgt_text) if t.strip()]
-
-        # Store the raw translated sentence for quick lookup (key: sent_id)
+        
         target_sent_map[sent_id_counter] = tgt_text 
         
-        # Populate source language data (The main DF for analysis)
         for token in src_tokens:
             data_src.append({
                 "token": token,
@@ -726,28 +842,14 @@ def load_parallel_corpus_file(file_source):
                 "sent_id": sent_id_counter
             })
             
-        # Placeholder for target language data (DF not currently used for analysis but helpful)
-        for token in tgt_tokens:
-             data_tgt.append({
-                "token": token,
-                "pos": "##",
-                "lemma": "##",
-                "sent_id": sent_id_counter
-            })
-
     if not data_src:
         st.error("No valid sentences found in the parallel corpus.")
         return None
 
     df_src = pd.DataFrame(data_src)
-    df_tgt = pd.DataFrame(data_tgt)
-    
-    # Finalize Source DF (the main corpus for analysis)
     df_src["_token_low"] = df_src["token"].str.lower()
 
-    # Update session state for parallel mode
     st.session_state['parallel_mode'] = True
-    st.session_state['df_target_lang'] = df_tgt
     st.session_state['target_sent_map'] = target_sent_map
     
     return df_src
@@ -756,18 +858,12 @@ def load_parallel_corpus_file(file_source):
 # --- Existing function modified to handle either tagged or raw text files ---
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
-    # If a parallel file was loaded, load_parallel_corpus_file already handled it and returned the source DF
-    if st.session_state.get('parallel_mode', False) and 'sent_id' in st.session_state.get('df_target_lang', pd.DataFrame()).columns:
-         # load_corpus_file is often called immediately after load_parallel_corpus_file via session state. 
-         # We proceed only if file_source exists.
-         pass 
-         
-    if file_source is None: return None
-    
-    # Reset parallel mode before processing standard file
+    # Always reset parallel mode when loading standard file
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
+         
+    if file_source is None: return None
     
     try:
         file_source.seek(0)
@@ -786,6 +882,11 @@ def load_corpus_file(file_source, sep=r"\s+"):
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
     except Exception as e: pass
+
+    # Set default global codes for non-parallel files
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    SOURCE_LANG_CODE = 'RAW'
+    TARGET_LANG_CODE = 'NA'
 
     try:
         file_buffer_for_pandas.seek(0) 
@@ -1096,7 +1197,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # UI: header
 # ---------------------------
 st.title("CORTEX - Corpus Texts Explorer v17.16 (Parallel Ready)")
-st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel)**.")
+st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
 # Panel: upload and corpus info
@@ -1128,23 +1229,46 @@ with st.sidebar:
         key="file_upload",
         on_change=reset_analysis
     )
+    
+    # --- C. PARALLEL CORPUS UPLOAD (XML) ---
+    st.markdown("##### 🔗 Upload Unlinked XML Parallel Corpus")
+    xml_src_file = st.file_uploader(
+        f"Source Language XML (e.g., <text lang='EN'>)", 
+        type=["xml"],
+        key="xml_src_file_upload",
+        on_change=reset_analysis
+    )
+    xml_tgt_file = st.file_uploader(
+        f"Target Language XML (Must match sent n=IDs)", 
+        type=["xml"],
+        key="xml_tgt_file_upload",
+        on_change=reset_analysis
+    )
 
-    # --- C. PARALLEL CORPUS UPLOAD (MOVED HERE) ---
-    st.markdown("##### 📥 Upload Parallel Corpus")
-    parallel_file = st.file_uploader(
-        "Upload Parallel Excel (Col 1: EN, Col 2: ID)", 
+    # --- D. PARALLEL CORPUS UPLOAD (EXCEL) ---
+    st.markdown("##### 📥 Upload Linked Excel Parallel Corpus")
+    parallel_excel_file = st.file_uploader(
+        "Upload Excel (Col 1: Source Text, Col 2: Target Text)", 
         type=["xlsx"],
-        key="parallel_file_upload",
+        key="parallel_excel_file_upload",
         on_change=reset_analysis
     )
     
-    # --- CORPUS LOADING LOGIC (Prioritize Parallel > Uploaded Monolingual > Built-in) ---
+    # --- CORPUS LOADING LOGIC (Prioritize XML > Excel > Uploaded Monolingual > Built-in) ---
     
-    if parallel_file is not None:
-        with st.spinner("Processing Parallel Corpus..."):
-            df_source_lang_for_analysis = load_parallel_corpus_file(parallel_file)
-            corpus_name = f"Parallel ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
-            parallel_uploaded = True
+    if xml_src_file is not None and xml_tgt_file is not None:
+        with st.spinner("Processing XML Parallel Corpus..."):
+            df_source_lang_for_analysis = load_xml_parallel_corpus(xml_src_file, xml_tgt_file)
+            if df_source_lang_for_analysis is not None:
+                corpus_name = f"Parallel (XML) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
+                parallel_uploaded = True
+    
+    elif parallel_excel_file is not None:
+        with st.spinner("Processing Excel Parallel Corpus..."):
+            df_source_lang_for_analysis = load_excel_parallel_corpus_file(parallel_excel_file)
+            if df_source_lang_for_analysis is not None:
+                corpus_name = f"Parallel (Excel) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
+                parallel_uploaded = True
     
     elif uploaded_file is not None:
         corpus_source = uploaded_file
@@ -1179,16 +1303,16 @@ with st.sidebar:
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
     
     is_active_d = st.session_state['view'] == 'dictionary' 
-    st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
+    st.button("📘 Dictionary", key='nav_dictionary', on_change=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
     
     is_active_c = st.session_state['view'] == 'concordance'
-    st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
+    st.button("📚 Concordance", key='nav_concordance', on_change=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
     
     is_active_n = st.session_state['view'] == 'n_gram' # NEW N-GRAM BUTTON
-    st.button("🔢 N-Gram", key='nav_n_gram', on_click=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
+    st.button("🔢 N-Gram", key='nav_n_gram', on_change=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
 
     is_active_l = st.session_state['view'] == 'collocation'
-    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
+    st.button("🔗 Collocation", key='nav_collocation', on_change=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
 
     # 3. TOOL SETTINGS (Conditional Block)
     if st.session_state['view'] != 'overview':
@@ -1636,7 +1760,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         
         # --- NEW: Add Translation Column ---
         if is_parallel_mode:
-            translations = [target_sent_map.get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
+            translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
             kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
         
         # --- KWIC Table Style (Extracted for cleaner re-use) ---
@@ -1764,7 +1888,7 @@ if st.session_state['view'] == 'dictionary':
         
         # --- NEW: Add Translation Column ---
         if is_parallel_mode:
-            translations = [target_sent_map.get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
+            translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
             kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
 
         kwic_table_style = f"""
@@ -1835,7 +1959,7 @@ if st.session_state['view'] == 'dictionary':
         window=coll_window,
         limit_per_collocate=1,
         is_parallel_mode=is_parallel_mode,
-        target_sent_map=target_sent_map
+        target_sent_map=st.session_state['target_sent_map']
     )
 
 
@@ -2004,7 +2128,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         window=coll_window,
         limit_per_collocate=1, # Exactly 1 example per collocate
         is_parallel_mode=is_parallel_mode,
-        target_sent_map=target_sent_map
+        target_sent_map=st.session_state['target_sent_map']
     )
     
     st.markdown("---")
@@ -2018,7 +2142,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         window=coll_window,
         limit_per_collocate=1, # Exactly 1 example per collocate
         is_parallel_mode=is_parallel_mode,
-        target_sent_map=target_sent_map
+        target_sent_map=st.session_state['target_sent_map']
     )
 
 
