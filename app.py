@@ -49,8 +49,14 @@ if 'collocate_regex_input' not in st.session_state:
     st.session_state['collocate_regex_input'] = ''
 if 'pattern_collocate_input' not in st.session_state:
     st.session_state['pattern_collocate_input'] = ''
-if 'pattern_collocate_pos_input' not in st.session_state:
-     st.session_state['pattern_collocate_pos_input'] = ''
+if 'pattern_collocate_pos_input_coll' not in st.session_state: # Used for Collocation POS Regex
+     st.session_state['pattern_collocate_pos_input_coll'] = ''
+if 'collocate_lemma_input' not in st.session_state: # Used for Collocation Lemma
+     st.session_state['collocate_lemma_input'] = ''
+if 'selected_pos_tags_input' not in st.session_state: # Used for Collocation POS Multiselect
+    st.session_state['selected_pos_tags_input'] = []
+if 'pattern_collocate_pos' not in st.session_state: # Used for Concordance POS Regex
+     st.session_state['pattern_collocate_pos'] = ''
 if 'typed_target_input' not in st.session_state:
      st.session_state['typed_target_input'] = ''
 if 'max_collocates' not in st.session_state:
@@ -59,9 +65,16 @@ if 'coll_window' not in st.session_state:
     st.session_state['coll_window'] = 5
 if 'mi_min_freq' not in st.session_state:
     st.session_state['mi_min_freq'] = 1
+# --- KWIC State ---
+if 'kwic_left' not in st.session_state:
+    st.session_state['kwic_left'] = 7
+if 'kwic_right' not in st.session_state:
+    st.session_state['kwic_right'] = 7
+if 'pattern_search_window' not in st.session_state:
+    st.session_state['pattern_search_window'] = 5
 # --- N-Gram State ---
 if 'n_gram_size' not in st.session_state:
-    st.session_state['n_gram_size'] = 2
+    st.session_state['n_gram_size'] = 3 # Default to 3-grams
 if 'n_gram_filters' not in st.session_state:
     st.session_state['n_gram_filters'] = {} # Dictionary to hold positional filters: {'1': 'pattern', '2': 'pattern', ...}
 if 'n_gram_trigger_analyze' not in st.session_state:
@@ -77,7 +90,9 @@ if 'source_lang_label' not in st.session_state:
     st.session_state['source_lang_label'] = 'EN' # Default
 if 'target_lang_label' not in st.session_state:
     st.session_state['target_lang_label'] = 'TL' # Default
-
+# --- Raw Mode Proxy (for sidebar) ---
+if 'is_raw_mode_proxy' not in st.session_state:
+     st.session_state['is_raw_mode_proxy'] = True # Assume raw until loaded
 
 # ---------------------------
 # Built-in Corpus Configuration
@@ -121,6 +136,7 @@ def reset_analysis():
     st.session_state['parallel_corpus_df'] = None
     st.session_state['source_lang_label'] = 'EN'
     st.session_state['target_lang_label'] = 'TL'
+    st.session_state['is_raw_mode_proxy'] = True # Reset proxy to raw on file clear
     
 # --- Analysis Trigger Callback (for implicit Enter/change) ---
 def trigger_analysis_callback():
@@ -1074,7 +1090,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
                 filtered_df = pd.DataFrame()
 
     # 3. Selected POS tags (Multiselect filter)
-    if selected_pos_tags and not collocate_pos_regex_input:
+    if selected_pos_tags and not collocate_pos_regex_input and not is_raw_mode: # Added is_raw_mode check
         filtered_df = filtered_df[filtered_df['POS'].isin(selected_pos_tags)]
         
     # 4. Collocate Lemma filter
@@ -1155,17 +1171,89 @@ with st.sidebar:
         else:
             corpus_source = download_file_to_bytesio(corpus_url) # Re-fetch on refresh
         corpus_name = selected_corpus_name
-
-    # ... (rest of sidebar content) ...
+        
+    # --- 3. ANALYSIS SETTINGS (ADDED) ---
+    # This block is added to provide the necessary configuration inputs for the main modules.
+    
+    st.header("3. Analysis Settings")
+    
+    # KWIC/Concordance Settings
+    st.subheader("Concordance Settings")
+    col_l, col_r = st.columns(2)
+    with col_l:
+        st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=st.session_state['kwic_left'], key='kwic_left_input', step=1)
+        st.session_state['kwic_left'] = st.session_state['kwic_left_input']
+    with col_r:
+        st.number_input("Right Context (tokens)", min_value=1, max_value=20, value=st.session_state['kwic_right'], key='kwic_right_input', step=1)
+        st.session_state['kwic_right'] = st.session_state['kwic_right_input']
+    
+    with st.expander("KWIC Pattern Search Filter"):
+        st.number_input("Pattern Window (± tokens)", min_value=1, max_value=10, value=st.session_state['pattern_search_window'], key='pattern_search_window_input', step=1)
+        st.session_state['pattern_search_window'] = st.session_state['pattern_search_window_input']
+        st.text_input("Collocate Word/Regex (e.g., *ing)", key='pattern_collocate_input', on_change=trigger_analysis_callback)
+        st.text_input("Collocate POS/POS Regex (e.g., _NNS|_NNP)", key='pattern_collocate_pos', on_change=trigger_analysis_callback)
+    
+    st.markdown("---")
+    
+    # Collocation Settings
+    st.subheader("Collocation Settings")
+    col_w, col_mf = st.columns(2)
+    with col_w:
+        st.number_input("Window (± tokens)", min_value=1, max_value=10, value=st.session_state['coll_window'], key='coll_window_input', step=1)
+        st.session_state['coll_window'] = st.session_state['coll_window_input']
+    with col_mf:
+        st.number_input("Min Observed Freq", min_value=1, max_value=100, value=st.session_state['mi_min_freq'], key='mi_min_freq_input', step=1)
+        st.session_state['mi_min_freq'] = st.session_state['mi_min_freq_input']
+        
+    st.number_input("Max Collocates Displayed", min_value=10, max_value=1000, value=st.session_state['max_collocates'], key='max_collocates_input', step=10)
+    st.session_state['max_collocates'] = st.session_state['max_collocates_input']
+    
+    
+    # Collocate Filters (Only show POS/Lemma filters if not explicitly known to be RAW/Parallel)
+    # Using a proxy for raw mode since the actual check is later.
+    is_raw_mode_proxy = st.session_state.get('is_raw_mode_proxy', True) # Default is true until vertical is loaded
+    if not is_raw_mode_proxy:
+        st.markdown("---")
+        st.subheader("Collocate Filters (Optional)")
+        
+        # Filter 1: POS multiselect 
+        if df_sidebar is not None: 
+            # Safely attempt to get unique POS tags, excluding dummy tags
+            unique_pos_tags = sorted([p for p in df_sidebar['pos'].unique() if p and not p.startswith('##')])
+            st.multiselect("Filter by POS Tag", options=unique_pos_tags, key='selected_pos_tags_input')
+        
+        # Filter 2: Collocate POS Regex (if used, overrides multiselect)
+        st.text_input("Collocate POS Regex (e.g., _N*|_V*)", key='collocate_pos_regex_input_coll', help="Overrides POS multiselect if provided.")
+        
+        # Filter 3: Collocate Lemma
+        st.text_input("Collocate Lemma/Lemma Regex", key='collocate_lemma_input', help="e.g., [make] or [do*]")
+    
+    st.markdown("---")
     
     # NAV SECTION (at the bottom of sidebar)
-    st.markdown("---")
     st.header("4. Modules")
-    if df_sidebar is not None: # check if any corpus is loaded
-        # ... (existing module buttons) ...
-        # Ensure df_sidebar is defined by the main loading block before this runs if possible.
-        # Since it's in the sidebar, we'll assume df_sidebar is defined later or use the main df.
-        pass
+    if df_sidebar is not None: # check if any corpus is loaded (FIX: Navigation buttons added)
+        st.button("1. Corpus Overview", on_click=lambda: set_view('overview'))
+        st.button("2. Dictionary", on_click=lambda: set_view('dictionary'))
+        st.button("3. Concordance (KWIC)", on_click=lambda: set_view('concordance'))
+        st.button("4. Collocation", on_click=lambda: set_view('collocation'))
+        st.button("5. N-Grams", on_click=lambda: set_view('n-grams'))
+        
+        # N-Gram settings expander (move N-Gram specific controls here)
+        if st.session_state['view'] == 'n-grams':
+            st.markdown("---")
+            st.subheader("N-Gram Filters")
+            # Use consistent keys for N-Gram
+            st.selectbox("N-Gram Size", options=[2, 3, 4, 5], index=1, key='n_gram_size_select', on_change=trigger_n_gram_analysis_callback)
+            st.session_state['n_gram_size'] = st.session_state['n_gram_size_select'] 
+            
+            st.caption("Positional Filters (1-based index). Enter token regex, `_POS` regex, or `[lemma]` regex.")
+            for i in range(1, st.session_state['n_gram_size'] + 1):
+                input_key = f'n_gram_filter_{i}_input'
+                current_value = st.session_state['n_gram_filters'].get(str(i), '')
+                
+                st.text_input(f"Position {i}", key=input_key, value=current_value, on_change=trigger_n_gram_analysis_callback, args=())
+                st.session_state['n_gram_filters'][str(i)] = st.session_state[input_key]
 
 # ---------------------------
 # Main Corpus Loading & Pre-Analysis
@@ -1227,7 +1315,8 @@ df_sidebar = df
 is_raw_mode = 'pos' not in df.columns or df['pos'].str.contains('##', na=False).sum() > 0.99 * len(df)
 if is_parallel_mode: is_raw_mode = True # Parallel corpus is explicitly untagged
 
-# Continue with the rest of the existing script logic...
+# Update the raw mode proxy for sidebar rendering in the next rerun
+st.session_state['is_raw_mode_proxy'] = is_raw_mode
 
 # Calculate corpus metrics
 total_tokens = len(df)
@@ -1235,8 +1324,14 @@ unique_types_df = df[~df['token'].str.lower().isin(PUNCTUATION) & ~df['token'].s
 unique_types = len(unique_types_df['token'].unique())
 unique_lemmas = len(df['lemma'].unique()) if 'lemma' in df.columns else 0
 
-# Filter out noise for frequency list (Punctuation, Tags)
-freq_df_filtered = df[~df['token'].str.lower().isin(PUNCTUATION) & ~df['token'].str.isdigit() & (df['pos'] != '##') & (df['pos'] != '###')].copy()
+# FIX: Modified frequency filter logic to handle raw/parallel mode correctly (lines 1342-1349)
+# Filter out noise for frequency list (Punctuation, Digits)
+freq_df_filtered = df[~df['token'].str.lower().isin(PUNCTUATION) & ~df['token'].str.isdigit()].copy()
+
+if not is_raw_mode:
+    # In tagged mode, also filter out the dummy tags ('##' and '###')
+    freq_df_filtered = freq_df_filtered[~freq_df_filtered['pos'].isin(['##', '###'])].copy()
+
 # FIX: Filter freq_df for non-empty tokens before grouping
 freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
 
@@ -1263,6 +1358,7 @@ if st.session_state['view'] == 'overview':
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         # FIX: Ensure freq_df is not empty before creating word cloud
         if not freq_df.empty:
+            # Word cloud will now work for small parallel file, even if it's very small.
             wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
             if not is_raw_mode:
                 st.markdown(
@@ -1369,11 +1465,11 @@ if st.session_state['view'] == 'concordance':
     raw_target_input = search_input.strip()
 
     # Get KWIC and Pattern Search Settings from sidebar (if set)
-    kwic_left = st.session_state.get('kwic_left', 7)
-    kwic_right = st.session_state.get('kwic_right', 7)
-    pattern_search_window = st.session_state.get('pattern_search_window', 5)
-    pattern_collocate = st.session_state.get('pattern_collocate_input', '')
-    pattern_collocate_pos_input = st.session_state.get('pattern_collocate_pos', '')
+    kwic_left = st.session_state['kwic_left']
+    kwic_right = st.session_state['kwic_right']
+    pattern_search_window = st.session_state['pattern_search_window']
+    pattern_collocate = st.session_state['pattern_collocate_input']
+    pattern_collocate_pos_input = st.session_state['pattern_collocate_pos']
 
     if raw_target_input:
         # Run analysis only if triggered
@@ -1581,8 +1677,8 @@ if st.session_state['view'] == 'dictionary':
         
         # --- 3. Random Concordance Examples (MODIFIED) ---
         st.subheader("Random Examples (Concordance)")
-        kwic_left = st.session_state.get('kwic_left', 7)
-        kwic_right = st.session_state.get('kwic_right', 7)
+        kwic_left = st.session_state['kwic_left']
+        kwic_right = st.session_state['kwic_right']
         
         with st.spinner(f"Fetching random concordance examples for '{current_dict_word}'..."):
             kwic_rows, total_matches, _, _ = generate_kwic(
@@ -1667,8 +1763,8 @@ if st.session_state['view'] == 'dictionary':
         # --- 4. Collocation Profile ---
         st.subheader("Collocation Profile (Top 5 LL)")
         # Get Collocation Settings
-        coll_window = st.session_state.get('coll_window', 5)
-        mi_min_freq = st.session_state.get('mi_min_freq', 1)
+        coll_window = st.session_state['coll_window']
+        mi_min_freq = st.session_state['mi_min_freq']
         
         with st.spinner(f"Running collocation analysis for '{current_dict_word}'..."):
             stats_df_sorted, freq, primary_target_mwu = generate_collocation_results(
@@ -1723,9 +1819,9 @@ if st.session_state['view'] == 'collocation':
     raw_target_input = search_input.strip()
     
     # Get Collocation Settings
-    coll_window = st.session_state.get('coll_window', 5)
-    mi_min_freq = st.session_state.get('mi_min_freq', 1)
-    max_collocates = st.session_state.get('max_collocates', 20)
+    coll_window = st.session_state['coll_window']
+    mi_min_freq = st.session_state['mi_min_freq']
+    max_collocates = st.session_state['max_collocates']
     
     # Get Filter Settings
     collocate_regex = st.session_state.get('collocate_regex_input', '').lower().strip()
