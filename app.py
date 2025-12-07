@@ -600,11 +600,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     # If a parallel file was loaded, load_parallel_corpus_file already handled it and returned the source DF
     if st.session_state.get('parallel_mode', False) and 'sent_id' in st.session_state.get('df_target_lang', pd.DataFrame()).columns:
          # load_corpus_file is often called immediately after load_parallel_corpus_file via session state. 
-         # We need a robust way to check if we are already dealing with a parallel DF setup. 
-         # Since this function is mostly for non-parallel uploads, we rely on the caller to manage state. 
-         # If parallel_mode is set, we assume we are processing the output of the parallel loader.
-         # This part needs adjustment based on where the result of load_parallel_corpus_file is stored.
-         # The main DataFrame (df_source_lang_for_analysis) is handled by the caller. We proceed only if file_source exists.
+         # We proceed only if file_source exists.
          pass 
          
     if file_source is None: return None
@@ -1244,19 +1240,26 @@ st.header(app_mode)
 if st.session_state['view'] == 'overview':
     
     col1, col2 = st.columns([2,1])
-# --- Find this section around line 1261 in app.py ---
     with col1:
         st.subheader("Corpus Summary")
         # STTR calculation omitted for brevity but can be easily added back
-        # ... (info_df definition) ...
+        info_data = {
+            "Metric": [f"Corpus size ({SOURCE_LANG_CODE} tokens)", "Unique types (w/o punc)", "Lemma count"],
+            "Value": [f"{total_tokens:,}", unique_types, unique_lemmas]
+        }
+        if st.session_state.get('parallel_mode', False):
+            info_data["Metric"].append("Aligned Sentences")
+            info_data["Value"].append(f"{len(st.session_state['target_sent_map']):,}")
+
+        info_df = pd.DataFrame(info_data)
         st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
-        # FIX: Ensure freq_df is not empty before creating word cloud
+        
         if not freq_df.empty:
             wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
             
-            # --- START OF MODIFICATION ---
+            # --- START OF FIX ---
             if wordcloud_fig is not None: 
                 if not is_raw_mode:
                     st.markdown(
@@ -1267,11 +1270,11 @@ if st.session_state['view'] == 'overview':
                     
                 st.pyplot(wordcloud_fig)
             else:
-                # This catches the case where freq_df was not empty, but filtering inside create_word_cloud emptied it.
-                st.info("Not enough single tokens remaining to generate a word cloud.")
+                 st.info("Not enough single tokens remaining to generate a word cloud.")
 
         else:
             st.info("Not enough tokens to generate a word cloud.")
+            # --- END OF FIX ---
 
     with col2:
         st.subheader("Top frequency")
@@ -1843,4 +1846,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
