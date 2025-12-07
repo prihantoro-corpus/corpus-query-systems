@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud 
 from pyvis.network import Network
 import streamlit.components.v1 as components 
+import xml.etree.ElementTree as ET # Import for XML parsing
 
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
@@ -668,9 +669,8 @@ def download_file_to_bytesio(url):
         return None
         
 # ---------------------------------------------------------------------
-# NEW: XML Parallel Corpus Parsing
+# XML Parallel Corpus Parsing
 # ---------------------------------------------------------------------
-import xml.etree.ElementTree as ET
 
 def parse_xml_file(file_source):
     """
@@ -678,12 +678,11 @@ def parse_xml_file(file_source):
     Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
     """
     try:
-        # Use ElementTree for robust XML parsing
+        file_source.seek(0)
         tree = ET.parse(file_source)
         root = tree.getroot()
         
-        # 1. Extract Language Code from the root tag (<text lang="EN">)
-        # Using a fixed namespace if needed, but assuming simple attributes here
+        # 1. Extract Language Code
         lang_code = root.get('lang')
         if not lang_code:
             # Fallback to regex on raw content if ElementTree doesn't capture it easily
@@ -708,7 +707,7 @@ def parse_xml_file(file_source):
     # Iterate over <sent n="ID"> tags
     for sent_elem in root.findall('sent'):
         sent_id_str = sent_elem.get('n')
-        if not sent_id_str: continue # Skip if no sentence number
+        if not sent_id_str: continue 
 
         try:
             sent_id = int(sent_id_str)
@@ -716,27 +715,25 @@ def parse_xml_file(file_source):
             st.warning(f"Skipping sentence with non-integer ID: {sent_id_str}")
             continue
 
+        # Get all text content inside the <sent> tag, including tail text from internal elements
         inner_content = sent_elem.text.strip() if sent_elem.text else ""
         
         # Check for verticalization/tagging
         lines = [line.strip() for line in inner_content.split('\n') if line.strip()]
         
         if not lines:
-            # Check for self-closing <sent> tags that might be used as closure (like <sent n="1">content<sent>).
-            # If ElementTree missed content, check if text is stored as tail on the tag or an adjacent element.
-            # However, for the provided XML schema, text should be .text or inner_content is empty. 
-            # We stick to parsing the content of the XML block.
              continue 
 
         # Heuristic: Check if the lines suggest vertical/tagged format (multiple columns/tabs)
-        # We need a strict check for the required format: token \t POS \t lemma
-        is_vertical_format = all(len(re.split(r'\s+', line.strip())) >= 3 for line in lines)
+        # Check if most lines have at least two whitespaces (suggesting three columns: token POS lemma)
+        is_vertical_format = sum(line.count('\t') > 0 or len(line.split()) >= 3 for line in lines) / len(lines) > 0.5
         
         if is_vertical_format:
             # Already verticalized (TrETagger format or similar)
             raw_tokens = []
             for line in lines:
-                parts = re.split(r'\s+', line.strip(), 2) # Split by any whitespace, max 2 times
+                # Use split by any whitespace
+                parts = re.split(r'\s+', line.strip(), 2) 
                 token = parts[0]
                 pos = parts[1] if len(parts) > 1 and parts[1] else "##"
                 lemma = parts[2] if len(parts) > 2 and parts[2] else "##"
@@ -751,6 +748,7 @@ def parse_xml_file(file_source):
         else:
             # Horizontal text (raw) - requires tokenization
             raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
+            # Standard tokenization: find sequences of word characters or non-word/non-space characters
             tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', raw_sentence_text) if t.strip()]
             
             for token in tokens:
@@ -819,7 +817,7 @@ def load_xml_parallel_corpus(src_file, tgt_file):
 
 
 # ---------------------------------------------------------------------
-# EXISTING: Excel Parallel Corpus Loading (Renamed)
+# EXISTING: Excel Parallel Corpus Loading
 # ---------------------------------------------------------------------
 @st.cache_data
 def load_excel_parallel_corpus_file(file_source):
@@ -941,8 +939,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     # Fallback to Raw Text Processing
     try:
         raw_text = file_content_str
-        tokens = re.findall(r'\b\w+\b|[^\w\s]+', raw_text)
-        tokens = [t.strip() for t in tokens if t.strip()] 
+        tokens = [t.strip() for t in re.findall(r'\b\w+\b|[^\w\s]+', raw_text) if t.strip()] 
         nonsense_tag = "##"
         nonsense_lemma = "##"
         
@@ -1330,19 +1327,15 @@ with st.sidebar:
     st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary")
     
     is_active_d = st.session_state['view'] == 'dictionary' 
-    # FIX: Changed on_change to on_click for st.button
     st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
     
     is_active_c = st.session_state['view'] == 'concordance'
-    # FIX: Changed on_change to on_click for st.button
     st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
     
     is_active_n = st.session_state['view'] == 'n_gram' # NEW N-GRAM BUTTON
-    # FIX: Changed on_change to on_click for st.button
     st.button("🔢 N-Gram", key='nav_n_gram', on_click=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
 
     is_active_l = st.session_state['view'] == 'collocation'
-    # FIX: Changed on_change to on_click for st.button
     st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
 
     # 3. TOOL SETTINGS (Conditional Block)
@@ -1506,7 +1499,7 @@ if df is None:
     st.markdown("---")
     st.markdown("## Get Started")
     st.markdown("**Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
-    st.error(f"❌ **CORPUS LOAD FAILED** or **NO CORPUS SELECTED**. Please check the sidebar selection.")
+    st.error(f"❌ **CORPUS LOAD FAILED** or **NO CORPUS SELECTED**. Please check the sidebar selection and ensure files are correctly formatted/aligned.")
     st.stop()
 # ---------------------------------------------------------------------
 
@@ -1823,7 +1816,6 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     with col_freq:
-        # FIX: Remove hardcoded language code
         st.subheader(f"Target Frequency")
         st.dataframe(results_df, use_container_width=True, hide_index=True)
 
