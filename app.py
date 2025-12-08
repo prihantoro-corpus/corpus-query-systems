@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.26 - Robust Vertical Corpus Loading Fix, CEFR, IPA, and Dynamic Dictionary Link
+# CORTEX Corpus Explorer v17.24 - Dictionary CEFR & IPA Transcription Feature
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.26 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.24 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1134,10 +1134,9 @@ def load_excel_parallel_corpus_file(file_source):
     return df_src
 
 
-# --- Monolingual File Dispatcher (Updated for Robust Vertical Corpus Loading) ---
+# --- Monolingual File Dispatcher (Updated to check for XML) ---
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
     # Always reset parallel mode when loading standard file
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
@@ -1147,7 +1146,8 @@ def load_corpus_file(file_source, sep=r"\s+"):
          
     if file_source is None: return None
     
-    # --- XML DISPATCHER ---
+    # --- NEW XML DISPATCHER ---
+    # FIX: Check if file_source has a 'name' attribute before attempting .name.lower()
     if hasattr(file_source, 'name') and file_source.name.lower().endswith('.xml'):
         file_source.seek(0)
         return load_monolingual_xml_corpus(file_source)
@@ -1166,25 +1166,28 @@ def load_corpus_file(file_source, sep=r"\s+"):
             except Exception:
                 file_content_str = file_bytes.decode('utf-8', errors='ignore')
         
-        # Strip comments and empty lines BEFORE processing
-        clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#') and line.strip()]
+        clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
     except Exception as e: return None
 
     # Set default global codes for non-parallel files
-    SOURCE_LANG_CODE = 'RAW' 
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    SOURCE_LANG_CODE = 'RAW'
     TARGET_LANG_CODE = 'NA'
 
-    # --- Attempt to load as Tagged/Vertical Corpus (Highest Priority) ---
+    # --- Attempt to load as Tagged/CSV/TSV ---
     try:
-        file_buffer_for_pandas.seek(0)
-        
-        # 1. Attempt using one or more whitespace characters as a separator for vertical files
-        df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
+        file_buffer_for_pandas.seek(0) 
+        # Attempt 1: Tab-separated (vertical format)
+        try:
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
+        except Exception:
+            file_buffer_for_pandas.seek(0)
+            # Attempt 2: Whitespace-separated (vertical format, common)
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
             
         if df_attempt is not None and df_attempt.shape[1] >= 3:
-            # Successfully detected a vertical corpus format
             df = df_attempt.iloc[:, :3].copy()
             df.columns = ["token", "pos", "lemma"]
             
@@ -1193,23 +1196,11 @@ def load_corpus_file(file_source, sep=r"\s+"):
             df["lemma"] = df["lemma"].fillna("###").astype(str)
             df["_token_low"] = df["token"].str.lower()
             
-            # --- Auto-detect Language for Tagged/Vertical Corpus ---
-            # Simple check: If 'lemma' column contains Indonesian-typical words, assume ID.
-            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-            is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() > 5 
-            
-            if is_indonesian_tagged:
-                 SOURCE_LANG_CODE = 'ID'
-            else:
-                 # Default tagged corpus to EN if not obviously ID
-                 SOURCE_LANG_CODE = 'EN' 
-                 
             return df
             
-    except Exception: 
-        pass # Fall through to raw text if vertical parsing fails
+    except Exception: pass 
 
-    # Fallback to Raw Text Processing (Lowest Priority)
+    # Fallback to Raw Text Processing
     try:
         raw_text = file_content_str
         # --- FIXED TOKENIZATION ---
@@ -1230,7 +1221,6 @@ def load_corpus_file(file_source, sep=r"\s+"):
         
         df["_token_low"] = df["token"].str.lower()
         
-        # SOURCE_LANG_CODE remains 'RAW' (default set before the try block)
         return df
         
     except Exception as raw_e: return None 
@@ -1497,7 +1487,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.26 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.24 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2168,68 +2158,70 @@ if st.session_state['view'] == 'dictionary':
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
     # --------------------------------------------------------
-    # Language-Specific Features
+    # IPA Feature Logic (Request 1 & 2)
     # --------------------------------------------------------
-    source_lang_code_upper = SOURCE_LANG_CODE.upper()
-    is_english_corpus = source_lang_code_upper in ('EN', 'ENG', 'ENGLISH')
-    is_indonesian_corpus = source_lang_code_upper in ('ID', 'IND', 'INDONESIAN')
-
+    is_english_corpus = SOURCE_LANG_CODE.upper() in ('EN', 'ENG', 'ENGLISH')
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
-    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus 
+    # --- NEW: CEFR Feature Logic ---
+    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus # CEFR only for English
     
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
-        
+        # Continue to Collocation if possible, but skip forms/regex.
     elif not forms_list.empty:
-        # Rename columns first for display consistency
+        # FIX 1: Rename columns (already done in v17.22 thought block)
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
 
         if cefr_active:
             try:
+                # Function to look up CEFR level
                 def get_cefr_level(row):
+                    # Tokens are in 'Token (lowercase)', POS is in 'POS Tag'
                     token_lower = row['Token (lowercase)']
                     pos_tag = row['POS Tag']
+                    
+                    # Need a token and a proper POS tag for the lookup
                     if not token_lower or pos_tag in ('##', '###', 'O'):
-                         return "NA"
+                         return "NA (Missing Tag)"
+                    
+                    # cefrpy lookup:
                     cefr_level = CEFR_ANALYZER.get_word_pos_level_CEFR(token_lower, pos_tag)
                     return cefr_level if cefr_level else "NA"
 
+                # 1. Add 'CEFR' column (insert it before the last column which will be Pronunciation)
                 forms_list.insert(forms_list.shape[1], 'CEFR', forms_list.apply(get_cefr_level, axis=1))
 
             except Exception as e:
-                # Silently catch and disable on error
+                st.warning(f"Warning: CEFR lookup encountered an unexpected error: {e}")
                 cefr_active = False 
 
         if ipa_active:
             try:
+                # Function to safely get IPA transcription, handling common errors/empty results
                 def get_ipa_transcription(token):
                     try:
+                        # eng_to_ipa.convert handles single words or short phrases
                         return ipa.convert(token)
                     except Exception:
                         return "IPA N/A"
 
+                # Forms list contains all-lowercase tokens (from get_all_lemma_forms_details)
+                # 2. Add 'IPA Transcription' column
                 forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token (lowercase)'].apply(get_ipa_transcription))
                 
             except Exception as e:
-                ipa_active = False 
+                st.error(f"Error during IPA transcription: {e}")
+                ipa_active = False # Disable feature if an unhandled error occurs
+                
+        # FIX 2: Add Pronunciation column with HTML link.
+        lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw', 'xml') else SOURCE_LANG_CODE.lower()
         
-        # --- NEW: Online Dictionary Link Column ---
-        if is_english_corpus:
-            col_name = "Dictionary"
-            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
-                lambda token: f"<a href='https://dictionary.cambridge.org/dictionary/english/{token}' target='_blank'>Click here</a>"
-            ))
-        elif is_indonesian_corpus:
-            col_name = "KBBI"
-            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
-                lambda token: f"<a href='https://kbbi.kemdikbud.go.id/entri/{token}' target='_blank'>Click here</a>"
-            ))
-        else:
-            # Placeholder for general language pronunciation/lookup (YouGlish)
-            lang_for_pronunciation = SOURCE_LANG_CODE.lower()
-            forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
-                lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
-            ))
+        # Create a new column with the clickable link HTML
+        forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
+            lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
+        ))
+        
+        # FIX 3: Replaced st.dataframe with st.markdown(forms_list.to_html()) to resolve Streamlit internal error.
         
         # Define table styling for cleaner look with markdown
         html_style = """
@@ -2262,15 +2254,20 @@ if st.session_state['view'] == 'dictionary':
             unsafe_allow_html=True
         )
     
-    # Status messages for linguistic features
-    if not IPA_FEATURE_AVAILABLE and is_english_corpus:
-        st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library.**")
+    if not IPA_FEATURE_AVAILABLE:
+        st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
+    elif is_english_corpus and not ipa_active:
+         st.warning("⚠️ IPA feature is available but encountered an error. Check logs.")
+    elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
+        st.info(f"💡 IPA transcription feature is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
     
-    if not CEFR_FEATURE_AVAILABLE and is_english_corpus:
-        st.info("💡 **CEFR Categorization feature requires the `cefrpy` library.**")
-    
-    if not is_english_corpus and not is_indonesian_corpus:
-        st.info(f"💡 Dictionary lookup links (e.g., KBBI, Cambridge) are currently unavailable for **{SOURCE_LANG_CODE}**.")
+    # NEW CEFR status message block
+    if not CEFR_FEATURE_AVAILABLE:
+        st.info("💡 **CEFR Categorization feature requires the `cefrpy` library to be installed** (check requirements).")
+    elif is_english_corpus and CEFR_FEATURE_AVAILABLE and not cefr_active:
+        st.warning("⚠️ CEFR feature is available but encountered an error or is only partially supported for some words. Check logs.")
+    elif not is_english_corpus and CEFR_FEATURE_AVAILABLE:
+        st.info(f"💡 CEFR categorization is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
     # --------------------------------------------------------
     
     st.markdown("---")
