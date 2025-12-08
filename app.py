@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.34 - FIXED: KWIC Alignment & Robust Loading
+# CORTEX Corpus Explorer v17.32 - Syntax Error Fix (Removed unnecessary global declaration)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,6 +11,8 @@ import os
 import re       
 import requests 
 import matplotlib.pyplot as plt 
+from wordcloud import WordCloud 
+from pyvis.network import Network
 import streamlit.components.v1 as components 
 import xml.etree.ElementTree as ET # Import for XML parsing
 
@@ -35,21 +37,10 @@ except ImportError:
     pass # Feature will be disabled if not installed
 # ------------------------------
 
-# --- WordCloud Feature Dependency (New) ---
-WORDCLOUD_FEATURE_AVAILABLE = False
-try:
-    # 3. pip install wordcloud
-    from wordcloud import WordCloud
-    WORDCLOUD_FEATURE_AVAILABLE = True
-except ImportError:
-    pass
-# ------------------------------------------
-
-
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.34 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.32 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -120,11 +111,6 @@ if 'xml_structure_data' not in st.session_state:
 # --- User Language Selection ---
 if 'user_selected_lang_input' not in st.session_state:
      st.session_state['user_selected_lang_input'] = 'Auto-Detect (Recommended)'
-# --- KWIC Display Options (NEW) ---
-if 'kwic_show_pos' not in st.session_state:
-    st.session_state['kwic_show_pos'] = False
-if 'kwic_show_lemma' not in st.session_state:
-    st.session_state['kwic_show_lemma'] = False
 
 
 # ---------------------------
@@ -147,35 +133,6 @@ POS_COLOR_MAP = {
 }
 
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
-
-# --- Word Cloud Creation Helper (Placeholder if not available) ---
-# NOTE: This function must be defined to avoid NameError in the Overview page
-# In this sandbox, it will return None due to dependency unavailability.
-def create_word_cloud(freq_df, is_tagged):
-    """
-    Generates a word cloud plot from frequency data.
-    If the WordCloud feature is not available, returns None.
-    """
-    if not WORDCLOUD_FEATURE_AVAILABLE or freq_df.empty:
-        return None
-        
-    try:
-        # Prepare frequency map
-        if is_tagged and 'pos' in freq_df.columns:
-            # Generate key based on token and POS for color mapping
-            freq_map = {(row['token'], row['pos']): row['frequency'] for index, row in freq_df.iterrows()}
-        else:
-            freq_map = {row['token']: row['frequency'] for index, row in freq_df.iterrows()}
-            
-        # Get only the token part for standard WordCloud frequency input
-        token_freqs = {k[0] if isinstance(k, tuple) else k: v for k, v in freq_map.items()}
-
-        # Define color function if using tags (requires WordCloud implementation not possible here)
-        # We simulate the call but return None due to environment limitations.
-        return None # Return None in sandbox as execution fails here anyway
-
-    except Exception:
-        return None # Return None on failure
 
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
@@ -287,14 +244,6 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     """
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids)
-    
-    KWIC Row Structure: (Note: Left/Right Token/POS/Lemma are now lists, not joined strings)
-    {
-        "Left_Token": list[str], "Left_POS": list[str], "Left_Lemma": list[str],
-        "Node_Token": str, "Node_POS": str, "Node_Lemma": str,
-        "Right_Token": list[str], "Right_POS": list[str], "Right_Lemma": list[str],
-        "Collocate": str # Only filled if pattern search is active
-    }
     """
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
@@ -389,7 +338,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 if i <= j < i + primary_target_len: continue # Skip node word(s)
                 
                 token_lower = tokens_lower[j]
-                token_pos = df_corpus["pos"].iloc[j] if "pos" in df_corpus.columns else "##"
+                token_pos = df_corpus["pos"].iloc[j]
                 
                 word_matches = collocate_word_regex is None or collocate_word_regex.fullmatch(token_lower)
                 pos_matches = collocate_pos_regex is None or (collocate_pos_regex.fullmatch(token_pos) if not is_raw_mode else False)
@@ -432,9 +381,6 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         if pos_patterns:
             full_pos_regex = re.compile("^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$")
             collocate_pos_regex_highlight = full_pos_regex
-            
-    has_lemma = "lemma" in df_corpus.columns
-    has_pos = "pos" in df_corpus.columns
     
     for i in display_positions:
         kwic_start = max(0, i - current_kwic_left)
@@ -448,29 +394,19 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
             sent_ids.append(None) # Not parallel mode or no ID available
             
         full_line_tokens = df_corpus["token"].iloc[kwic_start:kwic_end].tolist()
-        full_line_pos = df_corpus["pos"].iloc[kwic_start:kwic_end].tolist() if has_pos else ["##"] * len(full_line_tokens)
-        full_line_lemma = df_corpus["lemma"].iloc[kwic_start:kwic_end].tolist() if has_lemma else ["##"] * len(full_line_tokens)
         
-        # Parallel lists to build the three layers of the KWIC line
-        token_line = []
-        pos_line = []
-        lemma_line = []
-        
+        formatted_line = []
         node_orig_tokens = []
-        node_orig_pos = []
-        node_orig_lemma = []
         collocate_to_display = ""
 
         
         for k, token in enumerate(full_line_tokens):
             token_index_in_corpus = kwic_start + k
             token_lower = token.lower()
-            token_pos = full_line_pos[k] # Already sliced
-            token_lemma = full_line_lemma[k] # Already sliced
+            token_pos = df_corpus["pos"].iloc[token_index_in_corpus]
             
             is_node_word = (i <= token_index_in_corpus < i + primary_target_len)
             
-            # --- Collocate Highlighting Logic ---
             is_collocate_match = False
             if is_pattern_search_active and not is_node_word:
                  word_matches_highlight = collocate_word_regex_highlight is None or collocate_word_regex_highlight.fullmatch(token_lower)
@@ -481,259 +417,221 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                     if collocate_to_display == "": # Capture the first matching collocate
                         collocate_to_display = token # Use the original token case
             
-            # --- Format Tokens/POS/Lemma ---
-            token_display = token
-            # Clean up nonsense tags for display
-            pos_display = token_pos if token_pos not in ('##', '###') else '' 
-            lemma_display = token_lemma if token_lemma not in ('##', '###') else '' 
-
             if is_node_word:
-                # Node words use the base token/pos/lemma but are captured separately
-                node_orig_tokens.append(token_display)
-                node_orig_pos.append(pos_display)
-                node_orig_lemma.append(lemma_display)
-                
-                # Placeholder for node words in context lines (spaces for alignment)
-                token_line.append("") 
-                pos_line.append("")
-                lemma_line.append("")
+                node_orig_tokens.append(token)
+                formatted_line.append("") 
                 
             elif is_collocate_match:
                 # Collocate BOLDED and BRIGHT YELLOW HIGHLIGHTED
-                html_token = f"<b><span style='color: black; background-color: #FFEA00;'>{token_display}</span></b>"
-                token_line.append(html_token)
-                
-                # POS/Lemma for collocates are not specially highlighted in context
-                pos_line.append(pos_display)
-                lemma_line.append(lemma_display)
-
+                html_token = f"<b><span style='color: black; background-color: #FFEA00;'>{token}</span></b>"
+                formatted_line.append(html_token)
             else:
-                # Normal context words
-                token_line.append(token_display)
-                pos_line.append(pos_display)
-                lemma_line.append(lemma_display)
-
+                formatted_line.append(token)
 
         node_start_rel = i - kwic_start
         node_end_rel = node_start_rel + primary_target_len
 
-        # Slice the three parallel lists: (Context columns now return lists, Node returns joined strings)
+        left_context = formatted_line[:node_start_rel]
+        right_context = formatted_line[node_end_rel:]
+        node_orig = " ".join(node_orig_tokens)
+        
         kwic_rows.append({
-            "Left_Token": token_line[:node_start_rel], # List of tokens/HTML
-            "Left_POS": pos_line[:node_start_rel],     # List of POS
-            "Left_Lemma": lemma_line[:node_start_rel], # List of Lemmas
-            "Node_Token": " ".join(node_orig_tokens), 
-            "Node_POS": " ".join(node_orig_pos),
-            "Node_Lemma": " ".join(node_orig_lemma),
-            "Right_Token": token_line[node_end_rel:],  # List of tokens/HTML
-            "Right_POS": pos_line[node_end_rel:],      # List of POS
-            "Right_Lemma": lemma_line[node_end_rel:],  # List of Lemmas
-            "Collocate": collocate_to_display 
+            "Left": " ".join(left_context), 
+            "Node": node_orig, 
+            "Right": " ".join(right_context),
+            "Collocate": collocate_to_display # Only filled if pattern search is active
         })
         
-    return (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
+    return (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids) # Added sent_ids
 
+# --- Word Cloud Function ---
+@st.cache_data
+def create_word_cloud(freq_data, is_tagged_mode):
+    """Generates a word cloud from frequency data with conditional POS coloring."""
+    
+    # Filter out multi-word units for visualization stability
+    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
+    if single_word_freq_data.empty:
+        return None # SAFE EXIT 1
 
-# --- KWIC HTML Generator Helpers ---
+    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
+    word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
+    
+    # Simple list of English stopwords; can be expanded.
+    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are", "have", "not", "will", "i", "we", "you"])
+    
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color='black',
+        colormap='viridis', 
+        stopwords=stopwords,
+        min_font_size=10
+    )
+    
+    try:
+        wordcloud = wc.generate_from_frequencies(word_freq_dict)
+    except ValueError:
+        return None # SAFE EXIT 2: If the dictionary is empty after stopwords filtering
 
-def _format_aligned_context_html(tokens, poss, lemmas, show_pos, show_lemma, alignment):
+    if is_tagged_mode:
+        def final_color_func(word, *args, **kwargs):
+            pos_tag = word_to_pos.get(word, 'O')
+            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
+            if pos_code not in POS_COLOR_MAP:
+                pos_code = 'O'
+            return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
+
+        wordcloud = wordcloud.recolor(color_func=final_color_func)
+        
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    
+    return fig
+
+# --- N-GRAM LOGIC FUNCTION (FIXED: Added corpus_id argument for better caching) ---
+@st.cache_data(show_spinner=False)
+def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
     """
-    Generates aligned HTML structure for a list of tokens/pos/lemma using Flexbox
-    to make each token/tag/lemma triplet align vertically.
+    Generates N-grams, applies positional filters (token, POS, lemma), and calculates frequencies.
+    corpus_id is included in the signature to ensure cache invalidation when the corpus changes.
     """
+    total_tokens = len(df_corpus)
+    if total_tokens < n_size or n_size < 1:
+        return pd.DataFrame()
     
-    # 1. Create a <div> wrapper for each column (Token, POS, Lemma)
-    token_divs = []
-    pos_divs = []
-    lemma_divs = []
+    # Pre-extract lists for faster lookup
+    tokens = df_corpus["token"].tolist()
+    tokens_low = df_corpus["_token_low"].tolist()
+    pos = df_corpus["pos"].tolist() if "pos" in df_corpus.columns else ["##"] * total_tokens
+    lemma = df_corpus["lemma"].tolist() if "lemma" in df_corpus.columns else ["##"] * total_tokens
+
+    def matches_filter(token, token_low, pos_tag, lemma_tag, pattern_str, is_raw_mode):
+        """Checks if a single token/tag set matches a positional pattern string."""
+        if not pattern_str:
+            return True
+
+        pattern_str = pattern_str.strip()
+        
+        # 1. Structural/Lemma Query ([lemma*])
+        lemma_match_re = re.search(r"\[(.*?)\]", pattern_str)
+        if lemma_match_re and not is_raw_mode:
+            lemma_pattern = re.escape(lemma_match_re.group(1).lower()).replace(r'\*', '.*')
+            return re.fullmatch(f"^{lemma_pattern}$", lemma_tag.lower())
+
+        # 2. POS Query (_POS*)
+        pos_match_re = re.search(r"\_([\w\*|]+)", pattern_str)
+        if pos_match_re and not is_raw_mode:
+            pos_input = pos_match_re.group(1).strip()
+            pos_patterns = [p.strip() for p in pos_input.split('|') if p.strip()]
+            full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
+            full_pos_regex = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
+            return full_pos_regex.fullmatch(pos_tag)
+
+        # 3. Simple Token/Word Query (word*)
+        pattern = re.escape(pattern_str).replace(r'\*', '.*')
+        return re.fullmatch(f"^{pattern}$", token_low)
+
+        
+    matched_n_grams_list = []
     
-    for token, pos, lemma in zip(tokens, poss, lemmas):
-        # Token already contains highlighting HTML
-        token_divs.append(f"<div class='kwic-item kwic-token-item'>{token}</div>")
+    for i in range(total_tokens - n_size + 1):
+        current_tokens = tokens[i:i + n_size]
+        current_tokens_low = tokens_low[i:i + n_size]
+        current_pos = pos[i:i + n_size]
+        current_lemma = lemma[i:i + n_size]
         
-        # POS/Lemma are wrapped in span classes for coloring/sizing
-        pos_html = f"<span class='kwic-pos'>{pos}</span>" if pos and pos.strip() else "&nbsp;"
-        lemma_html = f"<span class='kwic-lemma'>{lemma}</span>" if lemma and lemma.strip() else "&nbsp;"
-
-        pos_divs.append(f"<div class='kwic-item kwic-pos-item'>{pos_html}</div>")
-        lemma_divs.append(f"<div class='kwic-item kwic-lemma-item'>{lemma_html}</div>")
+        is_match = True
         
-    # Join items horizontally using flexbox rows
-    token_line_html = f"<div class='kwic-row kwic-{alignment}'>{''.join(token_divs)}</div>"
-    pos_line_html = f"<div class='kwic-row kwic-{alignment}'>{''.join(pos_divs)}</div>" if show_pos else ""
-    lemma_line_html = f"<div class='kwic-row kwic-{alignment}'>{''.join(lemma_divs)}</div>" if show_lemma else ""
-
-    lines = [token_line_html]
-    if show_pos: lines.append(pos_line_html)
-    if show_lemma: lines.append(lemma_line_html)
-    
-    return "".join(lines)
-
-
-def _format_kwic_cell_html(token_data, pos_data, lemma_data, show_pos, show_lemma, alignment):
-    """
-    Generalized function to format a KWIC cell. 
-    Accepts strings for Node, or lists for Context (Left/Right).
-    """
-    
-    # Check if data is a list (Context cells) or a string (Node cell)
-    if isinstance(token_data, list):
-        # Context cell: use aligned display with Flexbox
-        return _format_aligned_context_html(token_data, pos_data, lemma_data, show_pos, show_lemma, alignment)
-    else:
-        # Node cell: already joined string, use original multi-line display
-        token_display = token_data
-        
-        # POS/Lemma are wrapped in span classes for coloring/sizing
-        pos_display = f"<span class='kwic-pos'>{pos_data}</span>" if show_pos and pos_data.strip() else ""
-        lemma_display = f"<span class='kwic-lemma'>{lemma_data}</span>" if show_lemma and lemma_data.strip() else ""
-        
-        lines = [token_display]
-        if show_pos: lines.append(pos_display if pos_display else "&nbsp;") # Use non-breaking space for alignment
-        if show_lemma: lines.append(lemma_display if lemma_display else "&nbsp;")
-        
-        return "<br>".join(lines)
-
-
-def generate_kwic_html(kwic_data, sent_ids, is_parallel_mode, target_lang_code, target_sent_map, show_pos, show_lemma):
-    """Generates the full, styled HTML table for KWIC display."""
-    
-    html_lines = []
-    
-    # Define columns for the table header
-    header_cols = ["No", "Left Context", "Node", "Right Context"]
-    if is_parallel_mode:
-        header_cols.append(f"Translation ({target_lang_code})")
-        
-    html_lines.append("<thead><tr>")
-    for col in header_cols:
-        if col == "No": html_lines.append(f"<th style='width: 30px;'>{col}</th>")
-        elif col == "Node": html_lines.append(f"<th style='width: 15%;'>{col}</th>")
-        elif col == "Left Context" or col == "Right Context": html_lines.append(f"<th style='width: 30%;'>{col}</th>")
-        else: html_lines.append(f"<th>{col}</th>")
-    html_lines.append("</tr></thead>")
-    html_lines.append("<tbody>")
-
-    # Calculate row height for alignment (used in CSS)
-    line_height = 1.2 # Standard line height for monospace
-    num_display_lines = 1
-    if show_pos: num_display_lines += 1
-    if show_lemma: num_display_lines += 1
-    min_row_height_em = num_display_lines * line_height + (num_display_lines - 1) * 0.1 
-
-    # 2. Iterate over KWIC rows
-    for i, row in enumerate(kwic_data):
-        row_num = i + 1
-        
-        # Prepare content for each cell. Alignment is key here.
-        # Left context: tokens should be displayed right-to-left, aligned to the node.
-        left_content = _format_kwic_cell_html(row['Left_Token'], row['Left_POS'], row['Left_Lemma'], show_pos, show_lemma, 'left')
-        
-        # Node context: already joined string, simple center align
-        node_content = _format_kwic_cell_html(row['Node_Token'], row['Node_POS'], row['Node_Lemma'], show_pos, show_lemma, 'center')
-        
-        # Right context: tokens should be displayed left-to-right, starting after the node.
-        right_content = _format_kwic_cell_html(row['Right_Token'], row['Right_POS'], row['Right_Lemma'], show_pos, show_lemma, 'right')
-        
-        # Add translation if needed
-        translation_content = ""
-        if is_parallel_mode:
-            sent_id = sent_ids[i]
-            translation = target_sent_map.get(sent_id, "TRANSLATION N/A")
+        # Apply positional filters
+        for pos_idx, pattern_str in n_gram_filters.items():
+            pos_int = int(pos_idx) - 1 # Convert 1-based UI index to 0-based Python index
+            if pos_int < 0 or pos_int >= n_size: continue
             
-            # Apply padding for translation cell alignment
-            translation_lines = [translation] + [""] * (num_display_lines - 1)
-            translation_cell_content = "<br>".join(translation_lines)
-            translation_content = f"<td class='kwic-translation'>{translation_cell_content}</td>"
-
-        # Build the HTML row
-        row_html = f"<tr><td>{row_num}</td><td class='kwic-left'>{left_content}</td><td class='kwic-node'>{node_content}</td><td class='kwic-right'>{right_content}</td>{translation_content}</tr>"
-        html_lines.append(row_html)
+            if not matches_filter(
+                current_tokens[pos_int], 
+                current_tokens_low[pos_int], 
+                current_pos[pos_int], 
+                current_lemma[pos_int], 
+                pattern_str, 
+                is_raw_mode
+            ):
+                is_match = False
+                break
         
-    html_lines.append("</tbody>")
-
-    # 3. Define the main CSS style block
-    kwic_css = f"""
-        <style>
-        .dataframe-container-scroll {{
-            max-height: 400px;
-            overflow-y: auto;
-            margin-bottom: 1rem;
-        }}
-        .dataframe-kwic {{ 
-            font-family: monospace; 
-            color: white; 
-            width: 100%; 
-            border-collapse: separate; 
-            border-spacing: 0 5px; 
-        }}
-        .dataframe-kwic th {{ 
-            font-weight: bold; 
-            text-align: center; 
-            background-color: #383838;
-            padding: 5px;
-        }}
-        .dataframe-kwic td {{
-            padding: 5px;
-            vertical-align: top; 
-            min-height: {min_row_height_em}em; 
-            line-height: {line_height}em; 
-            border-bottom: 1px solid #333;
-        }}
+        if is_match:
+            matched_n_grams_list.append(tuple(current_tokens))
+            
+    if not matched_n_grams_list:
+        return pd.DataFrame()
         
-        /* --- NEW FLEXBOX ALIGNMENT FOR CONTEXT CELLS --- */
-        .kwic-row {{
-            display: flex;
-            white-space: nowrap; 
-            flex-wrap: nowrap;
-            width: 100%; /* Important for alignment */
-            gap: 15px; /* Spacing between tokens in a row */
-        }}
-        /* Left context needs to align items to the right of its cell */
-        .kwic-row.kwic-left {{
-            justify-content: flex-end; 
-        }}
-        /* Right context needs to align items to the left of its cell */
-        .kwic-row.kwic-right {{
-            justify-content: flex-start;
-        }}
-        
-        .kwic-item {{
-            /* Rely on monospace font to ensure vertical alignment of tokens/pos/lemma */
-            display: block; /* Stack pos/lemma below token */
-            padding: 0;
-            margin: 0;
-            line-height: inherit;
-        }}
-        /* ------------------------------------------------ */
-        
-        .dataframe-kwic td.kwic-left {{ text-align: right; width: 30%; }}
-        .dataframe-kwic td.kwic-node {{ 
-            text-align: center; 
-            font-weight: bold; 
-            background-color: #f0f0f0; 
-            color: black; 
-            width: 15%; 
-        }}
-        .dataframe-kwic td.kwic-right {{ text-align: left; width: 30%; }}
-        .dataframe-kwic td.kwic-translation {{ 
-            text-align: left; 
-            color: #CCFFCC; 
-            font-family: sans-serif; 
-            font-size: 0.9em; 
-            width: 15%;
-            border-left: 1px solid #444; 
-        }}
-        .dataframe-kwic span.kwic-pos {{ color: #00BFFF; font-size: 0.7em; }} 
-        .dataframe-kwic span.kwic-lemma {{ color: #FFA500; font-size: 0.7em; }} 
-        </style>
-    """
+    # Count frequencies
+    n_gram_counts = Counter(matched_n_grams_list)
     
-    # 4. Final HTML assembly
-    full_html = kwic_css + f"<div class='dataframe-container-scroll'><table class='dataframe-kwic'>{''.join(html_lines)}</table></div>"
-    return full_html
+    data = []
+    total_tokens_float = float(total_tokens) # Use float for accurate calculation
+    
+    for n_gram, freq in n_gram_counts.items():
+        n_gram_str = " ".join(n_gram)
+        # Calculate relative frequency per million tokens
+        rel_freq = (freq / total_tokens_float) * 1_000_000
+        
+        data.append({
+            "N-Gram": n_gram_str,
+            "Frequency": freq,
+            "Relative Frequency (per M)": round(rel_freq, 4)
+        })
+        
+    n_gram_df = pd.DataFrame(data)
+    
+    def is_only_punc_or_digit(n_gram_str):
+        for token in n_gram_str.split():
+            if token.lower() not in PUNCTUATION and not token.isdigit():
+                return False
+        return True
+        
+    n_gram_df = n_gram_df[~n_gram_df["N-Gram"].apply(is_only_punc_or_digit)]
+    
+    return n_gram_df.sort_values("Frequency", ascending=False).reset_index(drop=True)
+# -----------------------------
 
-# --- End KWIC HTML Generator Helpers ---
+# --- Statistical Helpers ---
+EPS = 1e-12
+def safe_log(x):
+    return math.log(max(x, EPS))
+def compute_ll(k11, k12, k21, k22):
+    """Computes the Log-Likelihood (LL) statistic."""
+    total = k11 + k12 + k21 + k22
+    if total == 0: return 0.0
+    e11 = (k11 + k12) * (k11 + k21) / total
+    e12 = (k11 + k12) * (k12 + k22) / total
+    e21 = (k21 + k22) * (k11 + k21) / total
+    e22 = (k21 + k22) * (k12 + k22) / total
+    s = 0.0
+    for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
+        if k > 0 and e > 0: s += k * math.log(k / e)
+    return 2.0 * s
+def compute_mi(k11, target_freq, coll_total, corpus_size):
+    """Compuutes the Mutual Information (MI) statistic."""
+    expected = (target_freq * coll_total) / corpus_size
+    if expected == 0 or k11 == 0: return 0.0
+    return math.log2(k11 / expected)
+def significance_from_ll(ll_val):
+    """Converts Log-Likelihood value to significance level."""
+    if ll_val >= 15.13: return '*** (p<0.001)'
+    if ll_val >= 10.83: return '** (p<0.01)'
+    if ll_val >= 3.84: return '* (p<0.05)'
+    return 'ns'
+
+# --- IO / Data Helpers ---
+def df_to_excel_bytes(df):
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Sheet1")
+    buf.seek(0)
+    return buf.getvalue()
 
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
@@ -1084,37 +982,29 @@ def load_monolingual_xml_corpus(file_source):
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
         
-        # --- ROBUST LOADING ATTEMPT (Try Tab then Whitespace, max 3 columns) ---
-        df_attempt = None
-        # Try TAB separator
         try:
             file_buffer_for_pandas.seek(0)
-            df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
-        except Exception:
-            # Fall back to general whitespace separator
-            try:
-                file_buffer_for_pandas.seek(0)
-                df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
-            except Exception:
-                pass # Final fall through to failure
-
-        if df_attempt is not None and df_attempt.shape[1] >= 3:
-            # Successfully detected a vertical corpus format
-            df_src = df_attempt.iloc[:, :3].copy() # <-- FIXED: Explicitly take only the first 3 columns
-            df_src.columns = ["token", "pos", "lemma"]
-            df_src["token"] = df_src["token"].fillna("").astype(str).str.strip() 
-            df_src["pos"] = df_src["pos"].fillna("###").astype(str)
-            df_src["lemma"] = df_src["lemma"].fillna("###").astype(str)
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
             
-            # --- MANUAL LANGUAGE DETECTION (IMPROVED HEURISTIC) ---
-            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-            is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() >= 1
-            detected_lang_code = 'ID' if is_indonesian_tagged else 'EN'
-            
-            result = {'lang_code': detected_lang_code, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
+            if df_attempt is not None and df_attempt.shape[1] >= 3:
+                df_src = df_attempt.iloc[:, :3].copy()
+                df_src.columns = ["token", "pos", "lemma"]
+                df_src["token"] = df_src["token"].fillna("").astype(str).str.strip() 
+                df_src["pos"] = df_src["pos"].fillna("###").astype(str)
+                df_src["lemma"] = df_src["lemma"].fillna("###").astype(str)
+                
+                # --- MANUAL LANGUAGE DETECTION (IMPROVED HEURISTIC) ---
+                id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
+                is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() >= 1
+                detected_lang_code = 'ID' if is_indonesian_tagged else 'EN'
+                
+                result = {'lang_code': detected_lang_code, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
 
-        else:
-            return None # Final return None if fallback parsing fails
+            else:
+                return None
+                 
+        except Exception as e:
+            return None
     else:
         # If standard structured XML parsing succeeded, use its detected language code
         if result is not None and 'lang_code' in result:
@@ -1124,7 +1014,6 @@ def load_monolingual_xml_corpus(file_source):
         return None
 
     # Apply detected language code
-    global SOURCE_LANG_CODE 
     SOURCE_LANG_CODE = detected_lang_code
         
     TARGET_LANG_CODE = 'NA'
@@ -1230,8 +1119,6 @@ def load_xml_parallel_corpus(src_file, tgt_file):
 # ---------------------------------------------------------------------
 @st.cache_data
 def load_excel_parallel_corpus_file(file_source):
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
-    
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
@@ -1255,7 +1142,7 @@ def load_excel_parallel_corpus_file(file_source):
     src_lang = df_raw.columns[0]
     tgt_lang = df_raw.columns[1]
     
-    
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
     SOURCE_LANG_CODE = src_lang
     TARGET_LANG_CODE = tgt_lang
     
@@ -1347,48 +1234,42 @@ def load_corpus_file(file_source, sep=r"\s+"):
     TARGET_LANG_CODE = 'NA'
 
     # --- Attempt to load as Tagged/Vertical Corpus (Highest Priority) ---
-    df_attempt = None
-    
-    # 1. Try TAB separator (most robust for standard vertical format)
     try:
         file_buffer_for_pandas.seek(0)
-        df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
-    except Exception:
-        # 2. Fall back to general whitespace separator
-        try:
-             file_buffer_for_pandas.seek(0)
-             # Use sep=r'\s+' but explicitly drop extra columns if too many are found
-             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
-        except Exception:
-             pass # Fall through to raw text processing (lowest priority)
+        
+        # 1. Attempt using one or more whitespace characters as a separator for vertical files
+        df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
             
-    if df_attempt is not None and df_attempt.shape[1] >= 3:
-        # Successfully detected a vertical corpus format
-        df = df_attempt.iloc[:, :3].copy() # <-- FIXED: Explicitly take only the first 3 columns
-        df.columns = ["token", "pos", "lemma"]
-        
-        df["token"] = df["token"].fillna("").astype(str).str.strip() 
-        df["pos"] = df["pos"].fillna("###").astype(str)
-        df["lemma"] = df["lemma"].fillna("###").astype(str)
-        df["_token_low"] = df["token"].str.lower()
-        
-        # --- Auto-detect Language for Tagged/Vertical Corpus (Improved Heuristic) ---
-        id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-        # If ANY common Indonesian lemma is found, assume ID.
-        is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() >= 1
-        
-        if is_indonesian_tagged:
-             detected_lang_code = 'ID'
-        else:
-             # Default tagged corpus to EN if not obviously ID
-             detected_lang_code = 'EN' 
-        
-        SOURCE_LANG_CODE = detected_lang_code
-        return df
+        if df_attempt is not None and df_attempt.shape[1] >= 3:
+            # Successfully detected a vertical corpus format
+            df = df_attempt.iloc[:, :3].copy()
+            df.columns = ["token", "pos", "lemma"]
             
+            df["token"] = df["token"].fillna("").astype(str).str.strip() 
+            df["pos"] = df["pos"].fillna("###").astype(str)
+            df["lemma"] = df["lemma"].fillna("###").astype(str)
+            df["_token_low"] = df["token"].str.lower()
+            
+            # --- Auto-detect Language for Tagged/Vertical Corpus (Improved Heuristic) ---
+            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
+            # If ANY common Indonesian lemma is found, assume ID.
+            is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() >= 1
+            
+            if is_indonesian_tagged:
+                 detected_lang_code = 'ID'
+            else:
+                 # Default tagged corpus to EN if not obviously ID
+                 detected_lang_code = 'EN' 
+            
+            SOURCE_LANG_CODE = detected_lang_code
+            return df
+            
+    except Exception: 
+        pass # Fall through to raw text if vertical parsing fails
+
     # Fallback to Raw Text Processing (Lowest Priority)
     try:
-        raw_text = clean_content # Use the cleaned content from above
+        raw_text = file_content_str
         # --- FIXED TOKENIZATION ---
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
         tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
@@ -1413,7 +1294,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception as raw_e: return None 
 
 # -----------------------------------------------------
-# Function to display KWIC examples for collocates 
+# Function to display KWIC examples for collocates (omitted for brevity)
 # -----------------------------------------------------
 def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1, is_parallel_mode=False, target_sent_map=None):
     """
@@ -1427,18 +1308,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     colloc_list = top_collocates_df.head(KWIC_COLLOC_DISPLAY_LIMIT)
     collex_rows_total = []
     
-    # Get the display layers from session state
-    show_pos = st.session_state.get('kwic_show_pos', False)
-    show_lemma = st.session_state.get('kwic_show_lemma', False)
-    
-    # Calculate dimensions for CSS styling
-    line_height = 1.2 # Standard line height for monospace
-    num_display_lines = 1
-    if show_pos: num_display_lines += 1
-    if show_lemma: num_display_lines += 1
-    min_row_height_em = num_display_lines * line_height + (num_display_lines - 1) * 0.1 
-
-    # Custom KWIC table style for multi-line content
+    # Custom KWIC table style for 4 or 5 columns (Collocate, Left, Node, Right, [Translation])
     collocate_example_table_style = f"""
         <style>
         .collex-table-container-fixed {{
@@ -1446,21 +1316,9 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             overflow-y: auto;
             margin-bottom: 1rem;
         }}
-        .collex-table-inner {{ 
-            font-family: monospace; 
-            color: white; 
-            width: 100%; 
-            border-collapse: separate;
-            border-spacing: 0 5px; 
-        }}
-        .collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; padding: 5px; }}
-        .collex-table-inner td {{
-            padding: 5px;
-            vertical-align: top;
-            min-height: {min_row_height_em}em;
-            line-height: {line_height}em;
-            border-bottom: 1px solid #333;
-        }}
+        .collex-table-inner {{ font-family: monospace; color: white; width: 100%; }}
+        .collex-table-inner table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+        .collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; }}
         /* Collocate Column */
         .collex-table-inner td:nth-child(1) {{ text-align: left; font-weight: bold; width: 10%; border-right: 1px solid #444; }} 
         /* Left Context Column */
@@ -1470,32 +1328,17 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
         /* Right Context Column */
         .collex-table-inner td:nth-child(4) {{ text-align: left; color: white; width: 30%; }}
         /* Translation Column */
-        .collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 15%; font-family: sans-serif; font-size: 0.9em; border-left: 1px solid #444;}}
-        /* POS/Lemma Styles */
-        .collex-table-inner span.kwic-pos {{ color: #00BFFF; font-size: 0.7em; }}
-        .collex-table-inner span.kwic-lemma {{ color: #FFA500; font-size: 0.7em; }}
-        
-        /* Apply Flexbox alignment for internal context cells */
-        .collex-table-inner .kwic-row { display: flex; white-space: nowrap; flex-wrap: nowrap; width: 100%; gap: 15px; }
-        .collex-table-inner .kwic-row.kwic-left { justify-content: flex-end; }
-        .collex-table-inner .kwic-row.kwic-right { justify-content: flex-start; }
+        .collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 15%; font-family: sans-serif; font-size: 0.9em; }}
         </style>
     """
     st.markdown(collocate_example_table_style, unsafe_allow_html=True)
     
-    # NOTE: The format_collex_cell_content must be updated to use the new KWIC functions
-    def format_collex_cell_content(token_data, pos_data, lemma_data, alignment):
-        # We need to explicitly call the new _format_kwic_cell_html helper
-        return _format_kwic_cell_html(token_data, pos_data, lemma_data, show_pos, show_lemma, alignment)
-    
-    html_rows = []
     
     with st.spinner(f"Generating concordance examples for top {len(colloc_list)} collocates..."):
         for rank, (index, row) in enumerate(colloc_list.iterrows()):
             collocate_word = row['Collocate']
             
             # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
-            # kwic_rows will contain the multi-layer structure (lists for context)
             kwic_rows, total_matches, _, _, sent_ids = generate_kwic(
                 df_corpus, node_word, window, window, 
                 pattern_collocate_input=collocate_word, 
@@ -1514,31 +1357,30 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
                 if is_parallel_mode and sent_id is not None and target_sent_map:
                      translation = target_sent_map.get(sent_id, "TRANSLATION N/A")
                 
-                # Apply padding for translation cell alignment
-                translation_lines = [translation] + [""] * (num_display_lines - 1)
-                translation_html_content = "<br>".join(translation_lines)
-
-                
-                # Format multi-line cells using the new structure
-                left_html = format_collex_cell_content(kwic_row['Left_Token'], kwic_row['Left_POS'], kwic_row['Left_Lemma'], 'left')
-                node_html = format_collex_cell_content(kwic_row['Node_Token'], kwic_row['Node_POS'], kwic_row['Node_Lemma'], 'center')
-                right_html = format_collex_cell_content(kwic_row['Right_Token'], kwic_row['Right_POS'], kwic_row['Right_Lemma'], 'right')
-
-                
-                # Build HTML row
-                row_html = f"<tr><td>{rank+1}. {row['Collocate']}</td><td>{left_html}</td><td>{node_html}</td><td>{right_html}</td>"
-                if is_parallel_mode:
-                    row_html += f"<td>{translation_html_content}</td>"
-                row_html += "</tr>"
-                html_rows.append(row_html)
+                collex_rows_total.append({
+                    "Collocate": f"{rank+1}. {collocate_word}",
+                    "Left Context": kwic_row['Left'],
+                    "Node": kwic_row['Node'],
+                    "Right Context": kwic_row['Right'],
+                    "Translation": translation if is_parallel_mode else None # New column
+                })
         
-    if html_rows:
+    if collex_rows_total:
+        collex_df = pd.DataFrame(collex_rows_total)
+        # Drop translation column if not in parallel mode
+        if not is_parallel_mode:
+            collex_df = collex_df.drop(columns=['Translation'])
+
+        # Manually create header for the collocate example table
         header = "<tr><th>Collocate (Rank)</th><th>Left Context</th><th>Node</th><th>Right Context</th>"
         if is_parallel_mode:
             header += f"<th>Translation ({TARGET_LANG_CODE})</th>"
         header += "</tr>"
-
-        html_table = f"<table class='collex-table-inner'><thead>{header}</thead><tbody>{''.join(html_rows)}</tbody></table>"
+        
+        html_table = collex_df.to_html(header=False, escape=False, classes=['collex-table-inner'], index=False)
+        # Insert the custom header before the table body
+        html_table = html_table.replace("<thead></thead>", f"<thead>{header}</thead>", 1)
+        
         scrollable_html = f"<div class='collex-table-container-fixed'>{html_table}</div>"
         st.markdown(scrollable_html, unsafe_allow_html=True)
         st.caption(f"Context window is set to **±{window} tokens** (Collocation window). Matching collocate is **bolded and highlighted bright yellow**.")
@@ -1547,66 +1389,8 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # -----------------------------------------------------
 
 
-# --- Statistical Helpers (ROBUSTNESS IMPROVEMENT) ---
-EPS = 1e-12
-def safe_log(x):
-    # Ensure x is positive before taking the log
-    return math.log(max(x, EPS)) 
-    
-def compute_ll(k11, k12, k21, k22):
-    """Computes the Log-Likelihood (LL) statistic with robustness checks."""
-    total = k11 + k12 + k21 + k22
-    if total <= 0: return 0.0 # Guard against zero or negative total
-    
-    # Ensure all inputs are treated as floating point numbers for division
-    k11, k12, k21, k22, total = float(k11), float(k12), float(k21), float(k22), float(total)
-    
-    # Calculate Expected Values. Guard against div by zero on individual factors, though total > 0 check handles most cases.
-    e11_numerator = (k11 + k12) * (k11 + k21)
-    e12_numerator = (k11 + k12) * (k12 + k22)
-    e21_numerator = (k21 + k22) * (k11 + k21)
-    e22_numerator = (k21 + k22) * (k12 + k22)
-    
-    e11 = e11_numerator / total
-    e12 = e12_numerator / total
-    e21 = e21_numerator / total
-    e22 = e22_numerator / total
-    
-    s = 0.0
-    for k, e in ((k11, e11), (k12, e12), (k21, e21), (k22, e22)):
-        # Use EPS to ensure log argument is not zero/negative, thus avoiding Math Domain Error
-        if k > 0 and e > 0: 
-            s += k * safe_log(k / e)
-            
-    # The error often occurs here if the internal log calculation hits an issue.
-    # We return 0.0 if s is NaN or infinite to prevent propagation.
-    if not math.isfinite(s):
-        return 0.0
-    
-    return 2.0 * s
-
-def compute_mi(k11, target_freq, coll_total, corpus_size):
-    """Compuutes the Mutual Information (MI) statistic."""
-    expected = (target_freq * coll_total) / corpus_size
-    if expected == 0 or k11 == 0: return 0.0
-    return math.log2(k11 / expected)
-def significance_from_ll(ll_val):
-    """Converts Log-Likelihood value to significance level."""
-    if ll_val >= 15.13: return '*** (p<0.001)'
-    if ll_val >= 10.83: return '** (p<0.01)'
-    if ll_val >= 3.84: return '* (p<0.05)'
-    return 'ns'
-
-# --- IO / Data Helpers ---
-def df_to_excel_bytes(df):
-    buf = BytesIO()
-    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Sheet1")
-    buf.seek(0)
-    return buf.getvalue()
-
 # -----------------------------------------------------
-# COLLOCATION LOGIC 
+# COLLOCATION LOGIC (omitted for brevity)
 # -----------------------------------------------------
 @st.cache_data(show_spinner=False)
 def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_min_freq, max_collocates, is_raw_mode, collocate_regex="", collocate_pos_regex_input="", selected_pos_tags=None, collocate_lemma=""):
@@ -1688,7 +1472,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
             if w in PUNCTUATION_COLLOCATES or w.isdigit():
                  continue
                  
-            p = df_corpus["pos"].iloc[j] if "pos" in df_corpus.columns else "##"
+            p = df_corpus["pos"].iloc[j]
             l = df_corpus["lemma"].iloc[j].lower() if "lemma" in df_corpus.columns else "##"
             direction = 'L' if j < i else 'R'
             
@@ -1716,9 +1500,6 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
         k12 = freq - k11
         k21 = total_freq - k11
         k22 = total_tokens - (k11 + k12 + k21)
-        
-        # Ensure k values are non-negative, though logic should prevent this
-        k11, k12, k21, k22 = max(0, k11), max(0, k12), max(0, k21), max(0, k22)
         
         ll = compute_ll(k11, k12, k21, k22)
         mi = compute_mi(k11, freq, total_freq, total_tokens)
@@ -1774,7 +1555,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.34 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.32 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1787,8 +1568,6 @@ parallel_uploaded = False
 
 # --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
 with st.sidebar:
-    
-    # FIX APPLIED HERE: Removing the explicit 'global' declaration from the top of the sidebar block
     
     # 1. CORPUS SELECTION (TOP)
     st.header("1. Corpus Source")
@@ -1879,11 +1658,11 @@ with st.sidebar:
         corpus_name = selected_corpus_name
         df_source_lang_for_analysis = load_corpus_file(corpus_source)
     
-    # --- POST-LOAD LANGUAGE OVERRIDE LOGIC ---
+    # --- POST-LOAD LANGUAGE OVERRIDE LOGIC (FIXED) ---
     if df_source_lang_for_analysis is not None:
         user_selection = st.session_state.get('user_selected_lang_input', 'Auto-Detect (Recommended)')
         if user_selection not in ('Auto-Detect (Recommended)', None):
-            # FIX: Global variables are already in scope for assignment if they are top-level script variables.
+            # NO 'global' keyword needed here; it's outside a function definition
             SOURCE_LANG_CODE = user_selection
             if 'Parallel' not in corpus_name:
                  corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
@@ -1923,20 +1702,6 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("3. Tool Settings")
         
-        # --- NEW KWIC DISPLAY SETTINGS (Shared for Concordance/Dictionary/Collocation) ---
-        if st.session_state['view'] in ('concordance', 'dictionary', 'collocation'):
-            st.markdown("---")
-            st.subheader("KWIC Display Options")
-
-            if not is_raw_mode_sidebar:
-                st.write("Display Linguistic Layers:")
-                st.checkbox("Show POS Tags", key="kwic_show_pos", help="Display the Part-of-Speech Tag underneath the token in the KWIC line.")
-                st.checkbox("Show Lemma", key="kwic_show_lemma", help="Display the Lemma (base form) underneath the token in the KWIC line.")
-            else:
-                st.info("POS/Lemma display disabled for raw/un-tagged corpus.")
-                st.session_state['kwic_show_pos'] = False
-                st.session_state['kwic_show_lemma'] = False
-        
         # --- CONCORDANCE SETTINGS ---
         if st.session_state['view'] == 'concordance':
             st.write("KWIC Context (Display)")
@@ -1974,7 +1739,7 @@ with st.sidebar:
                 )
                 st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
             else:
-                # Need to explicitly initialize or clear here if the above block was skipped
+                st.info("POS filtering for collocates requires a tagged corpus.")
                 st.session_state['pattern_collocate_pos'] = ''
 
             st.session_state['pattern_search_window'] = pattern_search_window
@@ -2172,9 +1937,9 @@ if st.session_state['view'] == 'overview':
 
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         
-        if WORDCLOUD_FEATURE_AVAILABLE:
-            # Call the function which returns None in the sandbox, but would run locally
-            wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode) 
+        # --- FIX: Ensure we handle the potential None return from create_word_cloud safely ---
+        if not freq_df.empty:
+            wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
             
             if wordcloud_fig is not None: 
                 if not is_raw_mode:
@@ -2184,15 +1949,12 @@ if st.session_state['view'] == 'overview':
                         """
                     , unsafe_allow_html=True)
                     
-                # st.pyplot(wordcloud_fig) # Still commented out for sandbox execution safety
-                st.info("Word cloud generation is active. If running locally with all dependencies, the word cloud chart should appear here.")
+                st.pyplot(wordcloud_fig)
             else:
-                 # This message indicates the function returned None (likely due to sandbox environment)
-                 st.info("⚠️ **Word Cloud Feature Disabled:** Visualization is suppressed in this environment or failed unexpectedly. If running locally, please ensure the `wordcloud` library is correctly installed and try uncommenting `st.pyplot()` in the code.")
+                 st.info("Not enough single tokens remaining to generate a word cloud.")
 
         else:
-             # This message is shown if the import failed at the start of the script
-             st.info("⚠️ **Word Cloud Feature Disabled:** Visualization requires the external `wordcloud` library, which could not be initialized. Please ensure it is installed correctly in your local environment.")
+            st.info("Not enough tokens to generate a word cloud.")
         # ---------------------------------------------------------------------------------
 
     with col2:
@@ -2202,7 +1964,7 @@ if st.session_state['view'] == 'overview':
             freq_head = freq_df.head(10).copy()
             freq_head.insert(0,"No", range(1, len(freq_head)+1))
             st.dataframe(freq_head, use_container_width=True, hide_index=True) 
-            # st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
              st.info("Frequency data not available.")
 
@@ -2291,21 +2053,19 @@ if st.session_state['view'] == 'n_gram':
     if analyze_n_gram:
         with st.spinner(f"Generating and filtering {st.session_state['n_gram_size']}-grams..."):
             # FIX: Passed corpus_name as a unique ID to break the cache when corpus changes
-            # n_gram_df = generate_n_grams(
-            #     df, 
-            #     st.session_state['n_gram_size'],
-            #     st.session_state['n_gram_filters'],
-            #     is_raw_mode,
-            #     corpus_name # <-- Unique ID for cache invalidation
-            # )
-            # Mock empty DataFrame for safety
-            n_gram_df = pd.DataFrame() 
+            n_gram_df = generate_n_grams(
+                df, 
+                st.session_state['n_gram_size'],
+                st.session_state['n_gram_filters'],
+                is_raw_mode,
+                corpus_name # <-- Unique ID for cache invalidation
+            )
             st.session_state['n_gram_results_df'] = n_gram_df.copy()
             
     n_gram_df = st.session_state['n_gram_results_df']
     
     if n_gram_df.empty:
-        st.warning("N-gram analysis is unavailable. You may need to define `generate_n_grams` or load a compatible corpus.")
+        st.warning("No N-grams found matching the criteria. Adjust the N-Gram size or clear filters in the sidebar.")
         st.stop()
         
     st.success(f"Found **{len(n_gram_df):,}** unique {st.session_state['n_gram_size']}-grams matching the criteria.")
@@ -2340,12 +2100,12 @@ if st.session_state['view'] == 'n_gram':
         f"({len(n_gram_df):,} entries) (xlsx)"
     )
     
-    # st.download_button(
-    #     download_label,
-    #     data=df_to_excel_bytes(n_gram_df), 
-    #     file_name=f"{st.session_state['n_gram_size']}-gram_full_list.xlsx", 
-    #     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    # )
+    st.download_button(
+        download_label,
+        data=df_to_excel_bytes(n_gram_df), 
+        file_name=f"{st.session_state['n_gram_size']}-gram_full_list.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # -----------------------------------------------------
 # MODULE: CONCORDANCE LOGIC
@@ -2362,10 +2122,6 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     is_pattern_search_active = pattern_collocate or pattern_collocate_pos
     is_parallel_mode = st.session_state.get('parallel_mode', False)
     target_sent_map = st.session_state.get('target_sent_map', {})
-    
-    show_pos = st.session_state.get('kwic_show_pos', False)
-    show_lemma = st.session_state.get('kwic_show_lemma', False)
-
     
     # Generate KWIC lines using the reusable function
     with st.spinner("Searching corpus and generating concordance..."):
@@ -2398,7 +2154,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
-        kwic_df_for_llm = pd.DataFrame(kwic_rows).head(10).copy()
+        kwic_df_for_llm = pd.DataFrame(kwic_rows).head(10).copy().drop(columns=['Collocate'])
         interpret_results_llm(raw_target_input, "Concordance", "KWIC Context Sample (Max 10 lines)", kwic_df_for_llm)
 
     if st.session_state['llm_interpretation_result']:
@@ -2412,32 +2168,42 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     with col_kwic:
         st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
         
-        # --- NEW: Use HTML Generator function ---
-        kwic_html = generate_kwic_html(
-            kwic_rows, sent_ids, is_parallel_mode, 
-            TARGET_LANG_CODE, target_sent_map, 
-            show_pos, show_lemma
-        )
-        st.markdown(kwic_html, unsafe_allow_html=True)
-        # --- END NEW ---
+        kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
+        kwic_preview = kwic_df.copy().reset_index(drop=True)
+        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        
+        # --- NEW: Add Translation Column ---
+        if is_parallel_mode:
+            translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
+            kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
+        
+        # --- KWIC Table Style (Extracted for cleaner re-use) ---
+        kwic_table_style = f"""
+             <style>
+             .dataframe-container-scroll {{
+                 max-height: 400px; /* Fixed height for scrollable view */
+                 overflow-y: auto;
+                 margin-bottom: 1rem;
+             }}
+             .dataframe {{ font-family: monospace; color: white; width: 100%; }}
+             .dataframe table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+             .dataframe th {{ font-weight: bold; text-align: center; }}
+             .dataframe td:nth-child(2) {{ text-align: right; color: white; }}
+             .dataframe td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
+             .dataframe td:nth-child(4) {{ text-align: left; color: white; }}
+             .dataframe td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.9em; }} /* Translation Column Style */
+             .dataframe thead th:first-child {{ width: 30px; }}
+             </style>
+        """
+        st.markdown(kwic_table_style, unsafe_allow_html=True)
+        
+        html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
+        scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
+
+        st.markdown(scrollable_html, unsafe_allow_html=True)
 
         st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
-        
-        # Create a simple flat dataframe for download (Updated for list-based context)
-        kwic_download_df = pd.DataFrame({
-            "No": range(1, len(kwic_rows) + 1),
-            # Join the context lists back into strings for download, stripping HTML
-            "Left Context": [" ".join(r['Left_Token']).replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", "") for r in kwic_rows],
-            "Node": [r['Node_Token'] for r in kwic_rows],
-            "Right Context": [" ".join(r['Right_Token']).replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", "") for r in kwic_rows],
-            "POS Tags": [" ".join(r['Left_POS']) + " " + r['Node_POS'] + " " + " ".join(r['Right_POS']) for r in kwic_rows],
-            "Lemmas": [" ".join(r['Left_Lemma']) + " " + r['Node_Lemma'] + " " + " ".join(r['Right_Lemma']) for r in kwic_rows],
-        })
-        if is_parallel_mode:
-             translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
-             kwic_download_df[f'Translation ({TARGET_LANG_CODE})'] = translations
-        
-        # st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_download_df), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     with col_freq:
         st.subheader(f"Target Frequency")
@@ -2505,17 +2271,13 @@ if st.session_state['view'] == 'dictionary':
                     # Ensure CEFR is only attempted for valid tokens and non-Indonesian/non-raw tags
                     if not token_lower or pos_tag in ('##', '###', 'O'):
                          return "NA"
-                    # Correctly retrieve the CEFR level
                     cefr_level = CEFR_ANALYZER.get_word_pos_level_CEFR(token_lower, pos_tag)
                     return cefr_level if cefr_level else "NA"
 
-                # --- FIXED: Perform the actual computation ---
-                forms_list.insert(forms_list.shape[1], 'CEFR', forms_list.apply(get_cefr_level, axis=1)) 
-                # ---------------------------------------------
+                forms_list.insert(forms_list.shape[1], 'CEFR', forms_list.apply(get_cefr_level, axis=1))
 
             except Exception as e:
-                # If computation fails (e.g., analyzer setup issue, or unexpected error)
-                forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
+                # Silently catch and disable on error
                 cefr_active = False 
 
         # Non-English corpus: Manually insert NA if CEFR is not relevant/available
@@ -2625,8 +2387,6 @@ if st.session_state['view'] == 'dictionary':
     kwic_right = st.session_state.get('kwic_right', 7)
     is_parallel_mode = st.session_state.get('parallel_mode', False)
     target_sent_map = st.session_state.get('target_sent_map', {})
-    show_pos = st.session_state.get('kwic_show_pos', False)
-    show_lemma = st.session_state.get('kwic_show_lemma', False)
 
     with st.spinner(f"Fetching random concordance examples for '{current_dict_word}'..."):
         # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
@@ -2640,15 +2400,37 @@ if st.session_state['view'] == 'dictionary':
         display_limit = min(5, len(kwic_rows))
         st.success(f"Showing {display_limit} random examples from {total_matches:,} total matches.")
         
-        # --- NEW: Use HTML Generator function ---
-        kwic_html = generate_kwic_html(
-            kwic_rows[:display_limit], sent_ids[:display_limit], is_parallel_mode, 
-            TARGET_LANG_CODE, target_sent_map, 
-            show_pos, show_lemma
-        )
-        st.markdown(kwic_html, unsafe_allow_html=True)
-        st.caption(f"Context window is set to **±{kwic_left}/{kwic_right} tokens**.")
-        # --- END NEW ---
+        kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
+        kwic_preview = kwic_df.copy().reset_index(drop=True)
+        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+        
+        # --- NEW: Add Translation Column ---
+        if is_parallel_mode:
+            translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
+            kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
+
+        kwic_table_style = f"""
+            <style>
+            .dictionary-kwic-container {{
+                max-height: 250px; /* Fixed height for scrollable view */
+                overflow-y: auto;
+                margin-bottom: 1rem;
+            }}
+            .dict-kwic-table {{ font-family: monospace; color: white; width: 100%; }}
+            .dict-kwic-table table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
+            .dict-kwic-table th {{ font-weight: bold; text-align: center; }}
+            .dict-kwic-table td:nth-child(2) {{ text-align: right; color: white; }}
+            .dict-kwic-table td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
+            .dict-kwic-table td:nth-child(4) {{ text-align: left; color: white; }}
+            .dict-kwic-table td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.9em; }} /* Translation Column Style */
+            .dict-kwic-table thead th:first-child {{ width: 30px; }}
+            </style>
+        """
+        st.markdown(kwic_table_style, unsafe_allow_html=True)
+        
+        html_table = kwic_preview.to_html(escape=False, classes=['dict-kwic-table'], index=False)
+        scrollable_html = f"<div class='dictionary-kwic-container'>{html_table}</div>"
+        st.markdown(scrollable_html, unsafe_allow_html=True)
     else:
         st.info("No examples found.")
         
@@ -2680,7 +2462,7 @@ if st.session_state['view'] == 'dictionary':
     top_collocates = stats_df_sorted.head(20)
     
     # 3a. Top Collocates List
-    collocate_list = ", 선정된".join(top_collocates['Collocate'].tolist())
+    collocate_list = ", ".join(top_collocates['Collocate'].tolist())
     st.markdown(f"**Top {len(top_collocates)} Collocates (LL-ranked):**")
     st.text_area("Collocate List", collocate_list, height=100)
     
@@ -2814,7 +2596,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         st.markdown(f"**Log-Likelihood (LL) (Top {len(full_ll)})**")
         
         # Display table with relevant columns
-        ll_display_df = full_ll[['Rank', 'Collocate', 'POS', 'Observed', 'LL', 'Direction', 'Significance']].copy()
+        ll_display_df = full_ll[['Rank', 'Collocate', 'LL', 'Direction', 'Significance']].copy()
         
         # Use a scrollable container for the main table
         html_table = ll_display_df.to_html(index=False, classes=['collocate-table'])
@@ -2824,7 +2606,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq}, Top {len(full_mi)})**")
         
         # Display table with relevant columns
-        mi_display_df = full_mi[['Rank', 'Collocate', 'POS', 'Observed', 'MI', 'Direction', 'Significance']].copy()
+        mi_display_df = full_mi[['Rank', 'Collocate', 'MI', 'Direction', 'Significance']].copy()
         
         # Use a scrollable container for the main table
         html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
@@ -2834,18 +2616,18 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     st.markdown("---")
     st.subheader("Download Full Results")
     
-    # st.download_button(
-    #     f"⬇ Download full LL results (xlsx)", 
-    #     data=df_to_excel_bytes(stats_df_sorted), 
-    #     file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full_filtered.xlsx", 
-    #     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    # )
-    # st.download_button(
-    #     f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
-    #     data=df_to_excel_bytes(full_mi_all), 
-    #     file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}_filtered.xlsx", 
-    #     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    # )
+    st.download_button(
+        f"⬇ Download full LL results (xlsx)", 
+        data=df_to_excel_bytes(stats_df_sorted), 
+        file_name=f"{primary_target_mwu.replace(' ', '_')}_LL_full_filtered.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    st.download_button(
+        f"⬇ Download full MI results (obs≥{mi_min_freq}) (xlsx)", 
+        data=df_to_excel_bytes(full_mi_all), 
+        file_name=f"{primary_target_mwu.replace(' ', '_')}_MI_full_obsge{mi_min_freq}_filtered.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
     
     # -----------------------------------------------------
     # DEDICATED KWIC DISPLAY FOR TOP LL AND MI COLLOCATES
@@ -2857,10 +2639,6 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     
     # LL-Ranked KWIC Examples
     st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} LL Collocates (1 example per collocate)")
-    
-    show_pos = st.session_state.get('kwic_show_pos', False)
-    show_lemma = st.session_state.get('kwic_show_lemma', False)
-    
     display_collocation_kwic_examples(
         df_corpus=df, 
         node_word=primary_target_mwu, 
