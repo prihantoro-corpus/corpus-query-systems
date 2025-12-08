@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.21 - Dictionary Pronunciation/Lowercase Fix & Streamlit Config Bugfix
+# CORTEX Corpus Explorer v17.22 - Dictionary Pronunciation/Lowercase Fix & Streamlit Config Bugfix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.21 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.22 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1466,7 +1466,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.21 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.22 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2140,27 +2140,53 @@ if st.session_state['view'] == 'dictionary':
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
         # Do not stop, continue to Collocation if possible, but skip forms/regex.
     elif not forms_list.empty:
-        # FIX 1: Rename columns and add Pronunciation link column
-        forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}, inplace=True)
+        # FIX 1: Rename columns
+        forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
         
         # FIX 2: Add Pronunciation column with HTML link.
         lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw', 'xml') else SOURCE_LANG_CODE.lower()
         
         # Create a new column with the clickable link HTML
-        forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token'].apply(
+        forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
             lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
         ))
         
-        # FIX: Removed column_config to resolve Streamlit internal error. Rely on escape=False.
-        st.dataframe(
-            forms_list,
-            hide_index=True,
-            use_container_width=True,
-            escape=False 
+        # FIX 3: Replaced st.dataframe with st.markdown(forms_list.to_html()) to resolve Streamlit internal error.
+        
+        # Define table styling for cleaner look with markdown
+        html_style = """
+        <style>
+        .forms-list-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Arial, sans-serif;
+            font-size: 0.9em;
+        }
+        .forms-list-table th {
+            background-color: #383838;
+            color: white;
+            padding: 8px;
+            text-align: left;
+        }
+        .forms-list-table td {
+            padding: 8px;
+            border-bottom: 1px solid #444444;
+        }
+        .forms-list-table tr:hover {
+            background-color: #333333;
+        }
+        </style>
+        """
+        st.markdown(html_style, unsafe_allow_html=True)
+
+        st.markdown(
+            forms_list.to_html(index=False, escape=False, classes=['forms-list-table']), 
+            unsafe_allow_html=True
         )
     
-    # --- 2. Related Forms (by Regex) ---
     st.markdown("---")
+
+    # --- 2. Related Forms (by Regex) ---
     st.subheader("Related Forms (by Regex)")
     
     related_regex_forms = get_related_forms_by_regex(df, current_dict_word)
