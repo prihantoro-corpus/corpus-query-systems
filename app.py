@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.22 - Dictionary Pronunciation/Lowercase Fix & Streamlit Config Bugfix
+# CORTEX Corpus Explorer v17.23 - Dictionary IPA Transcription Feature
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -16,10 +16,20 @@ from pyvis.network import Network
 import streamlit.components.v1 as components 
 import xml.etree.ElementTree as ET # Import for XML parsing
 
+# --- IPA Feature Dependency ---
+IPA_FEATURE_AVAILABLE = False
+try:
+    # 1. pip install eng-to-ipa. Import added here.
+    import eng_to_ipa as ipa
+    IPA_FEATURE_AVAILABLE = True
+except ImportError:
+    pass # Feature will be disabled if not installed
+# ------------------------------
+
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.22 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.23 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1466,7 +1476,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.22 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.23 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2136,13 +2146,37 @@ if st.session_state['view'] == 'dictionary':
 
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
+    # --------------------------------------------------------
+    # IPA Feature Logic (Request 1 & 2)
+    # --------------------------------------------------------
+    is_english_corpus = SOURCE_LANG_CODE.upper() in ('EN', 'ENG', 'ENGLISH')
+    ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
+    
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
-        # Do not stop, continue to Collocation if possible, but skip forms/regex.
+        # Continue to Collocation if possible, but skip forms/regex.
     elif not forms_list.empty:
-        # FIX 1: Rename columns
+        # FIX 1: Rename columns (already done in v17.22 thought block)
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
-        
+
+        if ipa_active:
+            try:
+                # Function to safely get IPA transcription, handling common errors/empty results
+                def get_ipa_transcription(token):
+                    try:
+                        # eng_to_ipa.convert handles single words or short phrases
+                        return ipa.convert(token)
+                    except Exception:
+                        return "IPA N/A"
+
+                # Forms list contains all-lowercase tokens (from get_all_lemma_forms_details)
+                # 2. Add 'IPA Transcription' column
+                forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token (lowercase)'].apply(get_ipa_transcription))
+                
+            except Exception as e:
+                st.error(f"Error during IPA transcription: {e}")
+                ipa_active = False # Disable feature if an unhandled error occurs
+                
         # FIX 2: Add Pronunciation column with HTML link.
         lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw', 'xml') else SOURCE_LANG_CODE.lower()
         
@@ -2183,6 +2217,14 @@ if st.session_state['view'] == 'dictionary':
             forms_list.to_html(index=False, escape=False, classes=['forms-list-table']), 
             unsafe_allow_html=True
         )
+    
+    if not IPA_FEATURE_AVAILABLE:
+        st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
+    elif is_english_corpus and not ipa_active:
+         st.warning("⚠️ IPA feature is available but encountered an error. Check logs.")
+    elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
+        st.info(f"💡 IPA transcription feature is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
+    # --------------------------------------------------------
     
     st.markdown("---")
 
