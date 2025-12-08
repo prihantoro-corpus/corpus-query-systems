@@ -9,4 +9,5 @@ xlsxwriter
 openpyxl
 huggingface-hub
 eng-to-ipa
+cefrpy
 
