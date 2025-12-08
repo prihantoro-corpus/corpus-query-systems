@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.29 - Robust Indonesian Language Detection Fix
+# CORTEX Corpus Explorer v17.30 - Dictionary Language Feature Final Fix (CEFR & KBBI Link)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.29 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.30 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -835,13 +835,11 @@ def parse_xml_content_to_df(file_stream_copy):
         sent_tags = list(root)
     
     if not sent_tags:
-        # Last resort: check if the root element itself contains raw text
+        # Last resort: check if if the root element itself contains raw text
         if root.text and root.text.strip():
-             # Fall through to raw text logic below if no sent tags were found.
-             pass
+             pass # Fall through to raw text logic below if no sent tags were found.
         else:
-            # If no obvious structural tags or direct text, the file might be empty or too malformed.
-            return None
+            return None # If no obvious structural tags or direct text, the file might be empty or too malformed.
 
     # --- Use a counter for missing/non-integer IDs for robustness ---
     sequential_id_counter = 0
@@ -1556,7 +1554,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.29 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.30 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2234,6 +2232,7 @@ if st.session_state['view'] == 'dictionary':
     is_indonesian_corpus = source_lang_code_upper in ('ID', 'IND', 'INDONESIAN')
 
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
+    # CEFR is only active if the feature is installed AND the corpus is English
     cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus 
     
     if forms_list.empty and not is_raw_mode: 
@@ -2248,6 +2247,7 @@ if st.session_state['view'] == 'dictionary':
                 def get_cefr_level(row):
                     token_lower = row['Token (lowercase)']
                     pos_tag = row['POS Tag']
+                    # Ensure CEFR is only attempted for valid tokens and non-Indonesian/non-raw tags
                     if not token_lower or pos_tag in ('##', '###', 'O'):
                          return "NA"
                     cefr_level = CEFR_ANALYZER.get_word_pos_level_CEFR(token_lower, pos_tag)
@@ -2258,6 +2258,11 @@ if st.session_state['view'] == 'dictionary':
             except Exception as e:
                 # Silently catch and disable on error
                 cefr_active = False 
+
+        # Non-English corpus: Manually insert NA if CEFR is not relevant/available
+        elif not is_english_corpus: 
+             forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
+        # Else: If CEFR_FEATURE_AVAILABLE is False but it is an English corpus, CEFR column is skipped entirely
 
         if ipa_active:
             try:
@@ -2273,15 +2278,16 @@ if st.session_state['view'] == 'dictionary':
                 ipa_active = False 
         
         # --- NEW: Online Dictionary Link Column ---
-        if is_english_corpus:
+        if is_indonesian_corpus:
+            col_name = "KBBI"
+            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
+                # CORRECTED KBBI LINK STRUCTURE
+                lambda token: f"<a href='https://kbbi.kemdikbud.go.id/entri/{token}' target='_blank'>Click here</a>"
+            ))
+        elif is_english_corpus:
             col_name = "Dictionary"
             forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
                 lambda token: f"<a href='https://dictionary.cambridge.org/dictionary/english/{token}' target='_blank'>Click here</a>"
-            ))
-        elif is_indonesian_corpus:
-            col_name = "KBBI"
-            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
-                lambda token: f"<a href='https://kbbi.kemdikbud.go.id/entri/{token}' target='_blank'>Click here</a>"
             ))
         else:
             # Placeholder for general language pronunciation/lookup (YouGlish)
