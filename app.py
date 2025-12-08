@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.19 - XML Structure in Overview & Built-in Corpus Fix
+# CORTEX Corpus Explorer v17.20 - Dictionary Pronunciation/Lowercase Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.19 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.20 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -148,7 +148,10 @@ def trigger_n_gram_analysis_callback():
 # --- Dictionary Helper: Get all forms by lemma ---
 @st.cache_data
 def get_all_lemma_forms_details(df_corpus, target_word):
-    """Finds all unique tokens/POS pairs sharing the target word's lemma(s)."""
+    """
+    Finds all unique tokens/POS pairs sharing the target word's lemma(s).
+    FIX: All token/lemma output is converted to lowercase.
+    """
     target_lower = target_word.lower()
     matching_rows = df_corpus[df_corpus['token'].str.lower() == target_lower]
     
@@ -164,6 +167,10 @@ def get_all_lemma_forms_details(df_corpus, target_word):
 
     # Get all forms sharing these valid lemmas
     all_forms_df = df_corpus[df_corpus['lemma'].isin(valid_lemmas)][['token', 'pos', 'lemma']].copy()
+    
+    # FIX 1: Convert token and lemma columns to lowercase before dropping duplicates and sorting
+    all_forms_df['token'] = all_forms_df['token'].str.lower()
+    all_forms_df['lemma'] = all_forms_df['lemma'].str.lower()
     
     # Keep only unique token-pos-lemma combinations, sorted by token name
     forms_list = all_forms_df.drop_duplicates().sort_values('token').reset_index(drop=True)
@@ -540,10 +547,12 @@ def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
     n_gram_counts = Counter(matched_n_grams_list)
     
     data = []
+    total_tokens_float = float(total_tokens) # Use float for accurate calculation
+    
     for n_gram, freq in n_gram_counts.items():
         n_gram_str = " ".join(n_gram)
         # Calculate relative frequency per million tokens
-        rel_freq = (freq / total_tokens) * 1_000_000
+        rel_freq = (freq / total_tokens_float) * 1_000_000
         
         data.append({
             "N-Gram": n_gram_str,
@@ -794,7 +803,9 @@ def parse_xml_content_to_df(file_source):
             
     except Exception as e:
         # Critical failure: XML is not well-formed
-        st.error(f"Error reading or parsing XML file {file_source.name}: {e}")
+        # Use the name attribute if available, otherwise use a generic label
+        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
+        st.error(f"Error reading or parsing XML file {file_name_label}: {e}")
         return None
 
     df_data = []
@@ -816,7 +827,8 @@ def parse_xml_content_to_df(file_source):
                     df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
                 sent_map[1] = raw_text
              return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
-        st.warning(f"No parseable content found in corpus file: {file_source.name}.")
+        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
+        st.warning(f"No parseable content found in corpus file: {file_name_label}.")
         return None
 
     # --- Use a counter for missing/non-integer IDs for robustness ---
@@ -907,7 +919,8 @@ def parse_xml_content_to_df(file_source):
             sent_map[sent_id] = raw_sentence_text.strip()
         
     if not df_data:
-        st.warning(f"No tokenized data was extracted from the XML file: {file_source.name}.")
+        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
+        st.warning(f"No tokenized data was extracted from the XML file: {file_name_label}.")
         return None
         
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
@@ -1006,6 +1019,7 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     src_file.seek(0)
     tgt_file.seek(0)
     src_structure = extract_xml_structure(src_file)
+    tgt_file.seek(0)
     tgt_structure = extract_xml_structure(tgt_file)
     
     combined_structure = {}
@@ -1134,9 +1148,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
-    except Exception as e: 
-        # Handle exceptions during file reading/decoding
-        return None
+    except Exception as e: return None
 
     # Set default global codes for non-parallel files
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
@@ -1196,7 +1208,10 @@ def load_corpus_file(file_source, sep=r"\s+"):
 # Function to display KWIC examples for collocates (omitted for brevity)
 # -----------------------------------------------------
 def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1, is_parallel_mode=False, target_sent_map=None):
-    # ... (body remains the same)
+    """
+    Generates and displays KWIC examples for a list of top collocates.
+    Displays up to KWIC_COLLOC_DISPLAY_LIMIT total examples.
+    """
     if top_collocates_df.empty:
         st.info("No collocates to display examples for.")
         return
@@ -1283,6 +1298,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     else:
         st.info(f"No specific KWIC examples found for the top {len(colloc_list)} collocates within the ±{window} window.")
 # -----------------------------------------------------
+
 
 # -----------------------------------------------------
 # COLLOCATION LOGIC (omitted for brevity)
@@ -1450,7 +1466,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.19 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.20 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1540,8 +1556,6 @@ with st.sidebar:
         else:
              corpus_source = download_file_to_bytesio(corpus_url) 
         corpus_name = selected_corpus_name
-        
-        # This is where the error occurred, but load_corpus_file now handles it.
         df_source_lang_for_analysis = load_corpus_file(corpus_source)
     
     # Use the loaded DF for the rest of the sidebar logic
@@ -2124,12 +2138,29 @@ if st.session_state['view'] == 'dictionary':
 
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
-        st.stop()
+        # Do not stop, continue to Collocation if possible, but skip forms/regex.
     elif not forms_list.empty:
+        # FIX 1: Rename columns and add Pronunciation link column
+        forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}, inplace=True)
+        
+        # FIX 2: Add Pronunciation column with HTML link.
+        # Ensure the language code is safe for the YouGlish link (defaulting to 'english' if not EN)
+        lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw') else SOURCE_LANG_CODE.lower()
+        
+        # Create a new column with the clickable link HTML
+        forms_list['Pronunciation'] = forms_list['Token'].apply(
+            lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
+        )
+        
         st.dataframe(
-            forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}),
+            forms_list,
             hide_index=True,
-            use_container_width=True
+            use_container_width=True,
+            escape=False, # Allow HTML rendering for the Pronunciation column
+            column_config={
+                "Pronunciation": st.column_config.Column(width="small"),
+                "Token": st.column_config.Column(width="small")
+            }
         )
     
     # --- 2. Related Forms (by Regex) ---
@@ -2229,6 +2260,7 @@ if st.session_state['view'] == 'dictionary':
     
     if stats_df_sorted.empty:
         st.warning("No collocates found matching the criteria.")
+        # Do not stop here, allow the dictionary lookup to continue even without collocates.
         st.stop()
         
     top_collocates = stats_df_sorted.head(20)
@@ -2416,7 +2448,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         node_word=primary_target_mwu, 
         top_collocates_df=full_ll, 
         window=coll_window,
-        limit_per_collocate=1, # Exactly 1 example per collocate
+        limit_per_collocate=1,
         is_parallel_mode=is_parallel_mode,
         target_sent_map=st.session_state['target_sent_map']
     )
@@ -2430,7 +2462,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         node_word=primary_target_mwu, 
         top_collocates_df=full_mi, 
         window=coll_window,
-        limit_per_collocate=1, # Exactly 1 example per collocate
+        limit_per_collocate=1,
         is_parallel_mode=is_parallel_mode,
         target_sent_map=st.session_state['target_sent_map']
     )
