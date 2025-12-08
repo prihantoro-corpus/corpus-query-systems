@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.32 - Syntax Error Fix (Removed unnecessary global declaration)
+# CORTEX Corpus Explorer v17.24 - Word Cloud Robustness Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,7 +11,7 @@ import os
 import re       
 import requests 
 import matplotlib.pyplot as plt 
-from wordcloud import WordCloud 
+# Removed direct import of WordCloud here, moved to try/except block below
 from pyvis.network import Network
 import streamlit.components.v1 as components 
 import xml.etree.ElementTree as ET # Import for XML parsing
@@ -26,7 +26,7 @@ except ImportError:
     pass # Feature will be disabled if not installed
 # ------------------------------
 
-# --- CEFR Feature Dependency ---
+# --- CEFR Feature Dependency (New Robustness Check) ---
 CEFR_FEATURE_AVAILABLE = False
 try:
     # 2. pip install cefrpy. Import added here.
@@ -35,12 +35,22 @@ try:
     CEFR_FEATURE_AVAILABLE = True
 except ImportError:
     pass # Feature will be disabled if not installed
-# ------------------------------
+# ------------------------------------------
+
+# --- WordCloud Feature Dependency (New Robustness Check) ---
+WORDCLOUD_FEATURE_AVAILABLE = False
+try:
+    # 3. pip install wordcloud
+    from wordcloud import WordCloud 
+    WORDCLOUD_FEATURE_AVAILABLE = True
+except ImportError:
+    pass
+# ------------------------------------------
 
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.32 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.24 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -108,9 +118,6 @@ if 'monolingual_xml_file_upload' not in st.session_state:
 # --- XML Structure Cache ---
 if 'xml_structure_data' not in st.session_state:
      st.session_state['xml_structure_data'] = None
-# --- User Language Selection ---
-if 'user_selected_lang_input' not in st.session_state:
-     st.session_state['user_selected_lang_input'] = 'Auto-Detect (Recommended)'
 
 
 # ---------------------------
@@ -133,6 +140,57 @@ POS_COLOR_MAP = {
 }
 
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
+
+# --- Word Cloud Function ---
+@st.cache_data
+def create_word_cloud(freq_data, is_tagged_mode):
+    """Generates a word cloud from frequency data with conditional POS coloring."""
+    
+    # Check added for robustness against sandbox environment
+    if not WORDCLOUD_FEATURE_AVAILABLE:
+        return None
+        
+    # Filter out multi-word units for visualization stability
+    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
+    if single_word_freq_data.empty:
+        return None # SAFE EXIT 1
+
+    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
+    word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
+    
+    # Simple list of English stopwords; can be expanded.
+    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are", "have", "not", "will", "i", "we", "you"])
+    
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color='black',
+        colormap='viridis', 
+        stopwords=stopwords,
+        min_font_size=10
+    )
+    
+    try:
+        wordcloud = wc.generate_from_frequencies(word_freq_dict)
+    except ValueError:
+        return None # SAFE EXIT 2: If the dictionary is empty after stopwords filtering
+
+    if is_tagged_mode:
+        def final_color_func(word, *args, **kwargs):
+            pos_tag = word_to_pos.get(word, 'O')
+            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
+            if pos_code not in POS_COLOR_MAP:
+                pos_code = 'O'
+            return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
+
+        wordcloud = wordcloud.recolor(color_func=final_color_func)
+        
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    
+    return fig
 
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
@@ -444,53 +502,6 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         
     return (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids) # Added sent_ids
 
-# --- Word Cloud Function ---
-@st.cache_data
-def create_word_cloud(freq_data, is_tagged_mode):
-    """Generates a word cloud from frequency data with conditional POS coloring."""
-    
-    # Filter out multi-word units for visualization stability
-    single_word_freq_data = freq_data[~freq_data['token'].str.contains(' ')].copy()
-    if single_word_freq_data.empty:
-        return None # SAFE EXIT 1
-
-    word_freq_dict = single_word_freq_data.set_index('token')['frequency'].to_dict()
-    word_to_pos = single_word_freq_data.set_index('token').get('pos', pd.Series('O')).to_dict()
-    
-    # Simple list of English stopwords; can be expanded.
-    stopwords = set(["the", "of", "to", "and", "in", "that", "is", "a", "for", "on", "it", "with", "as", "by", "this", "be", "are", "have", "not", "will", "i", "we", "you"])
-    
-    wc = WordCloud(
-        width=800,
-        height=400,
-        background_color='black',
-        colormap='viridis', 
-        stopwords=stopwords,
-        min_font_size=10
-    )
-    
-    try:
-        wordcloud = wc.generate_from_frequencies(word_freq_dict)
-    except ValueError:
-        return None # SAFE EXIT 2: If the dictionary is empty after stopwords filtering
-
-    if is_tagged_mode:
-        def final_color_func(word, *args, **kwargs):
-            pos_tag = word_to_pos.get(word, 'O')
-            pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
-            if pos_code not in POS_COLOR_MAP:
-                pos_code = 'O'
-            return POS_COLOR_MAP.get(pos_code, POS_COLOR_MAP['O'])
-
-        wordcloud = wordcloud.recolor(color_func=final_color_func)
-        
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis("off")
-    plt.tight_layout(pad=0)
-    
-    return fig
-
 # --- N-GRAM LOGIC FUNCTION (FIXED: Added corpus_id argument for better caching) ---
 @st.cache_data(show_spinner=False)
 def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
@@ -541,7 +552,7 @@ def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
         current_tokens = tokens[i:i + n_size]
         current_tokens_low = tokens_low[i:i + n_size]
         current_pos = pos[i:i + n_size]
-        current_lemma = lemma[i:i + n_size]
+        current_lemma = lemma[i:i + n_gram_size]
         
         is_match = True
         
@@ -798,20 +809,19 @@ def format_structure_data_for_display(structure_data, file_label="Corpus"):
 
 
 # Core function to parse XML and extract tokens (used by both monolingual and parallel loaders)
-def parse_xml_content_to_df(file_stream_copy):
+def parse_xml_content_to_df(file_source):
     """
-    Parses a single XML file from a file stream copy, extracts sentences and IDs, and tokenizes/verticalizes if needed.
-    This function is primarily for structured XML formats.
-    Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}} or None on critical error.
+    Parses a single XML file, extracts sentences and IDs, and tokenizes/verticalizes if needed.
+    Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
     """
     try:
-        # 1. Read full content as string first for language detection fallback
-        file_stream_copy.seek(0)
-        xml_content = file_stream_copy.read().decode('utf-8')
-        file_stream_copy.seek(0)
+        # 1. Read full content as string first, for safety and regex fallback
+        file_source.seek(0)
+        xml_content = file_source.read().decode('utf-8')
+        file_source.seek(0)
         
         # Use ElementTree for robust XML structure parsing
-        tree = ET.parse(file_stream_copy)
+        tree = ET.parse(file_source)
         root = tree.getroot()
         
         # 2. Extract Language Code
@@ -821,28 +831,40 @@ def parse_xml_content_to_df(file_stream_copy):
             if lang_match:
                 lang_code = lang_match.group(1).upper()
             else:
+                # Default to XML if no language code is explicitly found
                 lang_code = 'XML' 
         else:
             lang_code = lang_code.upper()
             
     except Exception as e:
         # Critical failure: XML is not well-formed
+        # Use the name attribute if available, otherwise use a generic label
+        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
+        st.error(f"Error reading or parsing XML file {file_name_label}: {e}")
         return None
 
     df_data = []
     sent_map = {}
     
     # 3. Iterate over <sent> tags (or similar, like <p> if no <sent> is found)
-    sent_tags = root.findall('.//sent') # Search recursively for <sent>
-    if not sent_tags: # Fallback to looking at direct children if <sent> is missing (e.g., if the user uses <text>)
+    sent_tags = root.findall('sent')
+    if not sent_tags: # Fallback to looking at direct children if <sent> is missing (e.g., if the user uses <p>)
         sent_tags = list(root)
     
     if not sent_tags:
-        # Last resort: check if if the root element itself contains raw text
+        # Try to process raw content in root if present (as a fallback for very simple XML)
         if root.text and root.text.strip():
-             pass # Fall through to raw text logic below if no sent tags were found.
-        else:
-            return None # If no obvious structural tags or direct text, the file might be empty or too malformed.
+             raw_text = root.text.strip()
+             cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text) 
+             tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+             if tokens:
+                for token in tokens:
+                    df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
+                sent_map[1] = raw_text
+             return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
+        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
+        st.warning(f"No parseable content found in corpus file: {file_name_label}.")
+        return None
 
     # --- Use a counter for missing/non-integer IDs for robustness ---
     sequential_id_counter = 0
@@ -851,28 +873,32 @@ def parse_xml_content_to_df(file_stream_copy):
         
         # --- ID Extraction: Prioritize 'n' > 'id' > Sequential Counter ---
         sent_id_str = sent_elem.get('n') or sent_elem.get('id')
+        
         sent_id = None
         
         if sent_id_str:
             try:
+                # Try to convert to integer (required for alignment checks)
                 sent_id = int(sent_id_str)
             except ValueError:
+                # If the ID is a string (e.g., "s1.2") or simply non-numeric, use sequential
                 sequential_id_counter += 1
                 sent_id = sequential_id_counter
         else:
+            # If no 'n' or 'id' attribute found, use sequential ID.
             sequential_id_counter += 1
             sent_id = sequential_id_counter
 
         if sent_id is None: 
             continue
 
-        # --- Check for nested <w> tags (Vertical/Tagged Format in XML) ---
-        word_tags = sent_elem.findall('.//w') 
+        # --- Check for nested <w> tags (Vertical/Tagged Format) ---
+        word_tags = sent_elem.findall('.//w') # Use findall('.//w') to search recursively
         
         raw_sentence_text = ""
         
         if word_tags:
-            # Standard Tagged XML format (e.g., TreeTagger/TEI-like)
+            # Tagged XML format (e.g., TreeTagger/TEI-like)
             raw_tokens = []
             for w_elem in word_tags:
                 token = w_elem.text.strip() if w_elem.text else ""
@@ -887,23 +913,14 @@ def parse_xml_content_to_df(file_stream_copy):
             raw_sentence_text = " ".join(raw_tokens)
             
         else:
-            # Raw Text or Embedded Vertical Corpus inside the tag text
-            inner_content = (sent_elem.text or "").strip() 
+            # Raw Text XML format (Linear) - content is inside the <sent> tag itself
+            inner_content = sent_elem.text.strip() if sent_elem.text else ""
             
-            # Collect text from all direct children's tails if applicable (common in flat XML)
-            for child in sent_elem:
-                inner_content += (child.tail or "").strip()
-
-            if not inner_content:
-                continue
-            
-            # --- Embedded Vertical Format Detector ---
+            # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
             normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
             lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
+            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
             
-            # Check for multi-column data (assuming token/pos/lemma)
-            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) > 0
-
             if is_vertical_format:
                 raw_tokens = []
                 for line in lines:
@@ -919,10 +936,15 @@ def parse_xml_content_to_df(file_stream_copy):
                 raw_sentence_text = " ".join(raw_tokens)
             
             else:
-                # Pure Horizontal text (raw) - requires simple tokenization
+                # Pure Horizontal text (raw) - requires tokenization
                 raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
+                
+                # --- FIXED TOKENIZATION ---
+                # 1. Add spaces around punctuation/symbols 
                 cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
+                # 2. Split by any whitespace that remains
                 tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
+                # --------------------------
 
                 for token in tokens:
                     df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
@@ -931,24 +953,16 @@ def parse_xml_content_to_df(file_stream_copy):
         if raw_sentence_text:
             sent_map[sent_id] = raw_sentence_text.strip()
         
-    if not df_data and root.text and root.text.strip():
-        # Handle case where entire text is in root.text (simplest XML)
-        raw_text = root.text.strip()
-        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text) 
-        tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
-        if tokens:
-           for token in tokens:
-               df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
-           sent_map[1] = raw_text
-    
     if not df_data:
+        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
+        st.warning(f"No tokenized data was extracted from the XML file: {file_name_label}.")
         return None
         
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
 
 
 # ---------------------------------------------------------------------
-# Monolingual XML Loader (NOW WITH ROBUST FALLBACK)
+# Monolingual XML Loader 
 # ---------------------------------------------------------------------
 @st.cache_data
 def load_monolingual_xml_corpus(file_source):
@@ -957,75 +971,24 @@ def load_monolingual_xml_corpus(file_source):
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
-    st.session_state['xml_structure_data'] = None 
+    st.session_state['xml_structure_data'] = None # Reset old structure
 
     file_source.seek(0)
-    raw_xml_content = file_source.read().decode('utf-8', errors='ignore')
-
-    # 1. Attempt Standard Structured XML Parse
-    file_source.seek(0)
-    # Pass a BytesIO copy for parsing to avoid side effects on original file stream
-    result = parse_xml_content_to_df(BytesIO(raw_xml_content.encode('utf-8')))
+    result = parse_xml_content_to_df(file_source)
     
-    df_src = pd.DataFrame(result['df_data']) if result is not None and result['df_data'] else pd.DataFrame()
-
-    detected_lang_code = 'EN' # Default assumption if no structured lang code is found
-    
-    if df_src.empty:
-        # 2. Fallback to robust vertical text parsing
-        clean_lines = [
-            line for line in raw_xml_content.splitlines() 
-            if line and line.strip() 
-            and not line.strip().startswith('<') 
-            and not line.strip().startswith('#')
-        ]
-        clean_content = "\n".join(clean_lines)
-        file_buffer_for_pandas = StringIO(clean_content)
-        
-        try:
-            file_buffer_for_pandas.seek(0)
-            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
-            
-            if df_attempt is not None and df_attempt.shape[1] >= 3:
-                df_src = df_attempt.iloc[:, :3].copy()
-                df_src.columns = ["token", "pos", "lemma"]
-                df_src["token"] = df_src["token"].fillna("").astype(str).str.strip() 
-                df_src["pos"] = df_src["pos"].fillna("###").astype(str)
-                df_src["lemma"] = df_src["lemma"].fillna("###").astype(str)
-                
-                # --- MANUAL LANGUAGE DETECTION (IMPROVED HEURISTIC) ---
-                id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-                is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() >= 1
-                detected_lang_code = 'ID' if is_indonesian_tagged else 'EN'
-                
-                result = {'lang_code': detected_lang_code, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
-
-            else:
-                return None
-                 
-        except Exception as e:
-            return None
-    else:
-        # If standard structured XML parsing succeeded, use its detected language code
-        if result is not None and 'lang_code' in result:
-            detected_lang_code = result['lang_code']
-    
-    if df_src.empty:
+    if result is None:
         return None
-
-    # Apply detected language code
-    SOURCE_LANG_CODE = detected_lang_code
-        
-    TARGET_LANG_CODE = 'NA'
     
-    # Final cleanup and session state setup for success
+    df_src = pd.DataFrame(result['df_data'])
+    
+    # Set global codes for monolingual XML
+    SOURCE_LANG_CODE = result['lang_code']
+    TARGET_LANG_CODE = 'NA'
+
     df_src["_token_low"] = df_src["token"].str.lower()
     
-    # Structure extraction (only runs if initial XML parse was successful)
-    if result is not None and detected_lang_code not in ('ID', 'EN'):
-        file_source.seek(0)
-        st.session_state['xml_structure_data'] = extract_xml_structure(file_source)
-    
+    # --- XML Structure Extraction for Overview ---
+    st.session_state['xml_structure_data'] = extract_xml_structure(file_source)
     st.session_state['monolingual_xml_file_upload'] = file_source
     
     return df_src
@@ -1050,12 +1013,10 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     src_file.seek(0)
     tgt_file.seek(0)
     
-    # NOTE: Parallel XML is assumed to be structured or at least parseable for alignment
     src_result = parse_xml_content_to_df(src_file)
     tgt_result = parse_xml_content_to_df(tgt_file)
     
     if src_result is None or tgt_result is None:
-        st.error("Parallel XML parsing failed. Ensure both files are well-formed XML with tokens under `<w>` tags or linear text under `<sent>` tags.")
         return None
         
     df_src = pd.DataFrame(src_result['df_data'])
@@ -1089,7 +1050,9 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     st.session_state['target_sent_map'] = tgt_result['sent_map'] 
     
     # --- XML Structure Extraction for Overview (Combining structures) ---
-    src_file.seek(0); tgt_file.seek(0)
+    # Need to pass fresh copies of the file streams for structure extraction
+    src_file.seek(0)
+    tgt_file.seek(0)
     src_structure = extract_xml_structure(src_file)
     tgt_file.seek(0)
     tgt_structure = extract_xml_structure(tgt_file)
@@ -1098,6 +1061,7 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     if src_structure:
         combined_structure.update(src_structure)
     if tgt_structure:
+        # Merge target structure, prioritizing source if tags clash, but merging attributes
         for tag, attrs in tgt_structure.items():
             if tag not in combined_structure:
                 combined_structure[tag] = attrs
@@ -1107,6 +1071,7 @@ def load_xml_parallel_corpus(src_file, tgt_file):
                         combined_structure[tag][attr] = values
                     else:
                         combined_structure[tag][attr].update(values)
+                        # Keep only 20 unique samples
                         combined_structure[tag][attr] = set(list(combined_structure[tag][attr])[:20])
 
     st.session_state['xml_structure_data'] = combined_structure
@@ -1183,10 +1148,9 @@ def load_excel_parallel_corpus_file(file_source):
     return df_src
 
 
-# --- Monolingual File Dispatcher ---
+# --- Monolingual File Dispatcher (Updated to check for XML) ---
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
     # Always reset parallel mode when loading standard file
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
@@ -1196,10 +1160,10 @@ def load_corpus_file(file_source, sep=r"\s+"):
          
     if file_source is None: return None
     
-    # --- XML DISPATCHER ---
+    # --- NEW XML DISPATCHER ---
+    # FIX: Check if file_source has a 'name' attribute before attempting .name.lower()
     if hasattr(file_source, 'name') and file_source.name.lower().endswith('.xml'):
         file_source.seek(0)
-        # XML is handled by the dedicated loader which now has a text fallback
         return load_monolingual_xml_corpus(file_source)
     # --------------------------
     
@@ -1216,26 +1180,17 @@ def load_corpus_file(file_source, sep=r"\s+"):
             except Exception:
                 file_content_str = file_bytes.decode('utf-8', errors='ignore')
         
-        # --- ROBUST CONTENT CLEANING ---
-        # Strip comments (#), empty lines, and lines starting with '<' (XML tags in TXT files)
-        clean_lines = [
-            line for line in file_content_str.splitlines() 
-            if line and line.strip() 
-            and not line.strip().startswith('#')
-            and not line.strip().startswith('<') 
-        ]
+        clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
-        
     except Exception as e: return None
 
     # Set default global codes for non-parallel files
-    detected_lang_code = 'RAW' 
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    SOURCE_LANG_CODE = 'RAW'
     TARGET_LANG_CODE = 'NA'
 
-# app.py (Replace lines ~935 to ~947)
-
-    # --- Attempt to load as Tagged/CSV/TSV with fixed logic ---
+    # --- Attempt to load as Tagged/CSV/TSV ---
     df_attempt = None
     
     # 1. Try Tab-separated first (most specific)
@@ -1245,7 +1200,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception:
         pass # Ignore failure, try next
     
-    # 2. If tab-separated failed or didn't give 3 columns, try general whitespace (your format)
+    # 2. If tab-separated failed or didn't give 3 columns, try general whitespace (THE FIX)
     if df_attempt is None or df_attempt.shape[1] < 3:
         try:
             file_buffer_for_pandas.seek(0)
@@ -1253,34 +1208,21 @@ def load_corpus_file(file_source, sep=r"\s+"):
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str, skipinitialspace=True)
         except Exception:
             pass # If this also fails, df_attempt remains None
-            
+    
+    # Check final result
     if df_attempt is not None and df_attempt.shape[1] >= 3:
         df = df_attempt.iloc[:, :3].copy()
-            df.columns = ["token", "pos", "lemma"]
+        df.columns = ["token", "pos", "lemma"]
+        
+        df["token"] = df["token"].fillna("").astype(str).str.strip() 
+        df["pos"] = df["pos"].fillna("###").astype(str)
+        df["lemma"] = df["lemma"].fillna("###").astype(str)
+        df["_token_low"] = df["token"].str.lower()
+        
+        return df
             
-            df["token"] = df["token"].fillna("").astype(str).str.strip() 
-            df["pos"] = df["pos"].fillna("###").astype(str)
-            df["lemma"] = df["lemma"].fillna("###").astype(str)
-            df["_token_low"] = df["token"].str.lower()
-            
-            # --- Auto-detect Language for Tagged/Vertical Corpus (Improved Heuristic) ---
-            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-            # If ANY common Indonesian lemma is found, assume ID.
-            is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() >= 1
-            
-            if is_indonesian_tagged:
-                 detected_lang_code = 'ID'
-            else:
-                 # Default tagged corpus to EN if not obviously ID
-                 detected_lang_code = 'EN' 
-            
-            SOURCE_LANG_CODE = detected_lang_code
-            return df
-            
-    except Exception: 
-        pass # Fall through to raw text if vertical parsing fails
 
-    # Fallback to Raw Text Processing (Lowest Priority)
+    # Fallback to Raw Text Processing
     try:
         raw_text = file_content_str
         # --- FIXED TOKENIZATION ---
@@ -1301,7 +1243,6 @@ def load_corpus_file(file_source, sep=r"\s+"):
         
         df["_token_low"] = df["token"].str.lower()
         
-        SOURCE_LANG_CODE = detected_lang_code # Use RAW default
         return df
         
     except Exception as raw_e: return None 
@@ -1568,7 +1509,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.32 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.24 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1626,17 +1567,6 @@ with st.sidebar:
         on_change=reset_analysis
     )
     
-    # --- E. MANUAL LANGUAGE OVERRIDE (NEW) ---
-    st.markdown("---")
-    st.subheader("1.5 Language Override")
-    user_selected_lang = st.selectbox(
-        "Force Source Language Code:",
-        options=['Auto-Detect (Recommended)', 'ID', 'EN', 'RAW', 'OTHER'],
-        key="user_selected_lang_input",
-        on_change=reset_analysis,
-        help="Use this to manually set the language if auto-detection fails (e.g., 'ID' for Indonesian)."
-    )
-    
     # --- CORPUS LOADING LOGIC (Prioritize XML Parallel > Excel Parallel > Uploaded Monolingual > Built-in) ---
     
     if xml_src_file is not None and xml_tgt_file is not None:
@@ -1671,15 +1601,6 @@ with st.sidebar:
         corpus_name = selected_corpus_name
         df_source_lang_for_analysis = load_corpus_file(corpus_source)
     
-    # --- POST-LOAD LANGUAGE OVERRIDE LOGIC (FIXED) ---
-    if df_source_lang_for_analysis is not None:
-        user_selection = st.session_state.get('user_selected_lang_input', 'Auto-Detect (Recommended)')
-        if user_selection not in ('Auto-Detect (Recommended)', None):
-            # NO 'global' keyword needed here; it's outside a function definition
-            SOURCE_LANG_CODE = user_selection
-            if 'Parallel' not in corpus_name:
-                 corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
-
     # Use the loaded DF for the rest of the sidebar logic
     df_sidebar = df_source_lang_for_analysis
     
@@ -1950,21 +1871,25 @@ if st.session_state['view'] == 'overview':
 
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         
-        # --- FIX: Ensure we handle the potential None return from create_word_cloud safely ---
+        # --- FIX: New robust check implementation ---
         if not freq_df.empty:
-            wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
             
-            if wordcloud_fig is not None: 
-                if not is_raw_mode:
-                    st.markdown(
-                        """
-                        **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
-                        """
-                    , unsafe_allow_html=True)
-                    
-                st.pyplot(wordcloud_fig)
+            if not WORDCLOUD_FEATURE_AVAILABLE:
+                st.info("⚠️ **Word Cloud Feature Disabled:** Visualization requires the external `wordcloud` library, which could not be initialized. Please ensure it is installed correctly in your local environment.")
             else:
-                 st.info("Not enough single tokens remaining to generate a word cloud.")
+                wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
+                
+                if wordcloud_fig is not None: 
+                    if not is_raw_mode:
+                        st.markdown(
+                            """
+                            **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
+                            """
+                        , unsafe_allow_html=True)
+                        
+                    st.pyplot(wordcloud_fig)
+                else:
+                     st.info("Not enough single tokens remaining to generate a word cloud.")
 
         else:
             st.info("Not enough tokens to generate a word cloud.")
@@ -2259,76 +2184,52 @@ if st.session_state['view'] == 'dictionary':
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
     # --------------------------------------------------------
-    # Language-Specific Features
+    # IPA Feature Logic (Request 1 & 2)
     # --------------------------------------------------------
-    source_lang_code_upper = SOURCE_LANG_CODE.upper()
-    is_english_corpus = source_lang_code_upper in ('EN', 'ENG', 'ENGLISH')
-    is_indonesian_corpus = source_lang_code_upper in ('ID', 'IND', 'INDONESIAN')
-
+    is_english_corpus = SOURCE_LANG_CODE.upper() in ('EN', 'ENG', 'ENGLISH')
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
-    # CEFR is only active if the feature is installed AND the corpus is English
-    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus 
     
+    # Add CEFR check here for robustness in dictionary
+    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus
+
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
-        
+        # Continue to Collocation if possible, but skip forms/regex.
     elif not forms_list.empty:
-        # Rename columns first for display consistency
+        # FIX 1: Rename columns (already done in v17.22 thought block)
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
-
+        
         if cefr_active:
-            try:
-                def get_cefr_level(row):
-                    token_lower = row['Token (lowercase)']
-                    pos_tag = row['POS Tag']
-                    # Ensure CEFR is only attempted for valid tokens and non-Indonesian/non-raw tags
-                    if not token_lower or pos_tag in ('##', '###', 'O'):
-                         return "NA"
-                    cefr_level = CEFR_ANALYZER.get_word_pos_level_CEFR(token_lower, pos_tag)
-                    return cefr_level if cefr_level else "NA"
-
-                forms_list.insert(forms_list.shape[1], 'CEFR', forms_list.apply(get_cefr_level, axis=1))
-
-            except Exception as e:
-                # Silently catch and disable on error
-                cefr_active = False 
-
-        # Non-English corpus: Manually insert NA if CEFR is not relevant/available
-        elif not is_english_corpus: 
-             forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
-        # Else: If CEFR_FEATURE_AVAILABLE is False but it is an English corpus, CEFR column is skipped entirely
-
+            # Placeholder for CEFR logic (must be fully implemented locally)
+            forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
+        
         if ipa_active:
             try:
+                # Function to safely get IPA transcription, handling common errors/empty results
                 def get_ipa_transcription(token):
                     try:
+                        # eng_to-ipa.convert handles single words or short phrases
                         return ipa.convert(token)
                     except Exception:
                         return "IPA N/A"
 
+                # Forms list contains all-lowercase tokens (from get_all_lemma_forms_details)
+                # 2. Add 'IPA Transcription' column
                 forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token (lowercase)'].apply(get_ipa_transcription))
                 
             except Exception as e:
-                ipa_active = False 
+                st.error(f"Error during IPA transcription: {e}")
+                ipa_active = False # Disable feature if an unhandled error occurs
+                
+        # FIX 2: Add Pronunciation column with HTML link.
+        lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw', 'xml') else SOURCE_LANG_CODE.lower()
         
-        # --- NEW: Online Dictionary Link Column (CORRECTED) ---
-        if is_indonesian_corpus:
-            col_name = "KBBI"
-            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
-                # CORRECTED KBBI LINK STRUCTURE
-                lambda token: f"<a href='https://kbbi.kemdikbud.go.id/entri/{token}' target='_blank'>Click here</a>"
-            ))
-        elif is_english_corpus:
-            col_name = "Dictionary"
-            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
-                lambda token: f"<a href='https://dictionary.cambridge.org/dictionary/english/{token}' target='_blank'>Click here</a>"
-            ))
-        else:
-            # Placeholder for general language pronunciation/lookup (YouGlish)
-            lang_for_pronunciation = SOURCE_LANG_CODE.lower()
-            forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
-                lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
-            ))
+        # Create a new column with the clickable link HTML
+        forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
+            lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
+        ))
+        
+        # FIX 3: Replaced st.dataframe with st.markdown(forms_list.to_html()) to resolve Streamlit internal error.
         
         # Define table styling for cleaner look with markdown
         html_style = """
@@ -2361,15 +2262,16 @@ if st.session_state['view'] == 'dictionary':
             unsafe_allow_html=True
         )
     
-    # Status messages for linguistic features
-    if not IPA_FEATURE_AVAILABLE and is_english_corpus:
-        st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library.**")
-    
+    if not IPA_FEATURE_AVAILABLE:
+        st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
+    elif is_english_corpus and not ipa_active:
+         st.warning("⚠️ IPA feature is available but encountered an error. Check logs.")
+    elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
+        st.info(f"💡 IPA transcription feature is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
+        
     if not CEFR_FEATURE_AVAILABLE and is_english_corpus:
-        st.info("💡 **CEFR Categorization feature requires the `cefrpy` library.**")
-    
-    if not is_english_corpus and not is_indonesian_corpus:
-        st.info(f"💡 Dictionary lookup links (e.g., KBBI, Cambridge) are currently unavailable for **{SOURCE_LANG_CODE}**.")
+        st.info("💡 **CEFR Categorization feature requires the `cefrpy` library to be installed** (`pip install cefrpy`).")
+        
     # --------------------------------------------------------
     
     st.markdown("---")
@@ -2678,4 +2580,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
