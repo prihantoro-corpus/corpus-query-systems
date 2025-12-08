@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.27 - XML Tag Filtering for Robust Vertical Corpus Loading
+# CORTEX Corpus Explorer v17.28 - Robust XML Fallback for Vertical Data
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.27 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.28 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -795,19 +795,20 @@ def format_structure_data_for_display(structure_data, file_label="Corpus"):
 
 
 # Core function to parse XML and extract tokens (used by both monolingual and parallel loaders)
-def parse_xml_content_to_df(file_source):
+def parse_xml_content_to_df(file_stream_copy):
     """
-    Parses a single XML file, extracts sentences and IDs, and tokenizes/verticalizes if needed.
-    Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
+    Parses a single XML file from a file stream copy, extracts sentences and IDs, and tokenizes/verticalizes if needed.
+    This function is primarily for structured XML formats.
+    Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}} or None on critical error.
     """
     try:
-        # 1. Read full content as string first, for safety and regex fallback
-        file_source.seek(0)
-        xml_content = file_source.read().decode('utf-8')
-        file_source.seek(0)
+        # 1. Read full content as string first for language detection fallback
+        file_stream_copy.seek(0)
+        xml_content = file_stream_copy.read().decode('utf-8')
+        file_stream_copy.seek(0)
         
         # Use ElementTree for robust XML structure parsing
-        tree = ET.parse(file_source)
+        tree = ET.parse(file_stream_copy)
         root = tree.getroot()
         
         # 2. Extract Language Code
@@ -817,40 +818,30 @@ def parse_xml_content_to_df(file_source):
             if lang_match:
                 lang_code = lang_match.group(1).upper()
             else:
-                # Default to XML if no language code is explicitly found
                 lang_code = 'XML' 
         else:
             lang_code = lang_code.upper()
             
     except Exception as e:
         # Critical failure: XML is not well-formed
-        # Use the name attribute if available, otherwise use a generic label
-        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
-        st.error(f"Error reading or parsing XML file {file_name_label}: {e}")
         return None
 
     df_data = []
     sent_map = {}
     
     # 3. Iterate over <sent> tags (or similar, like <p> if no <sent> is found)
-    sent_tags = root.findall('sent')
-    if not sent_tags: # Fallback to looking at direct children if <sent> is missing (e.g., if the user uses <p>)
+    sent_tags = root.findall('.//sent') # Search recursively for <sent>
+    if not sent_tags: # Fallback to looking at direct children if <sent> is missing (e.g., if the user uses <text>)
         sent_tags = list(root)
     
     if not sent_tags:
-        # Try to process raw content in root if present (as a fallback for very simple XML)
+        # Last resort: check if the root element itself contains raw text
         if root.text and root.text.strip():
-             raw_text = root.text.strip()
-             cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text) 
-             tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
-             if tokens:
-                for token in tokens:
-                    df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
-                sent_map[1] = raw_text
-             return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
-        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
-        st.warning(f"No parseable content found in corpus file: {file_name_label}.")
-        return None
+             # Fall through to raw text logic below if no sent tags were found.
+             pass
+        else:
+            # If no obvious structural tags or direct text, the file might be empty or too malformed.
+            return None
 
     # --- Use a counter for missing/non-integer IDs for robustness ---
     sequential_id_counter = 0
@@ -859,32 +850,28 @@ def parse_xml_content_to_df(file_source):
         
         # --- ID Extraction: Prioritize 'n' > 'id' > Sequential Counter ---
         sent_id_str = sent_elem.get('n') or sent_elem.get('id')
-        
         sent_id = None
         
         if sent_id_str:
             try:
-                # Try to convert to integer (required for alignment checks)
                 sent_id = int(sent_id_str)
             except ValueError:
-                # If the ID is a string (e.g., "s1.2") or simply non-numeric, use sequential
                 sequential_id_counter += 1
                 sent_id = sequential_id_counter
         else:
-            # If no 'n' or 'id' attribute found, use sequential ID.
             sequential_id_counter += 1
             sent_id = sequential_id_counter
 
         if sent_id is None: 
             continue
 
-        # --- Check for nested <w> tags (Vertical/Tagged Format) ---
-        word_tags = sent_elem.findall('.//w') # Use findall('.//w') to search recursively
+        # --- Check for nested <w> tags (Vertical/Tagged Format in XML) ---
+        word_tags = sent_elem.findall('.//w') 
         
         raw_sentence_text = ""
         
         if word_tags:
-            # Tagged XML format (e.g., TreeTagger/TEI-like)
+            # Standard Tagged XML format (e.g., TreeTagger/TEI-like)
             raw_tokens = []
             for w_elem in word_tags:
                 token = w_elem.text.strip() if w_elem.text else ""
@@ -899,14 +886,23 @@ def parse_xml_content_to_df(file_source):
             raw_sentence_text = " ".join(raw_tokens)
             
         else:
-            # Raw Text XML format (Linear) - content is inside the <sent> tag itself
-            inner_content = sent_elem.text.strip() if sent_elem.text else ""
+            # Raw Text or Embedded Vertical Corpus inside the tag text
+            inner_content = (sent_elem.text or "").strip() 
             
-            # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
+            # Collect text from all direct children's tails if applicable (common in flat XML)
+            for child in sent_elem:
+                inner_content += (child.tail or "").strip()
+
+            if not inner_content:
+                continue
+            
+            # --- Embedded Vertical Format Detector ---
             normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
             lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
-            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
             
+            # Check for multi-column data (assuming token/pos/lemma)
+            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) > 0
+
             if is_vertical_format:
                 raw_tokens = []
                 for line in lines:
@@ -922,15 +918,10 @@ def parse_xml_content_to_df(file_source):
                 raw_sentence_text = " ".join(raw_tokens)
             
             else:
-                # Pure Horizontal text (raw) - requires tokenization
+                # Pure Horizontal text (raw) - requires simple tokenization
                 raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
-                
-                # --- FIXED TOKENIZATION ---
-                # 1. Add spaces around punctuation/symbols 
                 cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
-                # 2. Split by any whitespace that remains
                 tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
-                # --------------------------
 
                 for token in tokens:
                     df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id})
@@ -939,16 +930,24 @@ def parse_xml_content_to_df(file_source):
         if raw_sentence_text:
             sent_map[sent_id] = raw_sentence_text.strip()
         
+    if not df_data and root.text and root.text.strip():
+        # Handle case where entire text is in root.text (simplest XML)
+        raw_text = root.text.strip()
+        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text) 
+        tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+        if tokens:
+           for token in tokens:
+               df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
+           sent_map[1] = raw_text
+    
     if not df_data:
-        file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
-        st.warning(f"No tokenized data was extracted from the XML file: {file_name_label}.")
         return None
         
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
 
 
 # ---------------------------------------------------------------------
-# Monolingual XML Loader 
+# Monolingual XML Loader (NOW WITH ROBUST FALLBACK)
 # ---------------------------------------------------------------------
 @st.cache_data
 def load_monolingual_xml_corpus(file_source):
@@ -957,24 +956,73 @@ def load_monolingual_xml_corpus(file_source):
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
-    st.session_state['xml_structure_data'] = None # Reset old structure
+    st.session_state['xml_structure_data'] = None 
 
     file_source.seek(0)
-    result = parse_xml_content_to_df(file_source)
-    
-    if result is None:
-        return None
-    
-    df_src = pd.DataFrame(result['df_data'])
-    
-    # Set global codes for monolingual XML
-    SOURCE_LANG_CODE = result['lang_code']
-    TARGET_LANG_CODE = 'NA'
+    raw_xml_content = file_source.read().decode('utf-8', errors='ignore')
 
+    # 1. Attempt Standard Structured XML Parse
+    file_source.seek(0)
+    # Pass a BytesIO copy for parsing to avoid side effects on original file stream
+    result = parse_xml_content_to_df(BytesIO(raw_xml_content.encode('utf-8')))
+    
+    df_src = pd.DataFrame(result['df_data']) if result is not None and result['df_data'] else pd.DataFrame()
+
+    if df_src.empty:
+        # 2. Fallback to robust vertical text parsing (for non-standard XML containing vertical data)
+        st.warning("XML parser failed (no structured or linear content found). Attempting to load as vertical text...")
+        
+        # Strip all XML tags/headers and parse as vertical text
+        clean_lines = [
+            line for line in raw_xml_content.splitlines() 
+            if line and line.strip() 
+            and not line.strip().startswith('<') 
+            and not line.strip().startswith('#')
+        ]
+        clean_content = "\n".join(clean_lines)
+        file_buffer_for_pandas = StringIO(clean_content)
+        
+        try:
+            file_buffer_for_pandas.seek(0)
+            # Use the robust whitespace parser
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
+            
+            if df_attempt is not None and df_attempt.shape[1] >= 3:
+                df_src = df_attempt.iloc[:, :3].copy()
+                df_src.columns = ["token", "pos", "lemma"]
+                df_src["token"] = df_src["token"].fillna("").astype(str).str.strip() 
+                df_src["pos"] = df_src["pos"].fillna("###").astype(str)
+                df_src["lemma"] = df_src["lemma"].fillna("###").astype(str)
+                
+                # Manual Language Detection for fallback (for non-XML loads)
+                id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
+                is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() > 5 
+                SOURCE_LANG_CODE = 'ID' if is_indonesian_tagged else 'EN'
+                
+                # Create a placeholder for sent_map and result for consistency
+                result = {'lang_code': SOURCE_LANG_CODE, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
+
+            else:
+                st.error("Fallback vertical parser failed: not enough columns found.")
+                return None
+                 
+        except Exception as e:
+            st.error(f"Critical Fallback Error: {e}")
+            return None
+    
+    if df_src.empty:
+        return None
+
+    TARGET_LANG_CODE = 'NA'
+    
+    # Final cleanup and session state setup for success
     df_src["_token_low"] = df_src["token"].str.lower()
     
-    # --- XML Structure Extraction for Overview ---
-    st.session_state['xml_structure_data'] = extract_xml_structure(file_source)
+    # Structure extraction (only runs if initial XML parse was successful)
+    if result is not None and result['lang_code'] != 'ID' and result['lang_code'] != 'EN':
+        file_source.seek(0)
+        st.session_state['xml_structure_data'] = extract_xml_structure(file_source)
+    
     st.session_state['monolingual_xml_file_upload'] = file_source
     
     return df_src
@@ -999,10 +1047,12 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     src_file.seek(0)
     tgt_file.seek(0)
     
+    # NOTE: Parallel XML is assumed to be structured or at least parseable for alignment
     src_result = parse_xml_content_to_df(src_file)
     tgt_result = parse_xml_content_to_df(tgt_file)
     
     if src_result is None or tgt_result is None:
+        st.error("Parallel XML parsing failed. Ensure both files are well-formed XML with tokens under `<w>` tags or linear text under `<sent>` tags.")
         return None
         
     df_src = pd.DataFrame(src_result['df_data'])
@@ -1036,9 +1086,7 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     st.session_state['target_sent_map'] = tgt_result['sent_map'] 
     
     # --- XML Structure Extraction for Overview (Combining structures) ---
-    # Need to pass fresh copies of the file streams for structure extraction
-    src_file.seek(0)
-    tgt_file.seek(0)
+    src_file.seek(0); tgt_file.seek(0)
     src_structure = extract_xml_structure(src_file)
     tgt_file.seek(0)
     tgt_structure = extract_xml_structure(tgt_file)
@@ -1047,7 +1095,6 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     if src_structure:
         combined_structure.update(src_structure)
     if tgt_structure:
-        # Merge target structure, prioritizing source if tags clash, but merging attributes
         for tag, attrs in tgt_structure.items():
             if tag not in combined_structure:
                 combined_structure[tag] = attrs
@@ -1057,7 +1104,6 @@ def load_xml_parallel_corpus(src_file, tgt_file):
                         combined_structure[tag][attr] = values
                     else:
                         combined_structure[tag][attr].update(values)
-                        # Keep only 20 unique samples
                         combined_structure[tag][attr] = set(list(combined_structure[tag][attr])[:20])
 
     st.session_state['xml_structure_data'] = combined_structure
@@ -1134,7 +1180,7 @@ def load_excel_parallel_corpus_file(file_source):
     return df_src
 
 
-# --- Monolingual File Dispatcher (Updated for Robust Vertical Corpus Loading) ---
+# --- Monolingual File Dispatcher ---
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
@@ -1148,9 +1194,9 @@ def load_corpus_file(file_source, sep=r"\s+"):
     if file_source is None: return None
     
     # --- XML DISPATCHER ---
-    # Check for .xml extension first
     if hasattr(file_source, 'name') and file_source.name.lower().endswith('.xml'):
         file_source.seek(0)
+        # XML is handled by the dedicated loader which now has a text fallback
         return load_monolingual_xml_corpus(file_source)
     # --------------------------
     
@@ -1167,12 +1213,12 @@ def load_corpus_file(file_source, sep=r"\s+"):
             except Exception:
                 file_content_str = file_bytes.decode('utf-8', errors='ignore')
         
-        # --- ROBUST CONTENT CLEANING (FIX for XML tags in TXT files) ---
-        # Strip comments (#), empty lines, and lines starting with '<' (to remove XML headers/footers)
+        # --- ROBUST CONTENT CLEANING ---
+        # Strip comments (#), empty lines, and lines starting with '<' (XML tags in TXT files)
         clean_lines = [
             line for line in file_content_str.splitlines() 
             if line and line.strip() 
-            and not line.strip().startswith('#') 
+            and not line.strip().startswith('#')
             and not line.strip().startswith('<') 
         ]
         clean_content = "\n".join(clean_lines)
@@ -1202,14 +1248,12 @@ def load_corpus_file(file_source, sep=r"\s+"):
             df["_token_low"] = df["token"].str.lower()
             
             # --- Auto-detect Language for Tagged/Vertical Corpus ---
-            # Simple check: If 'lemma' column contains Indonesian-typical words, assume ID.
             id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
             is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() > 5 
             
             if is_indonesian_tagged:
                  SOURCE_LANG_CODE = 'ID'
             else:
-                 # Default tagged corpus to EN if not obviously ID
                  SOURCE_LANG_CODE = 'EN' 
                  
             return df
@@ -1505,7 +1549,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.27 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.28 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
