@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.31 - Manual Language Override
+# CORTEX Corpus Explorer v17.32 - Syntax Error Fix (Removed unnecessary global declaration)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.31 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.32 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -969,11 +969,10 @@ def load_monolingual_xml_corpus(file_source):
     
     df_src = pd.DataFrame(result['df_data']) if result is not None and result['df_data'] else pd.DataFrame()
 
+    detected_lang_code = 'EN' # Default assumption if no structured lang code is found
+    
     if df_src.empty:
-        # 2. Fallback to robust vertical text parsing (for non-standard XML containing vertical data)
-        # st.warning("XML parser failed (no structured or linear content found). Attempting to load as vertical text...")
-        
-        # Strip all XML tags/headers and parse as vertical text
+        # 2. Fallback to robust vertical text parsing
         clean_lines = [
             line for line in raw_xml_content.splitlines() 
             if line and line.strip() 
@@ -985,7 +984,6 @@ def load_monolingual_xml_corpus(file_source):
         
         try:
             file_buffer_for_pandas.seek(0)
-            # Use the robust whitespace parser
             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
             
             if df_attempt is not None and df_attempt.shape[1] >= 3:
@@ -997,27 +995,26 @@ def load_monolingual_xml_corpus(file_source):
                 
                 # --- MANUAL LANGUAGE DETECTION (IMPROVED HEURISTIC) ---
                 id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-                # If ANY common Indonesian lemma is found, assume ID.
                 is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() >= 1
                 detected_lang_code = 'ID' if is_indonesian_tagged else 'EN'
                 
-                # Create a placeholder for sent_map and result for consistency
                 result = {'lang_code': detected_lang_code, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
 
             else:
-                # st.error("Fallback vertical parser failed: not enough columns found.")
                 return None
                  
         except Exception as e:
-            # st.error(f"Critical Fallback Error: {e}")
             return None
+    else:
+        # If standard structured XML parsing succeeded, use its detected language code
+        if result is not None and 'lang_code' in result:
+            detected_lang_code = result['lang_code']
     
     if df_src.empty:
         return None
 
-    # Use the detected/default language code
-    if result is not None and 'lang_code' in result:
-        SOURCE_LANG_CODE = result['lang_code']
+    # Apply detected language code
+    SOURCE_LANG_CODE = detected_lang_code
         
     TARGET_LANG_CODE = 'NA'
     
@@ -1025,7 +1022,7 @@ def load_monolingual_xml_corpus(file_source):
     df_src["_token_low"] = df_src["token"].str.lower()
     
     # Structure extraction (only runs if initial XML parse was successful)
-    if result is not None and result['lang_code'] not in ('ID', 'EN'):
+    if result is not None and detected_lang_code not in ('ID', 'EN'):
         file_source.seek(0)
         st.session_state['xml_structure_data'] = extract_xml_structure(file_source)
     
@@ -1291,7 +1288,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         
         df["_token_low"] = df["token"].str.lower()
         
-        # SOURCE_LANG_CODE remains 'RAW' 
+        SOURCE_LANG_CODE = detected_lang_code # Use RAW default
         return df
         
     except Exception as raw_e: return None 
@@ -1558,7 +1555,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.31 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.32 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1661,11 +1658,11 @@ with st.sidebar:
         corpus_name = selected_corpus_name
         df_source_lang_for_analysis = load_corpus_file(corpus_source)
     
-    # --- POST-LOAD LANGUAGE OVERRIDE LOGIC ---
+    # --- POST-LOAD LANGUAGE OVERRIDE LOGIC (FIXED) ---
     if df_source_lang_for_analysis is not None:
         user_selection = st.session_state.get('user_selected_lang_input', 'Auto-Detect (Recommended)')
         if user_selection not in ('Auto-Detect (Recommended)', None):
-            global SOURCE_LANG_CODE
+            # NO 'global' keyword needed here; it's outside a function definition
             SOURCE_LANG_CODE = user_selection
             if 'Parallel' not in corpus_name:
                  corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
