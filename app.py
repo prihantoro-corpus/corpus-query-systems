@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.34 - FIXED: Statistical Calculation Robustness
+# CORTEX Corpus Explorer v17.34 - FIXED: KWIC Alignment & Robust Loading
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1046,29 +1046,37 @@ def load_monolingual_xml_corpus(file_source):
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
         
+        # --- ROBUST LOADING ATTEMPT (Try Tab then Whitespace, max 3 columns) ---
+        df_attempt = None
+        # Try TAB separator
         try:
             file_buffer_for_pandas.seek(0)
-            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
-            
-            if df_attempt is not None and df_attempt.shape[1] >= 3:
-                df_src = df_attempt.iloc[:, :3].copy()
-                df_src.columns = ["token", "pos", "lemma"]
-                df_src["token"] = df_src["token"].fillna("").astype(str).str.strip() 
-                df_src["pos"] = df_src["pos"].fillna("###").astype(str)
-                df_src["lemma"] = df_src["lemma"].fillna("###").astype(str)
-                
-                # --- MANUAL LANGUAGE DETECTION (IMPROVED HEURISTIC) ---
-                id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-                is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() >= 1
-                detected_lang_code = 'ID' if is_indonesian_tagged else 'EN'
-                
-                result = {'lang_code': detected_lang_code, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
+        except Exception:
+            # Fall back to general whitespace separator
+            try:
+                file_buffer_for_pandas.seek(0)
+                df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
+            except Exception:
+                pass # Final fall through to failure
 
-            else:
-                return None
-                 
-        except Exception as e:
-            return None
+        if df_attempt is not None and df_attempt.shape[1] >= 3:
+            # Successfully detected a vertical corpus format
+            df_src = df_attempt.iloc[:, :3].copy() # <-- FIXED: Explicitly take only the first 3 columns
+            df_src.columns = ["token", "pos", "lemma"]
+            df_src["token"] = df_src["token"].fillna("").astype(str).str.strip() 
+            df_src["pos"] = df_src["pos"].fillna("###").astype(str)
+            df_src["lemma"] = df_src["lemma"].fillna("###").astype(str)
+            
+            # --- MANUAL LANGUAGE DETECTION (IMPROVED HEURISTIC) ---
+            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
+            is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() >= 1
+            detected_lang_code = 'ID' if is_indonesian_tagged else 'EN'
+            
+            result = {'lang_code': detected_lang_code, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
+
+        else:
+            return None # Final return None if fallback parsing fails
     else:
         # If standard structured XML parsing succeeded, use its detected language code
         if result is not None and 'lang_code' in result:
@@ -1301,42 +1309,48 @@ def load_corpus_file(file_source, sep=r"\s+"):
     TARGET_LANG_CODE = 'NA'
 
     # --- Attempt to load as Tagged/Vertical Corpus (Highest Priority) ---
+    df_attempt = None
+    
+    # 1. Try TAB separator (most robust for standard vertical format)
     try:
         file_buffer_for_pandas.seek(0)
+        df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
+    except Exception:
+        # 2. Fall back to general whitespace separator
+        try:
+             file_buffer_for_pandas.seek(0)
+             # Use sep=r'\s+' but explicitly drop extra columns if too many are found
+             df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
+        except Exception:
+             pass # Fall through to raw text processing (lowest priority)
+            
+    if df_attempt is not None and df_attempt.shape[1] >= 3:
+        # Successfully detected a vertical corpus format
+        df = df_attempt.iloc[:, :3].copy() # <-- FIXED: Explicitly take only the first 3 columns
+        df.columns = ["token", "pos", "lemma"]
         
-        # 1. Attempt using one or more whitespace characters as a separator for vertical files
-        df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
+        df["token"] = df["token"].fillna("").astype(str).str.strip() 
+        df["pos"] = df["pos"].fillna("###").astype(str)
+        df["lemma"] = df["lemma"].fillna("###").astype(str)
+        df["_token_low"] = df["token"].str.lower()
+        
+        # --- Auto-detect Language for Tagged/Vertical Corpus (Improved Heuristic) ---
+        id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
+        # If ANY common Indonesian lemma is found, assume ID.
+        is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() >= 1
+        
+        if is_indonesian_tagged:
+             detected_lang_code = 'ID'
+        else:
+             # Default tagged corpus to EN if not obviously ID
+             detected_lang_code = 'EN' 
+        
+        SOURCE_LANG_CODE = detected_lang_code
+        return df
             
-        if df_attempt is not None and df_attempt.shape[1] >= 3:
-            # Successfully detected a vertical corpus format
-            df = df_attempt.iloc[:, :3].copy()
-            df.columns = ["token", "pos", "lemma"]
-            
-            df["token"] = df["token"].fillna("").astype(str).str.strip() 
-            df["pos"] = df["pos"].fillna("###").astype(str)
-            df["lemma"] = df["lemma"].fillna("###").astype(str)
-            df["_token_low"] = df["token"].str.lower()
-            
-            # --- Auto-detect Language for Tagged/Vertical Corpus (Improved Heuristic) ---
-            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
-            # If ANY common Indonesian lemma is found, assume ID.
-            is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() >= 1
-            
-            if is_indonesian_tagged:
-                 detected_lang_code = 'ID'
-            else:
-                 # Default tagged corpus to EN if not obviously ID
-                 detected_lang_code = 'EN' 
-            
-            SOURCE_LANG_CODE = detected_lang_code
-            return df
-            
-    except Exception: 
-        pass # Fall through to raw text if vertical parsing fails
-
     # Fallback to Raw Text Processing (Lowest Priority)
     try:
-        raw_text = file_content_str
+        raw_text = clean_content # Use the cleaned content from above
         # --- FIXED TOKENIZATION ---
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
         tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
@@ -1553,10 +1567,8 @@ def df_to_excel_bytes(df):
     buf.seek(0)
     return buf.getvalue()
 
-# [REST OF THE CODE IS UNCHANGED EXCEPT FOR THE compute_ll UPDATE ABOVE]
-
 # -----------------------------------------------------
-# COLLOCATION LOGIC (omitted for brevity)
+# COLLOCATION LOGIC 
 # -----------------------------------------------------
 @st.cache_data(show_spinner=False)
 def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_min_freq, max_collocates, is_raw_mode, collocate_regex="", collocate_pos_regex_input="", selected_pos_tags=None, collocate_lemma=""):
