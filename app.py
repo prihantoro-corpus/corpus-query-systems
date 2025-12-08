@@ -1655,8 +1655,8 @@ parallel_uploaded = False
 # --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
 with st.sidebar:
     
-    # FIX APPLIED HERE: Declare global variables at the top of the sidebar scope
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    # FIX APPLIED HERE: Removing the explicit 'global' declaration from the top of the sidebar block
+    # The variables are defined globally in the script and should be accessible here without 'global'.
     
     # 1. CORPUS SELECTION (TOP)
     st.header("1. Corpus Source")
@@ -1751,7 +1751,7 @@ with st.sidebar:
     if df_source_lang_for_analysis is not None:
         user_selection = st.session_state.get('user_selected_lang_input', 'Auto-Detect (Recommended)')
         if user_selection not in ('Auto-Detect (Recommended)', None):
-            # The 'global' declaration is moved to the top of the 'with st.sidebar:' block
+            # FIX: Global variables are already in scope for assignment if they are top-level script variables.
             SOURCE_LANG_CODE = user_selection
             if 'Parallel' not in corpus_name:
                  corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
