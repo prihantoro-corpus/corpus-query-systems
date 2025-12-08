@@ -1233,16 +1233,29 @@ def load_corpus_file(file_source, sep=r"\s+"):
     detected_lang_code = 'RAW' 
     TARGET_LANG_CODE = 'NA'
 
-    # --- Attempt to load as Tagged/Vertical Corpus (Highest Priority) ---
+# app.py (Replace lines ~935 to ~947)
+
+    # --- Attempt to load as Tagged/CSV/TSV with fixed logic ---
+    df_attempt = None
+    
+    # 1. Try Tab-separated first (most specific)
     try:
-        file_buffer_for_pandas.seek(0)
-        
-        # 1. Attempt using one or more whitespace characters as a separator for vertical files
-        df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
+        file_buffer_for_pandas.seek(0) 
+        df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str, skipinitialspace=True)
+    except Exception:
+        pass # Ignore failure, try next
+    
+    # 2. If tab-separated failed or didn't give 3 columns, try general whitespace (your format)
+    if df_attempt is None or df_attempt.shape[1] < 3:
+        try:
+            file_buffer_for_pandas.seek(0)
+            # Enforcing whitespace separation (sep=r"\s+")
+            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str, skipinitialspace=True)
+        except Exception:
+            pass # If this also fails, df_attempt remains None
             
-        if df_attempt is not None and df_attempt.shape[1] >= 3:
-            # Successfully detected a vertical corpus format
-            df = df_attempt.iloc[:, :3].copy()
+    if df_attempt is not None and df_attempt.shape[1] >= 3:
+        df = df_attempt.iloc[:, :3].copy()
             df.columns = ["token", "pos", "lemma"]
             
             df["token"] = df["token"].fillna("").astype(str).str.strip() 
@@ -2665,3 +2678,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
