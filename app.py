@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.26 - Robust POS/Lemma Loading Fix
+# CORTEX Corpus Explorer v17.27 - Syntax Fix (Global Variable Error)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.26 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.27 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1225,7 +1225,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         df["_token_low"] = df["token"].str.lower()
         
         # Set language code based on assumption of correct T/P/L format
-        global SOURCE_LANG_CODE
+        # FIX: Removed the redundant global declaration here.
         SOURCE_LANG_CODE = 'TAGGED'
         
         return df
@@ -1520,7 +1520,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.26 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.27 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2590,4 +2590,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
