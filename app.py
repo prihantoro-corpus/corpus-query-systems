@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.20 - Dictionary Pronunciation/Lowercase Fix
+# CORTEX Corpus Explorer v17.21 - Dictionary Pronunciation/Lowercase Fix & Streamlit Config Bugfix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.20 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.21 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1466,7 +1466,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.20 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.21 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2144,23 +2144,19 @@ if st.session_state['view'] == 'dictionary':
         forms_list.rename(columns={'token': 'Token', 'pos': 'POS Tag', 'lemma': 'Lemma'}, inplace=True)
         
         # FIX 2: Add Pronunciation column with HTML link.
-        # Ensure the language code is safe for the YouGlish link (defaulting to 'english' if not EN)
-        lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw') else SOURCE_LANG_CODE.lower()
+        lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw', 'xml') else SOURCE_LANG_CODE.lower()
         
         # Create a new column with the clickable link HTML
-        forms_list['Pronunciation'] = forms_list['Token'].apply(
+        forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token'].apply(
             lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
-        )
+        ))
         
+        # FIX: Removed column_config to resolve Streamlit internal error. Rely on escape=False.
         st.dataframe(
             forms_list,
             hide_index=True,
             use_container_width=True,
-            escape=False, # Allow HTML rendering for the Pronunciation column
-            column_config={
-                "Pronunciation": st.column_config.Column(width="small"),
-                "Token": st.column_config.Column(width="small")
-            }
+            escape=False 
         )
     
     # --- 2. Related Forms (by Regex) ---
@@ -2260,7 +2256,6 @@ if st.session_state['view'] == 'dictionary':
     
     if stats_df_sorted.empty:
         st.warning("No collocates found matching the criteria.")
-        # Do not stop here, allow the dictionary lookup to continue even without collocates.
         st.stop()
         
     top_collocates = stats_df_sorted.head(20)
