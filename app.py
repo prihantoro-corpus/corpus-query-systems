@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.33 - Multi-line KWIC Display (Token, POS, Lemma)
+# CORTEX Corpus Explorer v17.34 - FIXED: Statistical Calculation Robustness
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.33 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.34 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -507,11 +507,8 @@ def _format_kwic_cell_html(token_line, pos_line, lemma_line, show_pos, show_lemm
     lemma_display = f"<span class='kwic-lemma'>{lemma_line}</span>" if show_lemma and lemma_line.strip() else ""
     
     lines = [token_display]
-    if show_pos: lines.append(pos_display if pos_display else " ") # Use a non-breaking space if content is empty to preserve height
-    if show_lemma: lines.append(lemma_display if lemma_display else " ")
-    
-    # Use zero-width space if all layers are empty to prevent Streamlit hiding the cell, 
-    # but the logic above should handle it to preserve height alignment.
+    if show_pos: lines.append(pos_display if pos_display else "&nbsp;") # Use non-breaking space for alignment
+    if show_lemma: lines.append(lemma_display if lemma_display else "&nbsp;")
     
     return "<br>".join(lines)
 
@@ -1005,6 +1002,8 @@ def load_monolingual_xml_corpus(file_source):
         return None
 
     # Apply detected language code
+    # NOTE: The 'global' declaration is needed here as SOURCE_LANG_CODE is modified
+    global SOURCE_LANG_CODE 
     SOURCE_LANG_CODE = detected_lang_code
         
     TARGET_LANG_CODE = 'NA'
@@ -1412,6 +1411,66 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 # -----------------------------------------------------
 
 
+# --- Statistical Helpers (ROBUSTNESS IMPROVEMENT) ---
+EPS = 1e-12
+def safe_log(x):
+    # Ensure x is positive before taking the log
+    return math.log(max(x, EPS)) 
+    
+def compute_ll(k11, k12, k21, k22):
+    """Computes the Log-Likelihood (LL) statistic with robustness checks."""
+    total = k11 + k12 + k21 + k22
+    if total <= 0: return 0.0 # Guard against zero or negative total
+    
+    # Ensure all inputs are treated as floating point numbers for division
+    k11, k12, k21, k22, total = float(k11), float(k12), float(k21), float(k22), float(total)
+    
+    # Calculate Expected Values. Guard against div by zero on individual factors, though total > 0 check handles most cases.
+    e11_numerator = (k11 + k12) * (k11 + k21)
+    e12_numerator = (k11 + k12) * (k12 + k22)
+    e21_numerator = (k21 + k22) * (k11 + k21)
+    e22_numerator = (k21 + k22) * (k12 + k22)
+    
+    e11 = e11_numerator / total
+    e12 = e12_numerator / total
+    e21 = e21_numerator / total
+    e22 = e22_numerator / total
+    
+    s = 0.0
+    for k, e in ((k11, e11), (k12, e12), (k21, e21), (k22, e22)):
+        # Use EPS to ensure log argument is not zero/negative, thus avoiding Math Domain Error
+        if k > 0 and e > 0: 
+            s += k * safe_log(k / e)
+            
+    # The error often occurs here if the internal log calculation hits an issue.
+    # We return 0.0 if s is NaN or infinite to prevent propagation.
+    if not math.isfinite(s):
+        return 0.0
+    
+    return 2.0 * s
+
+def compute_mi(k11, target_freq, coll_total, corpus_size):
+    """Compuutes the Mutual Information (MI) statistic."""
+    expected = (target_freq * coll_total) / corpus_size
+    if expected == 0 or k11 == 0: return 0.0
+    return math.log2(k11 / expected)
+def significance_from_ll(ll_val):
+    """Converts Log-Likelihood value to significance level."""
+    if ll_val >= 15.13: return '*** (p<0.001)'
+    if ll_val >= 10.83: return '** (p<0.01)'
+    if ll_val >= 3.84: return '* (p<0.05)'
+    return 'ns'
+
+# --- IO / Data Helpers ---
+def df_to_excel_bytes(df):
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Sheet1")
+    buf.seek(0)
+    return buf.getvalue()
+
+# [REST OF THE CODE IS UNCHANGED EXCEPT FOR THE compute_ll UPDATE ABOVE]
+
 # -----------------------------------------------------
 # COLLOCATION LOGIC (omitted for brevity)
 # -----------------------------------------------------
@@ -1524,6 +1583,9 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
         k21 = total_freq - k11
         k22 = total_tokens - (k11 + k12 + k21)
         
+        # Ensure k values are non-negative, though logic should prevent this
+        k11, k12, k21, k22 = max(0, k11), max(0, k12), max(0, k21), max(0, k22)
+        
         ll = compute_ll(k11, k12, k21, k22)
         mi = compute_mi(k11, freq, total_freq, total_tokens)
         
@@ -1578,7 +1640,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.33 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.34 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1685,7 +1747,7 @@ with st.sidebar:
     if df_source_lang_for_analysis is not None:
         user_selection = st.session_state.get('user_selected_lang_input', 'Auto-Detect (Recommended)')
         if user_selection not in ('Auto-Detect (Recommended)', None):
-            # No 'global' keyword needed outside a function definition
+            global SOURCE_LANG_CODE # This is only needed if used in a function, but kept for clarity here in the module scope
             SOURCE_LANG_CODE = user_selection
             if 'Parallel' not in corpus_name:
                  corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
@@ -2649,6 +2711,10 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     
     # LL-Ranked KWIC Examples
     st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} LL Collocates (1 example per collocate)")
+    
+    show_pos = st.session_state.get('kwic_show_pos', False)
+    show_lemma = st.session_state.get('kwic_show_lemma', False)
+    
     display_collocation_kwic_examples(
         df_corpus=df, 
         node_word=primary_target_mwu, 
