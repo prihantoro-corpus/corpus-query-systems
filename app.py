@@ -1134,6 +1134,10 @@ def load_excel_parallel_corpus_file(file_source):
     return df_src
 
 
+# app.py
+# CORTEX Corpus Explorer v17.26 - Robust Vertical Corpus Loading Fix
+# ... (rest of the file content unchanged)
+
 # --- Monolingual File Dispatcher (Updated to check for XML) ---
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
@@ -1146,8 +1150,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
          
     if file_source is None: return None
     
-    # --- NEW XML DISPATCHER ---
-    # FIX: Check if file_source has a 'name' attribute before attempting .name.lower()
+    # --- XML DISPATCHER ---
     if hasattr(file_source, 'name') and file_source.name.lower().endswith('.xml'):
         file_source.seek(0)
         return load_monolingual_xml_corpus(file_source)
@@ -1166,10 +1169,80 @@ def load_corpus_file(file_source, sep=r"\s+"):
             except Exception:
                 file_content_str = file_bytes.decode('utf-8', errors='ignore')
         
-        clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
+        # Strip comments and empty lines BEFORE processing
+        clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#') and line.strip()]
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
     except Exception as e: return None
+
+    # Set default global codes for non-parallel files
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    # We assume 'EN' or 'ID' for tagged files, but 'RAW' as the absolute default fallback.
+    SOURCE_LANG_CODE = 'RAW' 
+    TARGET_LANG_CODE = 'NA'
+
+    # --- Attempt to load as Tagged/Vertical Corpus (Highest Priority) ---
+    try:
+        file_buffer_for_pandas.seek(0)
+        
+        # Check if the file looks like a vertical corpus (token\tPOS\tlemma or token\sPOS\slemma)
+        # We can detect this by checking the number of columns.
+        
+        # 1. Attempt using a common separator (Tab or multiple spaces)
+        df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
+            
+        if df_attempt is not None and df_attempt.shape[1] >= 3:
+            # Successfully detected a vertical corpus format
+            df = df_attempt.iloc[:, :3].copy()
+            df.columns = ["token", "pos", "lemma"]
+            
+            df["token"] = df["token"].fillna("").astype(str).str.strip() 
+            df["pos"] = df["pos"].fillna("###").astype(str)
+            df["lemma"] = df["lemma"].fillna("###").astype(str)
+            df["_token_low"] = df["token"].str.lower()
+            
+            # --- Auto-detect Language for Tagged/Vertical Corpus ---
+            # Simple check: If 'lemma' column contains Indonesian-typical words, assume ID.
+            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah']
+            is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() > 5 
+            
+            if is_indonesian_tagged:
+                 SOURCE_LANG_CODE = 'ID'
+            else:
+                 # Default tagged corpus to EN if not obviously ID
+                 SOURCE_LANG_CODE = 'EN' 
+                 
+            return df
+            
+    except Exception: 
+        pass # Fall through to raw text if vertical parsing fails
+
+    # Fallback to Raw Text Processing (Lowest Priority)
+    try:
+        raw_text = file_content_str
+        # --- FIXED TOKENIZATION ---
+        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
+        tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
+        # --------------------------
+        nonsense_tag = "##"
+        nonsense_lemma = "##"
+        
+        pos_tags = [nonsense_tag] * len(tokens)
+        lemmas = [nonsense_lemma] * len(tokens)
+        
+        df = pd.DataFrame({
+            "token": tokens,
+            "pos": pos_tags,
+            "lemma": lemmas
+        })
+        
+        df["_token_low"] = df["token"].str.lower()
+        
+        # SOURCE_LANG_CODE remains 'RAW' (default set before the try block)
+        return df
+        
+    except Exception as raw_e: return None 
+
 
     # Set default global codes for non-parallel files
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
@@ -2569,3 +2642,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
