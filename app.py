@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.24 - Dictionary CEFR & IPA Transcription Feature
+# CORTEX Corpus Explorer v17.25 - Dictionary CEFR, IPA, and Online Dictionary Feature
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.24 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.25 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1487,7 +1487,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.24 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.25 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2158,70 +2158,68 @@ if st.session_state['view'] == 'dictionary':
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
     # --------------------------------------------------------
-    # IPA Feature Logic (Request 1 & 2)
+    # Language-Specific Features
     # --------------------------------------------------------
-    is_english_corpus = SOURCE_LANG_CODE.upper() in ('EN', 'ENG', 'ENGLISH')
+    source_lang_code_upper = SOURCE_LANG_CODE.upper()
+    is_english_corpus = source_lang_code_upper in ('EN', 'ENG', 'ENGLISH')
+    is_indonesian_corpus = source_lang_code_upper in ('ID', 'IND', 'INDONESIAN')
+
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
-    # --- NEW: CEFR Feature Logic ---
-    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus # CEFR only for English
+    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus 
     
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
-        # Continue to Collocation if possible, but skip forms/regex.
+        
     elif not forms_list.empty:
-        # FIX 1: Rename columns (already done in v17.22 thought block)
+        # Rename columns first for display consistency
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
 
         if cefr_active:
             try:
-                # Function to look up CEFR level
                 def get_cefr_level(row):
-                    # Tokens are in 'Token (lowercase)', POS is in 'POS Tag'
                     token_lower = row['Token (lowercase)']
                     pos_tag = row['POS Tag']
-                    
-                    # Need a token and a proper POS tag for the lookup
                     if not token_lower or pos_tag in ('##', '###', 'O'):
-                         return "NA (Missing Tag)"
-                    
-                    # cefrpy lookup:
+                         return "NA"
                     cefr_level = CEFR_ANALYZER.get_word_pos_level_CEFR(token_lower, pos_tag)
                     return cefr_level if cefr_level else "NA"
 
-                # 1. Add 'CEFR' column (insert it before the last column which will be Pronunciation)
                 forms_list.insert(forms_list.shape[1], 'CEFR', forms_list.apply(get_cefr_level, axis=1))
 
             except Exception as e:
-                st.warning(f"Warning: CEFR lookup encountered an unexpected error: {e}")
+                # Silently catch and disable on error
                 cefr_active = False 
 
         if ipa_active:
             try:
-                # Function to safely get IPA transcription, handling common errors/empty results
                 def get_ipa_transcription(token):
                     try:
-                        # eng_to_ipa.convert handles single words or short phrases
                         return ipa.convert(token)
                     except Exception:
                         return "IPA N/A"
 
-                # Forms list contains all-lowercase tokens (from get_all_lemma_forms_details)
-                # 2. Add 'IPA Transcription' column
                 forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token (lowercase)'].apply(get_ipa_transcription))
                 
             except Exception as e:
-                st.error(f"Error during IPA transcription: {e}")
-                ipa_active = False # Disable feature if an unhandled error occurs
-                
-        # FIX 2: Add Pronunciation column with HTML link.
-        lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw', 'xml') else SOURCE_LANG_CODE.lower()
+                ipa_active = False 
         
-        # Create a new column with the clickable link HTML
-        forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
-            lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
-        ))
-        
-        # FIX 3: Replaced st.dataframe with st.markdown(forms_list.to_html()) to resolve Streamlit internal error.
+        # --- NEW: Online Dictionary Link Column ---
+        if is_english_corpus:
+            col_name = "Dictionary"
+            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
+                lambda token: f"<a href='https://dictionary.cambridge.org/dictionary/english/{token}' target='_blank'>Click here</a>"
+            ))
+        elif is_indonesian_corpus:
+            col_name = "KBBI"
+            forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
+                lambda token: f"<a href='https://kbbi.kemdikbud.go.id/entri/{token}' target='_blank'>Click here</a>"
+            ))
+        else:
+            # Placeholder for general language pronunciation/lookup (YouGlish)
+            lang_for_pronunciation = SOURCE_LANG_CODE.lower()
+            forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
+                lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
+            ))
         
         # Define table styling for cleaner look with markdown
         html_style = """
@@ -2254,20 +2252,15 @@ if st.session_state['view'] == 'dictionary':
             unsafe_allow_html=True
         )
     
-    if not IPA_FEATURE_AVAILABLE:
-        st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
-    elif is_english_corpus and not ipa_active:
-         st.warning("⚠️ IPA feature is available but encountered an error. Check logs.")
-    elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
-        st.info(f"💡 IPA transcription feature is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
+    # Status messages for linguistic features
+    if not IPA_FEATURE_AVAILABLE and is_english_corpus:
+        st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library.**")
     
-    # NEW CEFR status message block
-    if not CEFR_FEATURE_AVAILABLE:
-        st.info("💡 **CEFR Categorization feature requires the `cefrpy` library to be installed** (check requirements).")
-    elif is_english_corpus and CEFR_FEATURE_AVAILABLE and not cefr_active:
-        st.warning("⚠️ CEFR feature is available but encountered an error or is only partially supported for some words. Check logs.")
-    elif not is_english_corpus and CEFR_FEATURE_AVAILABLE:
-        st.info(f"💡 CEFR categorization is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
+    if not CEFR_FEATURE_AVAILABLE and is_english_corpus:
+        st.info("💡 **CEFR Categorization feature requires the `cefrpy` library.**")
+    
+    if not is_english_corpus and not is_indonesian_corpus:
+        st.info(f"💡 Dictionary lookup links (e.g., KBBI, Cambridge) are currently unavailable for **{SOURCE_LANG_CODE}**.")
     # --------------------------------------------------------
     
     st.markdown("---")
