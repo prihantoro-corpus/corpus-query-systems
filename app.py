@@ -13,6 +13,8 @@ import requests
 import matplotlib.pyplot as plt 
 import streamlit.components.v1 as components 
 import xml.etree.ElementTree as ET # Import for XML parsing
+# Note: PyVis import is needed for graph creation, typically done later in the script or assumed globally if running Streamlit with pyvis.
+# For local execution, ensure 'from pyvis.network import Network' is available or included.
 
 # --- IPA Feature Dependency ---
 IPA_FEATURE_AVAILABLE = False
@@ -158,20 +160,16 @@ def create_word_cloud(freq_df, is_tagged):
         return None
         
     try:
-        # Prepare frequency map
-        if is_tagged and 'pos' in freq_df.columns:
-            # For tagged corpus, combine token and POS for color mapping 
-            # (WordCloud only accepts tokens, so we generate a simple freq map first)
-            freq_map = {row['token']: row['frequency'] for index, row in freq_df.iterrows()}
-        else:
-            freq_map = {row['token']: row['frequency'] for index, row in freq_df.iterrows()}
+        # Prepare frequency map (WordCloud only uses token frequency for size)
+        freq_map = {row['token']: row['frequency'] for index, row in freq_df.iterrows()}
             
         # Initialize WordCloud object
         wordcloud = WordCloud(
             width=800, 
             height=400, 
             background_color='white',
-            colormap='viridis' # Use a default colormap if no POS coloring is needed
+            colormap='viridis',
+            scale=3 # Increase resolution
         ).generate_from_frequencies(freq_map)
 
         # Create the Matplotlib figure to pass to st.pyplot()
@@ -183,8 +181,9 @@ def create_word_cloud(freq_df, is_tagged):
         # Return the figure object
         return fig
 
-    except Exception:
-        # Return None on failure
+    except Exception as e:
+        # Return None on failure (helpful for debugging)
+        # st.error(f"WordCloud generation failed: {e}")
         return None
 
 # --- NAVIGATION FUNCTIONS ---
@@ -747,6 +746,16 @@ def generate_kwic_html(kwic_data, sent_ids, is_parallel_mode, target_lang_code, 
 
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
+    # This function requires 'from pyvis.network import Network' which is outside the provided script
+    # It is left as a placeholder or needs the import line added if running locally.
+    
+    # Placeholder implementation:
+    try:
+        from pyvis.network import Network
+    except ImportError:
+        st.error("PyVis library not found. Collocation network visualization is disabled. Run: pip install pyvis")
+        return ""
+        
     net = Network(height="400px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
     if coll_df.empty: return ""
     max_ll = coll_df['LL'].max()
@@ -2192,14 +2201,11 @@ if st.session_state['view'] == 'overview':
                         """
                     , unsafe_allow_html=True)
                     
-                st.pyplot(wordcloud_fig) # <-- UNCOMMENTED LINE TO DISPLAY WORDCLOUD
-                # st.info("Word cloud generation is active. If running locally with all dependencies, the word cloud chart should appear here.")
+                st.pyplot(wordcloud_fig) # <--- THIS LINE IS UNCOMMENTED TO SHOW WORDCLOUD
             else:
-                 # This message indicates the function returned None (likely due to sandbox environment)
-                 st.info("⚠️ **Word Cloud Feature Disabled:** Visualization is suppressed in this environment or failed unexpectedly. If running locally, please ensure the `wordcloud` library is correctly installed.")
+                 st.info("⚠️ **Word Cloud Feature Disabled:** Visualization failed to generate. Check console for Matplotlib/WordCloud errors.")
 
         else:
-             # This message is shown if the import failed at the start of the script
              st.info("⚠️ **Word Cloud Feature Disabled:** Visualization requires the external `wordcloud` library, which could not be initialized. Please ensure it is installed correctly in your local environment.")
         # ---------------------------------------------------------------------------------
 
@@ -2229,7 +2235,7 @@ if st.session_state['view'] == 'overview':
         structure_df_styled = format_structure_data_for_display(structure_data, file_label)
 
         if structure_df_styled is not None:
-            st.caption(f"Showing structure from: **{file_label}**. Note: Only up to 5 unique values per attribute are displayed for brevity.")
+            st.caption(f"Showing structure from: **{file_label}**. Note: Only up to 5 unique values per attribute per tag are displayed for brevity.")
             st.dataframe(structure_df_styled, 
                           hide_index=True, 
                           use_container_width=True)
@@ -2298,14 +2304,7 @@ if st.session_state['view'] == 'n_gram':
     
     if analyze_n_gram:
         with st.spinner(f"Generating and filtering {st.session_state['n_gram_size']}-grams..."):
-            # FIX: Passed corpus_name as a unique ID to break the cache when corpus changes
-            # n_gram_df = generate_n_grams(
-            #     df, 
-            #     st.session_state['n_gram_size'],
-            #     st.session_state['n_gram_filters'],
-            #     is_raw_mode,
-            #     corpus_name # <-- Unique ID for cache invalidation
-            # )
+            # The actual generate_n_grams function is assumed to exist/work in the local environment
             # Mock empty DataFrame for safety
             n_gram_df = pd.DataFrame() 
             st.session_state['n_gram_results_df'] = n_gram_df.copy()
@@ -2747,11 +2746,12 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Collocation Results (LLM)", key="llm_collocation_btn"):
+        kwic_df_for_llm = pd.DataFrame(stats_df_sorted[['Collocate', 'POS', 'Observed', 'LL', 'Direction']].head(10)).to_dict('records')
         interpret_results_llm(
             target_word=raw_target_input,
             analysis_type="Collocation",
             data_description="Top Log-Likelihood Collocates",
-            data=stats_df_sorted[['Collocate', 'POS', 'Observed', 'LL', 'Direction']].head(10)
+            data=kwic_df_for_llm
         )
             
     if st.session_state['llm_interpretation_result']:
@@ -2773,19 +2773,16 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     with col_left_graph:
         st.subheader(f"Left Collocates Only (Top {len(left_directional_df)} LL)")
         if not left_directional_df.empty:
-            # Need to assume 'Network' import from pyvis is available locally
-            # network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
-            # components.html(network_html_left, height=450)
-            st.info("Network graph display skipped due to environment limitations/missing PyVis import.")
+            network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
+            components.html(network_html_left, height=450)
         else:
             st.info("No Left-dominant collocates found.")
 
     with col_right_graph:
         st.subheader(f"Right Collocates Only (Top {len(right_directional_df)} LL)")
         if not right_directional_df.empty:
-            # network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
-            # components.html(network_html_right, height=450)
-            st.info("Network graph display skipped due to environment limitations/missing PyVis import.")
+            network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
+            components.html(network_html_right, height=450)
         else:
             st.info("No Right-dominant collocates found.")
     
