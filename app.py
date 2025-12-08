@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.23 - Dictionary IPA Transcription Feature
+# CORTEX Corpus Explorer v17.24 - Dictionary CEFR & IPA Transcription Feature
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -26,10 +26,21 @@ except ImportError:
     pass # Feature will be disabled if not installed
 # ------------------------------
 
+# --- CEFR Feature Dependency ---
+CEFR_FEATURE_AVAILABLE = False
+try:
+    # 2. pip install cefrpy. Import added here.
+    from cefrpy import CEFRAnalyzer
+    CEFR_ANALYZER = CEFRAnalyzer() # Initialize the analyzer globally
+    CEFR_FEATURE_AVAILABLE = True
+except ImportError:
+    pass # Feature will be disabled if not installed
+# ------------------------------
+
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.23 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.24 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1476,7 +1487,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.23 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.24 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2151,6 +2162,8 @@ if st.session_state['view'] == 'dictionary':
     # --------------------------------------------------------
     is_english_corpus = SOURCE_LANG_CODE.upper() in ('EN', 'ENG', 'ENGLISH')
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
+    # --- NEW: CEFR Feature Logic ---
+    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus # CEFR only for English
     
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
@@ -2158,6 +2171,29 @@ if st.session_state['view'] == 'dictionary':
     elif not forms_list.empty:
         # FIX 1: Rename columns (already done in v17.22 thought block)
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
+
+        if cefr_active:
+            try:
+                # Function to look up CEFR level
+                def get_cefr_level(row):
+                    # Tokens are in 'Token (lowercase)', POS is in 'POS Tag'
+                    token_lower = row['Token (lowercase)']
+                    pos_tag = row['POS Tag']
+                    
+                    # Need a token and a proper POS tag for the lookup
+                    if not token_lower or pos_tag in ('##', '###', 'O'):
+                         return "NA (Missing Tag)"
+                    
+                    # cefrpy lookup:
+                    cefr_level = CEFR_ANALYZER.get_word_pos_level_CEFR(token_lower, pos_tag)
+                    return cefr_level if cefr_level else "NA"
+
+                # 1. Add 'CEFR' column (insert it before the last column which will be Pronunciation)
+                forms_list.insert(forms_list.shape[1], 'CEFR', forms_list.apply(get_cefr_level, axis=1))
+
+            except Exception as e:
+                st.warning(f"Warning: CEFR lookup encountered an unexpected error: {e}")
+                cefr_active = False 
 
         if ipa_active:
             try:
@@ -2224,6 +2260,14 @@ if st.session_state['view'] == 'dictionary':
          st.warning("⚠️ IPA feature is available but encountered an error. Check logs.")
     elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
         st.info(f"💡 IPA transcription feature is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
+    
+    # NEW CEFR status message block
+    if not CEFR_FEATURE_AVAILABLE:
+        st.info("💡 **CEFR Categorization feature requires the `cefrpy` library to be installed** (check requirements).")
+    elif is_english_corpus and CEFR_FEATURE_AVAILABLE and not cefr_active:
+        st.warning("⚠️ CEFR feature is available but encountered an error or is only partially supported for some words. Check logs.")
+    elif not is_english_corpus and CEFR_FEATURE_AVAILABLE:
+        st.info(f"💡 CEFR categorization is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
     # --------------------------------------------------------
     
     st.markdown("---")
