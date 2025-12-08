@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.30 - Dictionary Language Feature Final Fix (CEFR & KBBI Link)
+# CORTEX Corpus Explorer v17.31 - Manual Language Override
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.30 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.31 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -108,6 +108,9 @@ if 'monolingual_xml_file_upload' not in st.session_state:
 # --- XML Structure Cache ---
 if 'xml_structure_data' not in st.session_state:
      st.session_state['xml_structure_data'] = None
+# --- User Language Selection ---
+if 'user_selected_lang_input' not in st.session_state:
+     st.session_state['user_selected_lang_input'] = 'Auto-Detect (Recommended)'
 
 
 # ---------------------------
@@ -996,10 +999,10 @@ def load_monolingual_xml_corpus(file_source):
                 id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
                 # If ANY common Indonesian lemma is found, assume ID.
                 is_indonesian_tagged = df_src['lemma'].str.lower().isin(id_keywords).sum() >= 1
-                SOURCE_LANG_CODE = 'ID' if is_indonesian_tagged else 'EN'
+                detected_lang_code = 'ID' if is_indonesian_tagged else 'EN'
                 
                 # Create a placeholder for sent_map and result for consistency
-                result = {'lang_code': SOURCE_LANG_CODE, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
+                result = {'lang_code': detected_lang_code, 'df_data': df_src.to_dict('records'), 'sent_map': {}}
 
             else:
                 # st.error("Fallback vertical parser failed: not enough columns found.")
@@ -1230,7 +1233,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception as e: return None
 
     # Set default global codes for non-parallel files
-    SOURCE_LANG_CODE = 'RAW' 
+    detected_lang_code = 'RAW' 
     TARGET_LANG_CODE = 'NA'
 
     # --- Attempt to load as Tagged/Vertical Corpus (Highest Priority) ---
@@ -1256,11 +1259,12 @@ def load_corpus_file(file_source, sep=r"\s+"):
             is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() >= 1
             
             if is_indonesian_tagged:
-                 SOURCE_LANG_CODE = 'ID'
+                 detected_lang_code = 'ID'
             else:
                  # Default tagged corpus to EN if not obviously ID
-                 SOURCE_LANG_CODE = 'EN' 
-                 
+                 detected_lang_code = 'EN' 
+            
+            SOURCE_LANG_CODE = detected_lang_code
             return df
             
     except Exception: 
@@ -1287,7 +1291,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         
         df["_token_low"] = df["token"].str.lower()
         
-        # SOURCE_LANG_CODE remains 'RAW' (default set before the try block)
+        # SOURCE_LANG_CODE remains 'RAW' 
         return df
         
     except Exception as raw_e: return None 
@@ -1554,7 +1558,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.30 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.31 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1612,6 +1616,17 @@ with st.sidebar:
         on_change=reset_analysis
     )
     
+    # --- E. MANUAL LANGUAGE OVERRIDE (NEW) ---
+    st.markdown("---")
+    st.subheader("1.5 Language Override")
+    user_selected_lang = st.selectbox(
+        "Force Source Language Code:",
+        options=['Auto-Detect (Recommended)', 'ID', 'EN', 'RAW', 'OTHER'],
+        key="user_selected_lang_input",
+        on_change=reset_analysis,
+        help="Use this to manually set the language if auto-detection fails (e.g., 'ID' for Indonesian)."
+    )
+    
     # --- CORPUS LOADING LOGIC (Prioritize XML Parallel > Excel Parallel > Uploaded Monolingual > Built-in) ---
     
     if xml_src_file is not None and xml_tgt_file is not None:
@@ -1646,6 +1661,15 @@ with st.sidebar:
         corpus_name = selected_corpus_name
         df_source_lang_for_analysis = load_corpus_file(corpus_source)
     
+    # --- POST-LOAD LANGUAGE OVERRIDE LOGIC ---
+    if df_source_lang_for_analysis is not None:
+        user_selection = st.session_state.get('user_selected_lang_input', 'Auto-Detect (Recommended)')
+        if user_selection not in ('Auto-Detect (Recommended)', None):
+            global SOURCE_LANG_CODE
+            SOURCE_LANG_CODE = user_selection
+            if 'Parallel' not in corpus_name:
+                 corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
+
     # Use the loaded DF for the rest of the sidebar logic
     df_sidebar = df_source_lang_for_analysis
     
@@ -2277,7 +2301,7 @@ if st.session_state['view'] == 'dictionary':
             except Exception as e:
                 ipa_active = False 
         
-        # --- NEW: Online Dictionary Link Column ---
+        # --- NEW: Online Dictionary Link Column (CORRECTED) ---
         if is_indonesian_corpus:
             col_name = "KBBI"
             forms_list.insert(forms_list.shape[1], col_name, forms_list['Token (lowercase)'].apply(
