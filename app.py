@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.18 - XML Structure Moved to Overview
+# CORTEX Corpus Explorer v17.19 - XML Structure in Overview & Built-in Corpus Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.18 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.19 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -690,6 +690,7 @@ def extract_xml_structure(file_source, max_values=20):
         return None
     
     # Must clone the file object before parsing to avoid modifying the original stream 
+    # since we cannot know the stream's current position if it was already read.
     file_source.seek(0)
     file_copy = BytesIO(file_source.read())
 
@@ -1001,6 +1002,9 @@ def load_xml_parallel_corpus(src_file, tgt_file):
     st.session_state['target_sent_map'] = tgt_result['sent_map'] 
     
     # --- XML Structure Extraction for Overview (Combining structures) ---
+    # Need to pass fresh copies of the file streams for structure extraction
+    src_file.seek(0)
+    tgt_file.seek(0)
     src_structure = extract_xml_structure(src_file)
     tgt_structure = extract_xml_structure(tgt_file)
     
@@ -1108,8 +1112,9 @@ def load_corpus_file(file_source, sep=r"\s+"):
     if file_source is None: return None
     
     # --- NEW XML DISPATCHER ---
-    file_source.seek(0)
-    if file_source.name.lower().endswith('.xml'):
+    # FIX: Check if file_source has a 'name' attribute before attempting .name.lower()
+    if hasattr(file_source, 'name') and file_source.name.lower().endswith('.xml'):
+        file_source.seek(0)
         return load_monolingual_xml_corpus(file_source)
     # --------------------------
     
@@ -1129,7 +1134,9 @@ def load_corpus_file(file_source, sep=r"\s+"):
         clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
         clean_content = "\n".join(clean_lines)
         file_buffer_for_pandas = StringIO(clean_content)
-    except Exception as e: pass
+    except Exception as e: 
+        # Handle exceptions during file reading/decoding
+        return None
 
     # Set default global codes for non-parallel files
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
@@ -1443,7 +1450,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.18 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.19 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1533,6 +1540,8 @@ with st.sidebar:
         else:
              corpus_source = download_file_to_bytesio(corpus_url) 
         corpus_name = selected_corpus_name
+        
+        # This is where the error occurred, but load_corpus_file now handles it.
         df_source_lang_for_analysis = load_corpus_file(corpus_source)
     
     # Use the loaded DF for the rest of the sidebar logic
@@ -1860,11 +1869,6 @@ if st.session_state['view'] == 'overview':
     # -----------------------------------------------------
 
     st.markdown("---")
-
-# -----------------------------------------------------
-# MODULE: CORPUS STRUCTURE (REMOVED)
-# -----------------------------------------------------
-# The content of the old Corpus Structure module is now incorporated into the Overview.
 
 # -----------------------------------------------------
 # MODULE: SEARCH INPUT (SHARED FOR CONCORDANCE/COLLOCATION)
