@@ -7,8 +7,8 @@ import math
 from collections import Counter
 from io import BytesIO, StringIO 
 import tempfile 
-import os       
-import re       
+import os 
+import re 
 import requests 
 import matplotlib.pyplot as plt 
 import streamlit.components.v1 as components 
@@ -86,9 +86,9 @@ if 'collocate_regex_input' not in st.session_state:
 if 'pattern_collocate_input' not in st.session_state:
     st.session_state['pattern_collocate_input'] = ''
 if 'pattern_collocate_pos_input' not in st.session_state:
-     st.session_state['pattern_collocate_pos_input'] = ''
+    st.session_state['pattern_collocate_pos_input'] = ''
 if 'typed_target_input' not in st.session_state:
-     st.session_state['typed_target_input'] = ''
+    st.session_state['typed_target_input'] = ''
 if 'max_collocates' not in st.session_state:
     st.session_state['max_collocates'] = 20
 if 'coll_window' not in st.session_state:
@@ -116,10 +116,10 @@ if 'monolingual_xml_file_upload' not in st.session_state:
     st.session_state['monolingual_xml_file_upload'] = None
 # --- XML Structure Cache ---
 if 'xml_structure_data' not in st.session_state:
-     st.session_state['xml_structure_data'] = None
+    st.session_state['xml_structure_data'] = None
 # --- User Language Selection ---
 if 'user_selected_lang_input' not in st.session_state:
-     st.session_state['user_selected_lang_input'] = 'Auto-Detect (Recommended)'
+    st.session_state['user_selected_lang_input'] = 'Auto-Detect (Recommended)'
 # --- KWIC Display Options (NEW) ---
 if 'kwic_show_pos' not in st.session_state:
     st.session_state['kwic_show_pos'] = False
@@ -148,9 +148,7 @@ POS_COLOR_MAP = {
 
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
 
-# --- Word Cloud Creation Helper (Placeholder if not available) ---
-# NOTE: This function must be defined to avoid NameError in the Overview page
-# In this sandbox, it will return None due to dependency unavailability.
+# --- Word Cloud Creation Helper (MODIFIED TO FUNCTION) ---
 def create_word_cloud(freq_df, is_tagged):
     """
     Generates a word cloud plot from frequency data.
@@ -162,20 +160,32 @@ def create_word_cloud(freq_df, is_tagged):
     try:
         # Prepare frequency map
         if is_tagged and 'pos' in freq_df.columns:
-            # Generate key based on token and POS for color mapping
-            freq_map = {(row['token'], row['pos']): row['frequency'] for index, row in freq_df.iterrows()}
+            # For tagged corpus, combine token and POS for color mapping 
+            # (WordCloud only accepts tokens, so we generate a simple freq map first)
+            freq_map = {row['token']: row['frequency'] for index, row in freq_df.iterrows()}
         else:
             freq_map = {row['token']: row['frequency'] for index, row in freq_df.iterrows()}
             
-        # Get only the token part for standard WordCloud frequency input
-        token_freqs = {k[0] if isinstance(k, tuple) else k: v for k, v in freq_map.items()}
+        # Initialize WordCloud object
+        wordcloud = WordCloud(
+            width=800, 
+            height=400, 
+            background_color='white',
+            colormap='viridis' # Use a default colormap if no POS coloring is needed
+        ).generate_from_frequencies(freq_map)
 
-        # Define color function if using tags (requires WordCloud implementation not possible here)
-        # We simulate the call but return None due to environment limitations.
-        return None # Return None in sandbox as execution fails here anyway
+        # Create the Matplotlib figure to pass to st.pyplot()
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wordcloud, interpolation='bilinear')
+        ax.axis('off')
+        plt.tight_layout(pad=0)
+
+        # Return the figure object
+        return fig
 
     except Exception:
-        return None # Return None on failure
+        # Return None on failure
+        return None
 
 # --- NAVIGATION FUNCTIONS ---
 def set_view(view_name):
@@ -322,7 +332,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 full_pos_regex_list = [re.escape(p).replace(r'\*', '.*') for p in pos_patterns]
                 pos_pattern = re.compile("^(" + "|".join(full_pos_regex_list) + ")$")
         if lemma_pattern or pos_pattern:
-             return {'type': 'structural', 'lemma_pattern': lemma_pattern, 'pos_pattern': pos_pattern}
+            return {'type': 'structural', 'lemma_pattern': lemma_pattern, 'pos_pattern': pos_pattern}
         pattern = re.escape(term.lower()).replace(r'\*', '.*')
         return {'type': 'word', 'pattern': re.compile(f"^{pattern}$")}
 
@@ -473,10 +483,10 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
             # --- Collocate Highlighting Logic ---
             is_collocate_match = False
             if is_pattern_search_active and not is_node_word:
-                 word_matches_highlight = collocate_word_regex_highlight is None or collocate_word_regex_highlight.fullmatch(token_lower)
-                 pos_matches_highlight = collocate_pos_regex_highlight is None or (collocate_pos_regex_highlight.fullmatch(token_pos) if not is_raw_mode else False)
-                 
-                 if word_matches_highlight and pos_matches_highlight:
+                word_matches_highlight = collocate_word_regex_highlight is None or collocate_word_regex_highlight.fullmatch(token_lower)
+                pos_matches_highlight = collocate_pos_regex_highlight is None or (collocate_pos_regex_highlight.fullmatch(token_pos) if not is_raw_mode else False)
+                
+                if word_matches_highlight and pos_matches_highlight:
                     is_collocate_match = True
                     if collocate_to_display == "": # Capture the first matching collocate
                         collocate_to_display = token # Use the original token case
@@ -1306,7 +1316,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
     st.session_state['xml_structure_data'] = None # Clear structure data
-         
+            
     if file_source is None: return None
     
     # --- XML DISPATCHER ---
@@ -1380,7 +1390,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
         if is_indonesian_tagged:
              detected_lang_code = 'ID'
         else:
-             # Default tagged corpus to EN if not obviously ID
+            # Default tagged corpus to EN if not obviously ID
              detected_lang_code = 'EN' 
         
         SOURCE_LANG_CODE = detected_lang_code
@@ -1531,7 +1541,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
                     row_html += f"<td>{translation_html_content}</td>"
                 row_html += "</tr>"
                 html_rows.append(row_html)
-        
+            
     if html_rows:
         header = "<tr><th>Collocate (Rank)</th><th>Left Context</th><th>Node</th><th>Right Context</th>"
         if is_parallel_mode:
@@ -1727,7 +1737,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
             "Collocate": w, "POS": p, "Lemma": l, "Observed": observed,
             "Total_Freq": total_freq, "LL": round(ll,6), "MI": round(mi,6),
             "Significance": significance_from_ll(ll), "Direction": dominant_direction, 
-            "Obs_L": data['L'], "Obs_R": data['R']              
+            "Obs_L": data['L'], "Obs_R": data['R']          
         })
 
     stats_df = pd.DataFrame(stats_list)
@@ -1787,8 +1797,6 @@ parallel_uploaded = False
 
 # --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
 with st.sidebar:
-    
-    # FIX APPLIED HERE: Removing the explicit 'global' declaration from the top of the sidebar block
     
     # 1. CORPUS SELECTION (TOP)
     st.header("1. Corpus Source")
@@ -1886,7 +1894,7 @@ with st.sidebar:
             # FIX: Global variables are already in scope for assignment if they are top-level script variables.
             SOURCE_LANG_CODE = user_selection
             if 'Parallel' not in corpus_name:
-                 corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
+                corpus_name = f"{corpus_name.split('(')[0].strip()} ({SOURCE_LANG_CODE} Monolingual)"
 
     # Use the loaded DF for the rest of the sidebar logic
     df_sidebar = df_source_lang_for_analysis
@@ -2173,7 +2181,7 @@ if st.session_state['view'] == 'overview':
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         
         if WORDCLOUD_FEATURE_AVAILABLE:
-            # Call the function which returns None in the sandbox, but would run locally
+            # Call the function which now returns a Matplotlib figure
             wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode) 
             
             if wordcloud_fig is not None: 
@@ -2184,11 +2192,11 @@ if st.session_state['view'] == 'overview':
                         """
                     , unsafe_allow_html=True)
                     
-                # st.pyplot(wordcloud_fig) # Still commented out for sandbox execution safety
-                st.info("Word cloud generation is active. If running locally with all dependencies, the word cloud chart should appear here.")
+                st.pyplot(wordcloud_fig) # <-- UNCOMMENTED LINE TO DISPLAY WORDCLOUD
+                # st.info("Word cloud generation is active. If running locally with all dependencies, the word cloud chart should appear here.")
             else:
                  # This message indicates the function returned None (likely due to sandbox environment)
-                 st.info("⚠️ **Word Cloud Feature Disabled:** Visualization is suppressed in this environment or failed unexpectedly. If running locally, please ensure the `wordcloud` library is correctly installed and try uncommenting `st.pyplot()` in the code.")
+                 st.info("⚠️ **Word Cloud Feature Disabled:** Visualization is suppressed in this environment or failed unexpectedly. If running locally, please ensure the `wordcloud` library is correctly installed.")
 
         else:
              # This message is shown if the import failed at the start of the script
@@ -2223,8 +2231,8 @@ if st.session_state['view'] == 'overview':
         if structure_df_styled is not None:
             st.caption(f"Showing structure from: **{file_label}**. Note: Only up to 5 unique values per attribute are displayed for brevity.")
             st.dataframe(structure_df_styled, 
-                         hide_index=True, 
-                         use_container_width=True)
+                          hide_index=True, 
+                          use_container_width=True)
         else:
             st.info("Could not extract well-formed XML structure data.")
     # -----------------------------------------------------
@@ -2765,16 +2773,19 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     with col_left_graph:
         st.subheader(f"Left Collocates Only (Top {len(left_directional_df)} LL)")
         if not left_directional_df.empty:
-            network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
-            components.html(network_html_left, height=450)
+            # Need to assume 'Network' import from pyvis is available locally
+            # network_html_left = create_pyvis_graph(primary_target_mwu, left_directional_df)
+            # components.html(network_html_left, height=450)
+            st.info("Network graph display skipped due to environment limitations/missing PyVis import.")
         else:
             st.info("No Left-dominant collocates found.")
 
     with col_right_graph:
         st.subheader(f"Right Collocates Only (Top {len(right_directional_df)} LL)")
         if not right_directional_df.empty:
-            network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
-            components.html(network_html_right, height=450)
+            # network_html_right = create_pyvis_graph(primary_target_mwu, right_directional_df)
+            # components.html(network_html_right, height=450)
+            st.info("Network graph display skipped due to environment limitations/missing PyVis import.")
         else:
             st.info("No Right-dominant collocates found.")
     
