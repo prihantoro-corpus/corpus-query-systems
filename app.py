@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.25 - Dictionary CEFR, IPA, and Online Dictionary Feature
+# CORTEX Corpus Explorer v17.26 - Robust Vertical Corpus Loading Fix, CEFR, IPA, and Dynamic Dictionary Link
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,7 +40,7 @@ except ImportError:
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.25 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.26 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1134,13 +1134,10 @@ def load_excel_parallel_corpus_file(file_source):
     return df_src
 
 
-# app.py
-# CORTEX Corpus Explorer v17.26 - Robust Vertical Corpus Loading Fix
-# ... (rest of the file content unchanged)
-
-# --- Monolingual File Dispatcher (Updated to check for XML) ---
+# --- Monolingual File Dispatcher (Updated for Robust Vertical Corpus Loading) ---
 @st.cache_data
 def load_corpus_file(file_source, sep=r"\s+"):
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
     # Always reset parallel mode when loading standard file
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
@@ -1176,8 +1173,6 @@ def load_corpus_file(file_source, sep=r"\s+"):
     except Exception as e: return None
 
     # Set default global codes for non-parallel files
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
-    # We assume 'EN' or 'ID' for tagged files, but 'RAW' as the absolute default fallback.
     SOURCE_LANG_CODE = 'RAW' 
     TARGET_LANG_CODE = 'NA'
 
@@ -1185,10 +1180,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
     try:
         file_buffer_for_pandas.seek(0)
         
-        # Check if the file looks like a vertical corpus (token\tPOS\tlemma or token\sPOS\slemma)
-        # We can detect this by checking the number of columns.
-        
-        # 1. Attempt using a common separator (Tab or multiple spaces)
+        # 1. Attempt using one or more whitespace characters as a separator for vertical files
         df_attempt = pd.read_csv(file_buffer_for_pandas, sep=r'\s+', header=None, engine="python", dtype=str)
             
         if df_attempt is not None and df_attempt.shape[1] >= 3:
@@ -1203,7 +1195,7 @@ def load_corpus_file(file_source, sep=r"\s+"):
             
             # --- Auto-detect Language for Tagged/Vertical Corpus ---
             # Simple check: If 'lemma' column contains Indonesian-typical words, assume ID.
-            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah']
+            id_keywords = ['yang', 'untuk', 'dan', 'ini', 'adalah', 'di', 'pada']
             is_indonesian_tagged = df['lemma'].str.lower().isin(id_keywords).sum() > 5 
             
             if is_indonesian_tagged:
@@ -1239,61 +1231,6 @@ def load_corpus_file(file_source, sep=r"\s+"):
         df["_token_low"] = df["token"].str.lower()
         
         # SOURCE_LANG_CODE remains 'RAW' (default set before the try block)
-        return df
-        
-    except Exception as raw_e: return None 
-
-
-    # Set default global codes for non-parallel files
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
-    SOURCE_LANG_CODE = 'RAW'
-    TARGET_LANG_CODE = 'NA'
-
-    # --- Attempt to load as Tagged/CSV/TSV ---
-    try:
-        file_buffer_for_pandas.seek(0) 
-        # Attempt 1: Tab-separated (vertical format)
-        try:
-            df_attempt = pd.read_csv(file_buffer_for_pandas, sep='\t', header=None, engine="python", dtype=str)
-        except Exception:
-            file_buffer_for_pandas.seek(0)
-            # Attempt 2: Whitespace-separated (vertical format, common)
-            df_attempt = pd.read_csv(file_buffer_for_pandas, sep=sep, header=None, engine="python", dtype=str)
-            
-        if df_attempt is not None and df_attempt.shape[1] >= 3:
-            df = df_attempt.iloc[:, :3].copy()
-            df.columns = ["token", "pos", "lemma"]
-            
-            df["token"] = df["token"].fillna("").astype(str).str.strip() 
-            df["pos"] = df["pos"].fillna("###").astype(str)
-            df["lemma"] = df["lemma"].fillna("###").astype(str)
-            df["_token_low"] = df["token"].str.lower()
-            
-            return df
-            
-    except Exception: pass 
-
-    # Fallback to Raw Text Processing
-    try:
-        raw_text = file_content_str
-        # --- FIXED TOKENIZATION ---
-        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
-        tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
-        # --------------------------
-        nonsense_tag = "##"
-        nonsense_lemma = "##"
-        
-        pos_tags = [nonsense_tag] * len(tokens)
-        lemmas = [nonsense_lemma] * len(tokens)
-        
-        df = pd.DataFrame({
-            "token": tokens,
-            "pos": pos_tags,
-            "lemma": lemmas
-        })
-        
-        df["_token_low"] = df["token"].str.lower()
-        
         return df
         
     except Exception as raw_e: return None 
@@ -1560,7 +1497,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.25 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.26 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2642,4 +2579,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
