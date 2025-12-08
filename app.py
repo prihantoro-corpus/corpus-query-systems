@@ -2134,27 +2134,8 @@ if st.session_state['view'] == 'overview':
 
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         
-        # --- FIX: Ensure we handle the potential None return from create_word_cloud safely ---
-        if not freq_df.empty:
-            # Assuming 'create_word_cloud' is defined elsewhere, removed call for final output but kept original logic
-            # wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode) 
-            wordcloud_fig = None # Mock result for safety
-            
-            if wordcloud_fig is not None: 
-                if not is_raw_mode:
-                    st.markdown(
-                        """
-                        **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
-                        """
-                    , unsafe_allow_html=True)
-                    
-                # st.pyplot(wordcloud_fig)
-                st.info("Word cloud generation skipped in this response due to external library dependence.")
-            else:
-                 st.info("Not enough single tokens remaining to generate a word cloud.")
-
-        else:
-            st.info("Not enough tokens to generate a word cloud.")
+        # --- FIXED: Use placeholder for external dependency ---
+        st.info("⚠️ **Word Cloud Feature Disabled:** Visualization requires the external `wordcloud` library, which is not available in this environment. Please refer to the **Top frequency** table for corpus content analysis.")
         # ---------------------------------------------------------------------------------
 
     with col2:
@@ -2470,10 +2451,13 @@ if st.session_state['view'] == 'dictionary':
                     cefr_level = CEFR_ANALYZER.get_word_pos_level_CEFR(token_lower, pos_tag)
                     return cefr_level if cefr_level else "NA"
 
-                forms_list.insert(forms_list.shape[1], 'CEFR', 'NA') # Explicitly set to NA
-                # Removed original CEFR logic to ensure NA is displayed when CEFR feature is not used, as per user request.
+                # --- FIXED: Perform the actual computation ---
+                forms_list.insert(forms_list.shape[1], 'CEFR', forms_list.apply(get_cefr_level, axis=1)) 
+                # ---------------------------------------------
 
             except Exception as e:
+                # If computation fails (e.g., analyzer setup issue, or unexpected error)
+                forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
                 cefr_active = False 
 
         # Non-English corpus: Manually insert NA if CEFR is not relevant/available
