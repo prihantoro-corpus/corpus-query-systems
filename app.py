@@ -250,11 +250,11 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids)
     
-    KWIC Row Structure: (Note: Left/Right Token/POS/Lemma are now lists, not joined strings)
+    KWIC Row Structure:
     {
-        "Left_Token": list[str], "Left_POS": list[str], "Left_Lemma": list[str],
+        "Left_Token": str, "Left_POS": str, "Left_Lemma": str,
         "Node_Token": str, "Node_POS": str, "Node_Lemma": str,
-        "Right_Token": list[str], "Right_POS": list[str], "Right_Lemma": list[str],
+        "Right_Token": str, "Right_POS": str, "Right_Lemma": str,
         "Collocate": str # Only filled if pattern search is active
     }
     """
@@ -479,17 +479,17 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         node_start_rel = i - kwic_start
         node_end_rel = node_start_rel + primary_target_len
 
-        # Slice the three parallel lists: (Context columns now return lists, Node returns joined strings)
+        # Slice and join the three parallel lists:
         kwic_rows.append({
-            "Left_Token": token_line[:node_start_rel], # List of tokens/HTML
-            "Left_POS": pos_line[:node_start_rel],     # List of POS
-            "Left_Lemma": lemma_line[:node_start_rel], # List of Lemmas
+            "Left_Token": " ".join(token_line[:node_start_rel]), 
+            "Left_POS": " ".join(pos_line[:node_start_rel]),
+            "Left_Lemma": " ".join(lemma_line[:node_start_rel]),
             "Node_Token": " ".join(node_orig_tokens), 
             "Node_POS": " ".join(node_orig_pos),
             "Node_Lemma": " ".join(node_orig_lemma),
-            "Right_Token": token_line[node_end_rel:],  # List of tokens/HTML
-            "Right_POS": pos_line[node_end_rel:],      # List of POS
-            "Right_Lemma": lemma_line[node_end_rel:],  # List of Lemmas
+            "Right_Token": " ".join(token_line[node_end_rel:]),
+            "Right_POS": " ".join(pos_line[node_end_rel:]),
+            "Right_Lemma": " ".join(lemma_line[node_end_rel:]),
             "Collocate": collocate_to_display 
         })
         
@@ -498,63 +498,19 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
 
 # --- KWIC HTML Generator Helpers ---
 
-def _format_aligned_context_html(tokens, poss, lemmas, show_pos, show_lemma, alignment):
-    """
-    Generates aligned HTML structure for a list of tokens/pos/lemma using Flexbox
-    to make each token/tag/lemma triplet align vertically.
-    """
+def _format_kwic_cell_html(token_line, pos_line, lemma_line, show_pos, show_lemma):
+    """Generates the multi-line HTML content for a single KWIC cell."""
     
-    # 1. Create a <div> wrapper for each column (Token, POS, Lemma)
-    token_divs = []
-    pos_divs = []
-    lemma_divs = []
+    token_display = token_line
+    # POS/Lemma are wrapped in span classes for coloring/sizing
+    pos_display = f"<span class='kwic-pos'>{pos_line}</span>" if show_pos and pos_line.strip() else ""
+    lemma_display = f"<span class='kwic-lemma'>{lemma_line}</span>" if show_lemma and lemma_line.strip() else ""
     
-    for token, pos, lemma in zip(tokens, poss, lemmas):
-        # Token already contains highlighting HTML
-        token_divs.append(f"<div class='kwic-item kwic-token-item'>{token}</div>")
-        
-        # POS/Lemma are wrapped in span classes for coloring/sizing
-        pos_html = f"<span class='kwic-pos'>{pos}</span>" if pos and pos.strip() else "&nbsp;"
-        lemma_html = f"<span class='kwic-lemma'>{lemma}</span>" if lemma and lemma.strip() else "&nbsp;"
-
-        pos_divs.append(f"<div class='kwic-item kwic-pos-item'>{pos_html}</div>")
-        lemma_divs.append(f"<div class='kwic-item kwic-lemma-item'>{lemma_html}</div>")
-        
-    # Join items horizontally using flexbox rows
-    token_line_html = f"<div class='kwic-row kwic-{alignment}'>{''.join(token_divs)}</div>"
-    pos_line_html = f"<div class='kwic-row kwic-{alignment}'>{''.join(pos_divs)}</div>" if show_pos else ""
-    lemma_line_html = f"<div class='kwic-row kwic-{alignment}'>{''.join(lemma_divs)}</div>" if show_lemma else ""
-
-    lines = [token_line_html]
-    if show_pos: lines.append(pos_line_html)
-    if show_lemma: lines.append(lemma_line_html)
+    lines = [token_display]
+    if show_pos: lines.append(pos_display if pos_display else "&nbsp;") # Use non-breaking space for alignment
+    if show_lemma: lines.append(lemma_display if lemma_display else "&nbsp;")
     
-    return "".join(lines)
-
-
-def _format_kwic_cell_html(token_data, pos_data, lemma_data, show_pos, show_lemma, alignment):
-    """
-    Generalized function to format a KWIC cell. 
-    Accepts strings for Node, or lists for Context (Left/Right).
-    """
-    
-    # Check if data is a list (Context cells) or a string (Node cell)
-    if isinstance(token_data, list):
-        # Context cell: use aligned display with Flexbox
-        return _format_aligned_context_html(token_data, pos_data, lemma_data, show_pos, show_lemma, alignment)
-    else:
-        # Node cell: already joined string, use original multi-line display
-        token_display = token_data
-        
-        # POS/Lemma are wrapped in span classes for coloring/sizing
-        pos_display = f"<span class='kwic-pos'>{pos_data}</span>" if show_pos and pos_data.strip() else ""
-        lemma_display = f"<span class='kwic-lemma'>{lemma_data}</span>" if show_lemma and lemma_data.strip() else ""
-        
-        lines = [token_display]
-        if show_pos: lines.append(pos_display if pos_display else "&nbsp;") # Use non-breaking space for alignment
-        if show_lemma: lines.append(lemma_display if lemma_display else "&nbsp;")
-        
-        return "<br>".join(lines)
+    return "<br>".join(lines)
 
 
 def generate_kwic_html(kwic_data, sent_ids, is_parallel_mode, target_lang_code, target_sent_map, show_pos, show_lemma):
@@ -587,15 +543,10 @@ def generate_kwic_html(kwic_data, sent_ids, is_parallel_mode, target_lang_code, 
     for i, row in enumerate(kwic_data):
         row_num = i + 1
         
-        # Prepare content for each cell. Alignment is key here.
-        # Left context: tokens should be displayed right-to-left, aligned to the node.
-        left_content = _format_kwic_cell_html(row['Left_Token'], row['Left_POS'], row['Left_Lemma'], show_pos, show_lemma, 'left')
-        
-        # Node context: already joined string, simple center align
-        node_content = _format_kwic_cell_html(row['Node_Token'], row['Node_POS'], row['Node_Lemma'], show_pos, show_lemma, 'center')
-        
-        # Right context: tokens should be displayed left-to-right, starting after the node.
-        right_content = _format_kwic_cell_html(row['Right_Token'], row['Right_POS'], row['Right_Lemma'], show_pos, show_lemma, 'right')
+        # Prepare content for each cell (up to 3 lines)
+        left_content = _format_kwic_cell_html(row['Left_Token'], row['Left_POS'], row['Left_Lemma'], show_pos, show_lemma)
+        node_content = _format_kwic_cell_html(row['Node_Token'], row['Node_POS'], row['Node_Lemma'], show_pos, show_lemma)
+        right_content = _format_kwic_cell_html(row['Right_Token'], row['Right_POS'], row['Right_Lemma'], show_pos, show_lemma)
         
         # Add translation if needed
         translation_content = ""
@@ -642,33 +593,6 @@ def generate_kwic_html(kwic_data, sent_ids, is_parallel_mode, target_lang_code, 
             line-height: {line_height}em; 
             border-bottom: 1px solid #333;
         }}
-        
-        /* --- NEW FLEXBOX ALIGNMENT FOR CONTEXT CELLS --- */
-        .kwic-row {{
-            display: flex;
-            white-space: nowrap; 
-            flex-wrap: nowrap;
-            width: 100%; /* Important for alignment */
-            gap: 15px; /* Spacing between tokens in a row */
-        }}
-        /* Left context needs to align items to the right of its cell */
-        .kwic-row.kwic-left {{
-            justify-content: flex-end; 
-        }}
-        /* Right context needs to align items to the left of its cell */
-        .kwic-row.kwic-right {{
-            justify-content: flex-start;
-        }}
-        
-        .kwic-item {{
-            /* Rely on monospace font to ensure vertical alignment of tokens/pos/lemma */
-            display: block; /* Stack pos/lemma below token */
-            padding: 0;
-            margin: 0;
-            line-height: inherit;
-        }}
-        /* ------------------------------------------------ */
-        
         .dataframe-kwic td.kwic-left {{ text-align: right; width: 30%; }}
         .dataframe-kwic td.kwic-node {{ 
             text-align: center; 
@@ -1422,19 +1346,12 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
         /* POS/Lemma Styles */
         .collex-table-inner span.kwic-pos {{ color: #00BFFF; font-size: 0.7em; }}
         .collex-table-inner span.kwic-lemma {{ color: #FFA500; font-size: 0.7em; }}
-        
-        /* Apply Flexbox alignment for internal context cells */
-        .collex-table-inner .kwic-row { display: flex; white-space: nowrap; flex-wrap: nowrap; width: 100%; gap: 15px; }
-        .collex-table-inner .kwic-row.kwic-left { justify-content: flex-end; }
-        .collex-table-inner .kwic-row.kwic-right { justify-content: flex-start; }
         </style>
     """
     st.markdown(collocate_example_table_style, unsafe_allow_html=True)
     
-    # NOTE: The format_collex_cell_content must be updated to use the new KWIC functions
-    def format_collex_cell_content(token_data, pos_data, lemma_data, alignment):
-        # We need to explicitly call the new _format_kwic_cell_html helper
-        return _format_kwic_cell_html(token_data, pos_data, lemma_data, show_pos, show_lemma, alignment)
+    def format_collex_cell_content(token_line, pos_line, lemma_line):
+        return _format_kwic_cell_html(token_line, pos_line, lemma_line, show_pos, show_lemma)
     
     html_rows = []
     
@@ -1443,7 +1360,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             collocate_word = row['Collocate']
             
             # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
-            # kwic_rows will contain the multi-layer structure (lists for context)
+            # kwic_rows will contain the multi-layer structure
             kwic_rows, total_matches, _, _, sent_ids = generate_kwic(
                 df_corpus, node_word, window, window, 
                 pattern_collocate_input=collocate_word, 
@@ -1468,9 +1385,9 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 
                 
                 # Format multi-line cells using the new structure
-                left_html = format_collex_cell_content(kwic_row['Left_Token'], kwic_row['Left_POS'], kwic_row['Left_Lemma'], 'left')
-                node_html = format_collex_cell_content(kwic_row['Node_Token'], kwic_row['Node_POS'], kwic_row['Node_Lemma'], 'center')
-                right_html = format_collex_cell_content(kwic_row['Right_Token'], kwic_row['Right_POS'], kwic_row['Right_Lemma'], 'right')
+                left_html = format_collex_cell_content(kwic_row['Left_Token'], kwic_row['Left_POS'], kwic_row['Left_Lemma'])
+                node_html = format_collex_cell_content(kwic_row['Node_Token'], kwic_row['Node_POS'], kwic_row['Node_Lemma'])
+                right_html = format_collex_cell_content(kwic_row['Right_Token'], kwic_row['Right_POS'], kwic_row['Right_Lemma'])
 
                 
                 # Build HTML row
@@ -1739,6 +1656,7 @@ parallel_uploaded = False
 with st.sidebar:
     
     # FIX APPLIED HERE: Removing the explicit 'global' declaration from the top of the sidebar block
+    # The variables are defined globally in the script and should be accessible here without 'global'.
     
     # 1. CORPUS SELECTION (TOP)
     st.header("1. Corpus Source")
@@ -2373,15 +2291,14 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
 
         st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
         
-        # Create a simple flat dataframe for download (Updated for list-based context)
+        # Create a simple flat dataframe for download
         kwic_download_df = pd.DataFrame({
             "No": range(1, len(kwic_rows) + 1),
-            # Join the context lists back into strings for download, stripping HTML
-            "Left Context": [" ".join(r['Left_Token']).replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", "") for r in kwic_rows],
+            "Left Context": [r['Left_Token'].replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", "") for r in kwic_rows],
             "Node": [r['Node_Token'] for r in kwic_rows],
-            "Right Context": [" ".join(r['Right_Token']).replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", "") for r in kwic_rows],
-            "POS Tags": [" ".join(r['Left_POS']) + " " + r['Node_POS'] + " " + " ".join(r['Right_POS']) for r in kwic_rows],
-            "Lemmas": [" ".join(r['Left_Lemma']) + " " + r['Node_Lemma'] + " " + " ".join(r['Right_Lemma']) for r in kwic_rows],
+            "Right Context": [r['Right_Token'].replace("<b><span style='color: black; background-color: #FFEA00;'>", "").replace("</span></b>", "") for r in kwic_rows],
+            "POS Tags": [r['Left_POS'] + " " + r['Node_POS'] + " " + r['Right_POS'] for r in kwic_rows],
+            "Lemmas": [r['Left_Lemma'] + " " + r['Node_Lemma'] + " " + r['Right_Lemma'] for r in kwic_rows],
         })
         if is_parallel_mode:
              translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
@@ -2760,7 +2677,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         st.markdown(f"**Log-Likelihood (LL) (Top {len(full_ll)})**")
         
         # Display table with relevant columns
-        ll_display_df = full_ll[['Rank', 'Collocate', 'POS', 'Observed', 'LL', 'Direction', 'Significance']].copy()
+        ll_display_df = full_ll[['Rank', 'Collocate', 'LL', 'Direction', 'Significance']].copy()
         
         # Use a scrollable container for the main table
         html_table = ll_display_df.to_html(index=False, classes=['collocate-table'])
@@ -2770,7 +2687,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq}, Top {len(full_mi)})**")
         
         # Display table with relevant columns
-        mi_display_df = full_mi[['Rank', 'Collocate', 'POS', 'Observed', 'MI', 'Direction', 'Significance']].copy()
+        mi_display_df = full_mi[['Rank', 'Collocate', 'MI', 'Direction', 'Significance']].copy()
         
         # Use a scrollable container for the main table
         html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
@@ -2833,3 +2750,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
