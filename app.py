@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.43 - Robust XML Structure Parsing and Error Capture
+# CORTEX Corpus Explorer v17.44 - Robust XML and CEFR Status Check
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.43 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.44 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1748,7 +1748,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.43 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.44 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2134,6 +2134,23 @@ with st.sidebar:
         # --- DICTIONARY SETTINGS (Placeholder) ---
         elif st.session_state['view'] == 'dictionary':
             st.info("Dictionary module currently uses global Collocation Window/Filter settings for collocation analysis, accessible in the Collocation view.")
+
+    # --- 4. FEATURE STATUS CHECK (NEW) ---
+    st.markdown("---")
+    st.subheader("4. Feature Status")
+
+    # CEFR Status Check
+    cefr_status = f"**CEFR Categorization:** {'✅ ACTIVE' if CEFR_FEATURE_AVAILABLE else '❌ DISABLED (Install `cefrpy`)'}"
+    if explicit_lang_code != 'EN' and CEFR_FEATURE_AVAILABLE:
+        cefr_status += f" (Disabled for **{explicit_lang_code}** corpus)"
+    st.markdown(cefr_status)
+
+    # IPA Status Check
+    ipa_status = f"**IPA Transcription:** {'✅ ACTIVE' if IPA_FEATURE_AVAILABLE else '❌ DISABLED (Install `eng-to-ipa`)'}"
+    if explicit_lang_code != 'EN' and IPA_FEATURE_AVAILABLE:
+        ipa_status += f" (Disabled for non-English corpus)"
+    st.markdown(ipa_status)
+# --- END SIDEBAR ---
 
 
 # load corpus (cached) for main body access - Use the result from the sidebar
@@ -2688,19 +2705,21 @@ if st.session_state['view'] == 'dictionary':
         
         def safe_get_cefr(token):
             """Safely calls CEFR_ANALYZER and catches exceptions from cefrpy library."""
+            # Use 'NA' as the standard placeholder for uncategorized words
             if not CEFR_ANALYZER:
-                return '##'
+                return 'NA'
             try:
                 # The token is already lowercased by the main frequency counter, but applying lower() again for robustness
-                return CEFR_ANALYZER.get_cefr_level(token).upper()
+                level = CEFR_ANALYZER.get_cefr_level(token).upper()
+                return level if level != 'NA' else 'NA' # Ensure NA is used for uncategorized
             except Exception:
                 # Catch any error (e.g., word not found, internal library error)
-                return '##'
+                return 'NA'
 
         forms_list.insert(forms_list.shape[1], 'CEFR', forms_list['Token'].apply(safe_get_cefr))
         
-    else: # Ensure column is present with '##' placeholder
-        forms_list.insert(forms_list.shape[1], 'CEFR', '##')
+    else: # Ensure column is present with 'NA' placeholder
+        forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
     # -----------------------------------------------------------
     
     # ------------------ IPA Column Insertion ------------------
@@ -2711,16 +2730,16 @@ if st.session_state['view'] == 'dictionary':
                     import eng_to_ipa as ipa 
                     return ipa.convert(token)
                 except Exception:
-                    return "##" # Changed from 'IPA N/A' to '##'
+                    return "NA" 
             forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token'].apply(get_ipa_transcription))
             
         except Exception as e:
             st.error(f"Error during IPA transcription: {e}")
             ipa_active = False 
             
-    # Ensure column is present with '##' placeholder if not active/failed
+    # Ensure column is present with 'NA' placeholder if not active/failed
     if not ipa_active:
-        forms_list.insert(forms_list.shape[1], 'IPA Transcription', '##')
+        forms_list.insert(forms_list.shape[1], 'IPA Transcription', 'NA')
     # -----------------------------------------------------------
             
     # --- Pronunciation Link Logic (REVISED for KBBI/Cambridge) ---
