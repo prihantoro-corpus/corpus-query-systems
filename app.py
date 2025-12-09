@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.50 - Finalized User-Specified Dark Theme Styling
+# CORTEX Corpus Explorer v17.50 - Zipf Breakdown Finalized Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -438,6 +438,12 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         })
         
     breakdown_df = pd.DataFrame(breakdown_list)
+    
+    # --- NEW: Add Zipf Metrics (MODIFIED) ---
+    breakdown_df['Zipf Score'] = breakdown_df['Relative Frequency (per M)'].apply(pmw_to_zipf).round(2)
+    breakdown_df['Zipf Law Frequency Band'] = breakdown_df['Zipf Score'].apply(zipf_to_band)
+    # ----------------------------
+    
     # ---------------------------------------------------
         
     # --- Apply Pattern Filtering ---
@@ -2606,15 +2612,14 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         # Display max 100 entries
         breakdown_display_df = breakdown_df.head(100).copy()
         
-# --- Please verify your entire scroll_style_breakdown block (around Line 3022) ---
-
+        # Use a scrollable container and apply specific table styling
         scroll_style_breakdown = f"""
         <style>
         /* Container for scroll */
         .scrollable-breakdown-table {{
             max-height: 300px;
             overflow-y: auto;
-            border: 1px solid #444444; 
+            border: 1px solid #444444; /* Use header background color for border */
         }}
         /* Style the table and cells */
         .breakdown-table {{
@@ -2623,25 +2628,25 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             font-size: 0.9em;
         }}
         .breakdown-table th {{
-            background-color: #444444; /* Header Background */
-            color: #FAFAFA;          /* Header Text */
+            background-color: #444444; /* User's Header Background */
+            color: #FAFAFA;          /* User's Text Color */
             padding: 8px;
             text-align: left;
         }}
         .breakdown-table td {{
-            background-color: #444444; /* **ROW BACKGROUND MATCHES KWIC**: #1F1F1F */
-            color: #FAFAFA;          /* Default Row Text */
+            background-color: #1F1F1F; /* *** FIXED: User's Row Background #1F1F1F *** */
+            color: #FAFAFA;          /* User's Text Color */
             padding: 8px;
             border-bottom: 1px solid #333;
         }}
-        /* *** CRITICAL FIX HERE *** */
-        .breakdown-table td:nth-child(1), .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3) {{
-            color: #FAFAFA !important; /* Forces visible white text against the dark background */
+        /* *** CRITICAL FIX: Forces Text Color on ALL 4 columns, including the new Zipf column (4th) *** */
+        .breakdown-table td:nth-child(1), .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3), .breakdown-table td:nth-child(4) {{
+            color: #FAFAFA !important; 
         }}
         </style>
         """
         st.markdown(scroll_style_breakdown, unsafe_allow_html=True)
-        
+
         # Apply the CSS class 'breakdown-table' to the generated HTML
         html_table_breakdown = breakdown_display_df.to_html(index=False, classes=['breakdown-table'])
         st.markdown(f"""<div class='scrollable-breakdown-table'>{html_table_breakdown}</div>""", unsafe_allow_html=True)
@@ -3272,14 +3277,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
-
-
-
-
-
-
-
-
-
-
