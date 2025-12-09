@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.46 - Frequency Breakdown and Overview Update
+# CORTEX Corpus Explorer v17.49 - Finalized Dark Theme Styling for Breakdown Table
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.46 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.49 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -726,7 +726,7 @@ def compute_ll(k11, k12, k21, k22):
     e11 = (k11 + k12) * (k11 + k21) / total
     e12 = (k11 + k12) * (k12 + k22) / total
     e21 = (k21 + k22) * (k11 + k21) / total
-    e22 = (k21 + k22) * (k12 + k22) / total
+    e22 = (k21 + k22) * (k12 + kk22) / total
     s = 0.0
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
         if k > 0 and e > 0: s += k * math.log(k / e)
@@ -1795,7 +1795,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.46 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.49 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2602,7 +2602,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     st.markdown("---") # Separator
 
-# --- NEW: Breakdown of Matching Forms ---
+    # --- NEW: Breakdown of Matching Forms (v17.49: Finalized Dark Theme Styling) ---
     if not breakdown_df.empty:
         st.subheader(f"Token Breakdown for Query '{raw_target_input}'")
         
@@ -2610,7 +2610,6 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         breakdown_display_df = breakdown_df.head(100).copy()
         
         # Use a scrollable container and apply specific table styling
-        # --- MODIFIED CSS FOR VISIBILITY IN DARK THEME (v17.47) ---
         scroll_style_breakdown = f"""
         <style>
         /* Container for scroll */
@@ -2626,20 +2625,20 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             font-size: 0.9em;
         }}
         .breakdown-table th {{
-            background-color: #383838; /* Darker header */
+            background-color: #383838; 
             color: white;
             padding: 8px;
             text-align: left;
         }}
         .breakdown-table td {{
-            background-color: #1E1E1E; /* Dark background for cells */
-            color: #E0E0E0; /* Light text for general data */
+            background-color: #1E1E1E; /* Data cell background */
+            color: #E0E0E0; /* Standard light gray text for all data */
             padding: 8px;
             border-bottom: 1px solid #333;
         }}
-        /* Specific coloring for frequency columns (Absolute/Relative) for better contrast */
-        .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3) {{
-            color: #CCFFCC; /* Light green/cyan for numbers */
+        /* Explicitly setting all data column colors to the standard light gray */
+        .breakdown-table td:nth-child(1), .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3) {{
+            color: #E0E0E0; /* Ensure all data columns are standard light gray */
         }}
         </style>
         """
@@ -3275,4 +3274,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
