@@ -2618,7 +2618,7 @@ if st.session_state['view'] == 'dictionary':
         # Create a new column with the clickable link HTML
         # The column name is the 'pronunciation_label' determined above (e.g., 'Dictionary (ID - KBBI)')
         forms_list.insert(forms_list.shape[1], pronunciation_label, forms_list['Token'].apply(
-            lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>KBBI Link</a>"
+            lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>Link</a>"
         ))
         
         # Define table styling for cleaner look with markdown
@@ -3015,3 +3015,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
