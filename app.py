@@ -7,9 +7,9 @@ import math
 from collections import Counter
 from io import BytesIO, StringIO 
 import tempfile 
-import os       
-import re       
-import requests 
+import os 
+import re 
+import requests
 import matplotlib.pyplot as plt 
 
 # --- Re-enabled Imports ---
@@ -516,9 +516,9 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                  pos_matches_highlight = collocate_pos_regex_highlight is None or (collocate_pos_regex_highlight.fullmatch(token_pos) if not is_raw_mode else False)
                  
                  if word_matches_highlight and pos_matches_highlight:
-                    is_collocate_match = True
-                    if collocate_to_display == "": # Capture the first matching collocate
-                        collocate_to_display = token # Use the original token case
+                     is_collocate_match = True
+                     if collocate_to_display == "": # Capture the first matching collocate
+                         collocate_to_display = token # Use the original token case
             
             if is_node_word:
                 # Format node word(s) as inline, explicitly marking them as node words
@@ -528,7 +528,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 formatted_line.append(format_token_inline(token, token_pos, token_lemma, is_collocate_match=is_collocate_match, is_node_word=False))
 
 
-        node_start_rel = i - kwic_start
+        node_start_rel = k - kwic_start
         node_end_rel = node_start_rel + primary_target_len
 
         left_context = formatted_line[:node_start_rel]
@@ -929,7 +929,7 @@ def parse_xml_content_to_df(file_source):
             tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
             if tokens:
                for token in tokens:
-                   df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
+                    df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
                sent_map[1] = raw_sentence_text
             return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
             
@@ -1029,7 +1029,7 @@ def parse_xml_content_to_df(file_source):
         # Store raw sentence for the target map
         if raw_sentence_text:
             sent_map[sent_id] = raw_sentence_text.strip()
-        
+            
     if not df_data:
         file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
         st.warning(f"No tokenized data was extracted from the XML file: {file_name_label}.")
@@ -1330,7 +1330,7 @@ def load_corpus_file_built_in(file_source, corpus_name, explicit_lang_code):
     # Set the global language code from the user's explicit selection initially
     SOURCE_LANG_CODE = explicit_lang_code
     TARGET_LANG_CODE = 'NA'
-         
+        
     if file_source is None: return None
     
     # Check if the corpus name/URL suggests XML (KOSLAT-ID uses XML)
@@ -1617,7 +1617,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
             # FIX: Filter out punctuation collocates here
             if w in PUNCTUATION_COLLOCATES or w.isdigit():
                  continue
-                 
+                
             p = df_corpus["pos"].iloc[j]
             l = df_corpus["lemma"].iloc[j].lower() if "lemma" in df_corpus.columns else "##"
             direction = 'L' if j < i else 'R'
@@ -1654,7 +1654,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
             "Collocate": w, "POS": p, "Lemma": l, "Observed": observed,
             "Total_Freq": total_freq, "LL": round(ll,6), "MI": round(mi,6),
             "Significance": significance_from_ll(ll), "Direction": dominant_direction, 
-            "Obs_L": data['L'], "Obs_R": data['R']              
+            "Obs_L": data['L'], "Obs_R": data['R'] 
         })
 
     stats_df = pd.DataFrame(stats_list)
@@ -1792,13 +1792,13 @@ with st.sidebar:
         # Custom Monolingual Loading Logic
         if uploaded_files_mono:
              with st.spinner(f"Processing Monolingual Corpus ({len(uploaded_files_mono)} file(s))..."):
-                df_source_lang_for_analysis = load_monolingual_corpus_files(
-                    uploaded_files_mono, 
-                    explicit_lang_code, # Use the new explicit selection
-                    selected_format_mono
-                )
-                if df_source_lang_for_analysis is not None:
-                    corpus_name = f"Monolingual ({SOURCE_LANG_CODE}, {selected_format_mono})"
+                 df_source_lang_for_analysis = load_monolingual_corpus_files(
+                     uploaded_files_mono, 
+                     explicit_lang_code, # Use the new explicit selection
+                     selected_format_mono
+                 )
+                 if df_source_lang_for_analysis is not None:
+                     corpus_name = f"Monolingual ({SOURCE_LANG_CODE}, {selected_format_mono})"
     
     # --- B2. PARALLEL CORPUS UPLOAD ---
     else: # Parallel Corpus
@@ -2083,7 +2083,7 @@ with st.sidebar:
             else:
                 st.info("Lemma filtering requires a lemmatized corpus.")
                 st.session_state['collocate_lemma'] = ''
-        
+            
         # --- DICTIONARY SETTINGS (Placeholder) ---
         elif st.session_state['view'] == 'dictionary':
             st.info("Dictionary module currently uses global Collocation Window/Filter settings for collocation analysis, accessible in the Collocation view.")
@@ -2201,7 +2201,7 @@ if st.session_state['view'] == 'overview':
                         
                     st.pyplot(wordcloud_fig)
                 else:
-                     st.info("Not enough single tokens remaining to generate a word cloud.")
+                    st.info("Not enough single tokens remaining to generate a word cloud.")
 
         else:
             st.info("No tokens to generate a word cloud.")
@@ -2236,8 +2236,8 @@ if st.session_state['view'] == 'overview':
             st.caption(f"Showing structure from: **{file_label}**. Unique attribute values are sampled (Max 20 per attribute).")
             # The styled dataframe will be rendered here.
             st.dataframe(structure_df_styled, 
-                         hide_index=True, 
-                         use_container_width=True)
+                          hide_index=True, 
+                          use_container_width=True)
         else:
             st.info("Could not extract well-formed XML structure data.")
     # -----------------------------------------------------
@@ -2441,47 +2441,47 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     # --- KWIC Table Style (REVISED FOR EXPLICIT FLEXIBLE COLUMN WIDTHS) ---
     kwic_table_style = f"""
-         <style>
-         .dataframe-container-scroll {{
-             max-height: 400px; /* Fixed vertical height */
-             overflow-y: auto;
-             margin-bottom: 1rem;
-             width: 100%;
-         }}
-         .dataframe table {{ 
-             width: 100%; 
-             table-layout: fixed; /* Use fixed layout to enforce proportional width */
-             font-family: monospace; 
-             color: white;
-             font-size: 0.9em;
-         }}
-         .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
-         
-         /* KWIC Width Fix: Set proportional column widths (ensures full width is used even without POS/Lemma) */
-         .dataframe td:nth-child(1) {{ width: 5%; }} /* No column */
-         .dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
-         .dataframe td:nth-child(3) {{ 
-             width: 15%; /* Node */
-             text-align: center; 
-             font-weight: bold; 
-             background-color: #f0f0f0; 
-             color: black; 
-         }} 
-         .dataframe td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
-         
-         /* Ensure content can wrap */
-         .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
-             white-space: normal;
-             vertical-align: top;
-             padding: 5px 10px;
-             line-height: 1.5; 
-         }}
-         
-         /* Adjust for Translation column if present (total is 100%) */
-         .dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
-         .dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
+           <style>
+           .dataframe-container-scroll {{
+               max-height: 400px; /* Fixed vertical height */
+               overflow-y: auto;
+               margin-bottom: 1rem;
+               width: 100%;
+           }}
+           .dataframe table {{ 
+               width: 100%; 
+               table-layout: fixed; /* Use fixed layout to enforce proportional width */
+               font-family: monospace; 
+               color: white;
+               font-size: 0.9em;
+           }}
+           .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
+           
+           /* KWIC Width Fix: Set proportional column widths (ensures full width is used even without POS/Lemma) */
+           .dataframe td:nth-child(1) {{ width: 5%; }} /* No column */
+           .dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
+           .dataframe td:nth-child(3) {{ 
+               width: 15%; /* Node */
+               text-align: center; 
+               font-weight: bold; 
+               background-color: #f0f0f0; 
+               color: black; 
+           }} 
+           .dataframe td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
+           
+           /* Ensure content can wrap */
+           .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
+               white-space: normal;
+               vertical-align: top;
+               padding: 5px 10px;
+               line-height: 1.5; 
+           }}
+           
+           /* Adjust for Translation column if present (total is 100%) */
+           .dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
+           .dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
-         </style>
+           </style>
     """
     st.markdown(kwic_table_style, unsafe_allow_html=True)
     
@@ -2545,11 +2545,41 @@ if st.session_state['view'] == 'dictionary':
     # IPA/CEFR are enabled ONLY for English.
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
     cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus
+    
+    # Calculate initial frequency to determine if the token exists at all
+    word_freq = token_counts.get(current_dict_word.lower(), 0)
+
+    # --- CUSTOM FIX: Force Forms List for Indonesian Raw Mode ---
+    # This section ensures that the table appears for ID words even if no lemma is found.
+    if is_indonesian_corpus and forms_list.empty and word_freq > 0:
+        # Manufacturing the form list for display (as requested)
+        forms_list = pd.DataFrame([{
+            'token': current_dict_word,
+            'pos': '##',
+            'lemma': '##'
+        }])
+    # -----------------------------------------------------------
 
     if forms_list.empty and not is_raw_mode: 
-        st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
+        # This block now only runs if the word wasn't found (word_freq == 0),
+        # or if it's not Indonesian and the form list is empty.
+        if word_freq == 0:
+            st.warning(f"Token **'{current_dict_word}'** not found in the corpus.")
+        else:
+            st.warning(f"Token **'{current_dict_word}'** found (Freq: {word_freq}), but no lemma data available to form the linguistic table.")
+        st.stop()
+        
     elif not forms_list.empty:
-        forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
+        # This block now includes our manufactured table for the ID case
+        forms_list.rename(columns={
+            'token': 'Token', 
+            'pos': 'POS Tag', 
+            'lemma': 'Lemma'
+        }, inplace=True)
+        
+        # --- ADD FREQUENCY COLUMNS (Absolute and Relative) ---
+        forms_list.insert(forms_list.shape[1], 'Absolute Frequency', forms_list['Token'].apply(lambda t: token_counts.get(t.lower(), 0)))
+        forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
         
         if cefr_active: # This runs only if is_english_corpus is True
             # Placeholder for CEFR logic
@@ -2564,7 +2594,7 @@ if st.session_state['view'] == 'dictionary':
                     except Exception:
                         return "IPA N/A"
 
-                forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token (lowercase)'].apply(get_ipa_transcription))
+                forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token'].apply(get_ipa_transcription))
                 
             except Exception as e:
                 st.error(f"Error during IPA transcription: {e}")
@@ -2572,7 +2602,7 @@ if st.session_state['view'] == 'dictionary':
                 
         # --- Pronunciation Link Logic (REVISED for KBBI) ---
         if is_indonesian_corpus: # This runs if corpus_lang is ID
-             # Use KBBI for Indonesian dictionary
+            # Use KBBI for Indonesian dictionary
             pronunciation_url = lambda token: f"https://kbbi.kemdikbud.go.id/entri/{token.lower()}"
             pronunciation_label = f"Dictionary ({corpus_lang} - KBBI)"
         elif is_english_corpus:
@@ -2580,14 +2610,15 @@ if st.session_state['view'] == 'dictionary':
             pronunciation_url = lambda token: f"https://youglish.com/pronounce/{token}/english"
             pronunciation_label = "Pronunciation (EN - YouGlish)"
         else:
-             # Generic link for other languages / Fallback
+            # Generic link for other languages / Fallback
             pronunciation_url = lambda token: f"https://forvo.com/word/{token}/#{corpus_lang.lower()}"
             pronunciation_label = f"Pronunciation/Dictionary ({corpus_lang})"
 
 
         # Create a new column with the clickable link HTML
-        forms_list.insert(forms_list.shape[1], pronunciation_label, forms_list['Token (lowercase)'].apply(
-            lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>Click here</a>"
+        # The column name is the 'pronunciation_label' determined above (e.g., 'Dictionary (ID - KBBI)')
+        forms_list.insert(forms_list.shape[1], pronunciation_label, forms_list['Token'].apply(
+            lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>KBBI Link</a>"
         ))
         
         # Define table styling for cleaner look with markdown
@@ -2620,7 +2651,7 @@ if st.session_state['view'] == 'dictionary':
             forms_list.to_html(index=False, escape=False, classes=['forms-list-table']), 
             unsafe_allow_html=True
         )
-    
+        
     # Feature info messages based on current language
     if not IPA_FEATURE_AVAILABLE and is_english_corpus:
         st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
@@ -2630,8 +2661,6 @@ if st.session_state['view'] == 'dictionary':
     if not CEFR_FEATURE_AVAILABLE and is_english_corpus:
         st.info("💡 **CEFR Categorization feature requires the `cefrpy` library to be installed** (`pip install cefrpy`).")
         
-    # --------------------------------------------------------
-    
     st.markdown("---")
 
     # --- 2. Related Forms (by Regex) ---
