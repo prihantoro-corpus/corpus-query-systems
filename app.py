@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.50 - Zipf Breakdown Finalized Fix
+# CORTEX Corpus Explorer v17.50 - Definitive Breakdown Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -746,7 +746,7 @@ def significance_from_ll(ll_val):
     """Converts Log-Likelihood value to significance level."""
     if ll_val >= 15.13: return '*** (p<0.001)'
     if ll_val >= 10.83: return '** (p<0.01)'
-    if ll_val >= 3.84: return '* (p<0.05)'
+    if ll_val >= 3.84: return ' * (p<0.05)'
     return 'ns'
 
 # --- IO / Data Helpers ---
@@ -2634,14 +2634,15 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             text-align: left;
         }}
         .breakdown-table td {{
-            background-color: #1F1F1F; /* *** FIXED: User's Row Background #1F1F1F *** */
+            background-color: #1F1F1F; /* *** FIXED ROW BACKGROUND: Matches KWIC/App BG *** */
             color: #FAFAFA;          /* User's Text Color */
             padding: 8px;
             border-bottom: 1px solid #333;
         }}
-        /* *** CRITICAL FIX: Forces Text Color on ALL 4 columns, including the new Zipf column (4th) *** */
+        /* *** CRITICAL FIX: Forces Text Color and Background on ALL 4 columns, including the new Zipf column (4th) *** */
         .breakdown-table td:nth-child(1), .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3), .breakdown-table td:nth-child(4) {{
-            color: #FAFAFA !important; 
+            background-color: #1F1F1F !important; /* Forces dark background to hide Streamlit numeric column style */
+            color: #FAFAFA !important; /* Forces visible white text */
         }}
         </style>
         """
