@@ -128,6 +128,7 @@ if 'show_lemma' not in st.session_state:
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
+    "KOSLAT-ID": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
 
@@ -2901,3 +2902,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
