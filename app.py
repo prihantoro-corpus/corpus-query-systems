@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.42 - Fixed Language Code Propagation for Dictionary Features
+# CORTEX Corpus Explorer v17.43 - Robust XML Structure Parsing and Error Capture
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.42 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.43 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -124,6 +124,8 @@ if 'monolingual_xml_file_upload' not in st.session_state:
 # --- XML Structure Cache ---
 if 'xml_structure_data' not in st.session_state:
      st.session_state['xml_structure_data'] = None
+if 'xml_structure_error' not in st.session_state: # NEW: To store XML parsing errors
+    st.session_state['xml_structure_error'] = None
 # --- Display Settings ---
 if 'show_pos_tag' not in st.session_state:
     st.session_state['show_pos_tag'] = False
@@ -232,6 +234,7 @@ def reset_analysis():
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
     st.session_state['xml_structure_data'] = None # Clear structure data
+    st.session_state['xml_structure_error'] = None # Clear structure error
     
     # --- Force a complete script rerun directly inside the callback ---
     st.rerun()
@@ -805,13 +808,17 @@ def extract_xml_structure(file_source, max_values=20):
     file_to_analyze.seek(0)
     file_copy = BytesIO(file_to_analyze.read())
 
+    # --- AGGRESSIVE ERROR CAPTURE ---
     try:
         file_copy.seek(0)
         tree = ET.parse(file_copy)
         root = tree.getroot()
+        st.session_state['xml_structure_error'] = None # Clear previous error on success
     except Exception as e:
-        # Silently fail structure extraction if the file isn't well-formed XML
+        # Store the exact parsing error string in session state
+        st.session_state['xml_structure_error'] = f"XML Parsing Error: {e}"
         return None
+    # --- END AGGRESSIVE ERROR CAPTURE ---
 
     # Structure: {tag_name: {attr_name: set_of_values, ...}, ...}
     structure = {}
@@ -1069,6 +1076,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     st.session_state['xml_structure_data'] = None # Reset old structure
+    st.session_state['xml_structure_error'] = None # Reset old error
 
     if not file_sources:
         return None
@@ -1186,6 +1194,7 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None # Clear mono XML state
     st.session_state['xml_structure_data'] = None # Reset old structure
+    st.session_state['xml_structure_error'] = None # Reset old error
     
     if src_file is None or tgt_file is None: return None
 
@@ -1272,6 +1281,7 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None # Clear mono XML state
     st.session_state['xml_structure_data'] = None # Clear structure data
+    st.session_state['xml_structure_error'] = None # Clear structure error
     
     if file_source is None: return None
     
@@ -1346,6 +1356,7 @@ def load_corpus_file_built_in(file_source, corpus_name, explicit_lang_code):
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
     st.session_state['xml_structure_data'] = None 
+    st.session_state['xml_structure_error'] = None # Reset old error
     
     # Set the global language code from the user's explicit selection initially
     SOURCE_LANG_CODE = explicit_lang_code
@@ -1721,7 +1732,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.42 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.43 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2242,59 +2253,69 @@ if st.session_state['view'] == 'overview':
     
     # --- XML CORPUS STRUCTURE DISPLAY (NEW HIERARCHICAL DISPLAY) ---
     structure_data = st.session_state.get('xml_structure_data')
-    
-    if structure_data:
-        
-        # Display everything inside an expander that is OPEN by default
-        with st.expander("📊 XML Corpus Structure (Hierarchical View)", expanded=True):
-            st.subheader("Details")
-            
-            file_label = f"Source ({SOURCE_LANG_CODE})" if is_parallel_mode_active else f"Monolingual ({SOURCE_LANG_CODE})"
-            if is_parallel_mode_active:
-                 st.caption(f"Showing combined structure from **{SOURCE_LANG_CODE}** and **{TARGET_LANG_CODE}**.")
-            else:
-                st.caption(f"Showing structure from **{file_label}**. Attributes are sampled up to 20 unique values.")
-                
-            try:
-                # Use the hierarchical function to generate HTML
-                structure_html = format_structure_data_hierarchical(structure_data)
+    structure_error = st.session_state.get('xml_structure_error')
 
-                st.markdown(
-                    f"""
-                    <div style="font-family: monospace; font-size: 0.9em; padding: 10px; background-color: #282828; border-radius: 5px;">
-                    {structure_html}
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-            except Exception as e:
-                # AGGRESSIVE DEBUGGING - Show error message if rendering fails
-                st.error(f"❌ **XML Hierarchical Display FAILED (Rendering Error: {e})**. Showing raw data structure below for debugging.")
+    # Display the section only if an XML file was involved (either monoline XML or parallel mode)
+    if is_monolingual_xml_loaded or is_parallel_mode_active or selected_corpus_name == "KOSLAT-ID (XML Tagged)":
+        
+        # Use a large, always visible expander for structure details
+        with st.expander("📊 XML Corpus Structure (Details)", expanded=True):
+        
+            if structure_error:
+                st.error(f"❌ **XML Parsing Failed in Parser Function.** The underlying Python `xml.etree.ElementTree.parse()` function raised the following error: \n\n`{structure_error}`")
+                st.info("This indicates your file may contain invalid XML characters, unescaped control characters, or be malformed (e.g., missing a closing tag).")
                 
-            # --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY ---
-            with st.expander("Show Raw XML Structure Data (for diagnosis)"):
-                 st.info("The data below is the Python dictionary produced by the XML parser. If this is empty or invalid, the parser failed.")
-                 
-                 # Show the raw Python dictionary object
-                 st.json(structure_data)
-                 
-                 # Fallback 2: Show the unstyled raw text output if json fails or for comparison
-                 def format_structure_data_raw_text(structure_data, max_values=20):
-                     lines = []
-                     for tag in sorted(structure_data.keys()):
-                         lines.append(f"\n<{tag}>")
-                         for attr in sorted(structure_data[tag].keys()):
-                             values = sorted(list(structure_data[tag][attr]))
-                             sampled_values_str = ", ".join(values[:max_values])
-                             if len(values) > max_values:
-                                 sampled_values_str += f", ... ({len(values) - max_values} more unique)"
-                             lines.append(f"    @{attr}: [{sampled_values_str}]")
-                     return "\n".join(lines)
+            if structure_data:
+                st.subheader("Structure and Attributes (Hierarchical View)")
+                
+                file_label = f"Source ({SOURCE_LANG_CODE})" if is_parallel_mode_active else f"Monolingual ({SOURCE_LANG_CODE})"
+                if is_parallel_mode_active:
+                     st.caption(f"Showing combined structure from **{SOURCE_LANG_CODE}** and **{TARGET_LANG_CODE}**.")
+                else:
+                    st.caption(f"Showing structure from **{file_label}**. Attributes are sampled up to 20 unique values.")
+                    
+                try:
+                    # Use the hierarchical function to generate HTML
+                    structure_html = format_structure_data_hierarchical(structure_data)
+
+                    st.markdown(
+                        f"""
+                        <div style="font-family: monospace; font-size: 0.9em; padding: 10px; background-color: #282828; border-radius: 5px;">
+                        {structure_html}
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                except Exception as e:
+                    # AGGRESSIVE DEBUGGING - Show error message if rendering fails (not parsing)
+                    st.error(f"❌ **XML Hierarchical Display FAILED (Rendering Error: {e})**. Showing raw data structure below for diagnosis.")
+                    
+                # --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY ---
+                with st.expander("Show Raw Python Data (for diagnosis)"):
+                     st.info("The data below is the Python dictionary successfully produced by the XML parser.")
                      
-                 st.code(format_structure_data_raw_text(structure_data))
-                 # --- END DIAGNOSTIC/FALLBACK ---
-    else:
-        st.info("XML structure not found in the loaded corpus. The corpus must be an XML file and well-formed.")
+                     # Show the raw Python dictionary object
+                     st.json(structure_data)
+                     
+                     # Fallback 2: Show the unstyled raw text output if json fails or for comparison
+                     def format_structure_data_raw_text(structure_data, max_values=20):
+                         lines = []
+                         for tag in sorted(structure_data.keys()):
+                             lines.append(f"\n<{tag}>")
+                             for attr in sorted(structure_data[tag].keys()):
+                                 values = sorted(list(structure_data[tag][attr]))
+                                 sampled_values_str = ", ".join(values[:max_values])
+                                 if len(values) > max_values:
+                                     sampled_values_str += f", ... ({len(values) - max_values} more unique)"
+                                 lines.append(f"    @{attr}: [{sampled_values_str}]")
+                         return "\n".join(lines)
+                         
+                     st.code(format_structure_data_raw_text(structure_data))
+                     # --- END DIAGNOSTIC/FALLBACK ---
+            
+            elif not structure_error:
+                # Only show this if no error occurred AND no data was returned (i.e., parser ran but found nothing)
+                st.info("XML structure not found in the loaded corpus. The corpus must be an XML file and well-formed.")
              
     # -----------------------------------------------------
 
