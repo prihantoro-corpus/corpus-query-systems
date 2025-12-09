@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.36 - Robust Built-in TPL Parsing Fix
+# CORTEX Corpus Explorer v17.37 - Robust XML Token Filtering & Structure Hierarchy
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.36 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.37 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -128,7 +128,6 @@ if 'show_lemma' not in st.session_state:
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
-    "KOSLAT-ID": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
 
@@ -821,40 +820,41 @@ def extract_xml_structure(file_source, max_values=20):
     
     return structure
 
-# Helper to format structure data into a presentable DataFrame for Overview
+# Helper to format structure data into a presentable DataFrame for Overview (ENHANCED)
 def format_structure_data_for_display(structure_data, file_label="Corpus"):
+    """
+    Formats the hierarchical XML structure data into a flat DataFrame for display,
+    limiting sampled values to 20.
+    """
     if not structure_data:
         return None
 
     table_data = []
-    
-    header = ["Tag", "Attribute"] + [f"Value {i+1}" for i in range(5)] # Limit to top 5 for brevity
+    header = ["Tag", "Attribute", "Sampled Values (Max 20)"]
     
     # Iterate through tags to build rows
     for tag in sorted(structure_data.keys()):
         tag_data = structure_data[tag]
         
-        # Get unique attributes and sort them
         sorted_tag_attributes = sorted(tag_data.keys())
 
         for attr_idx, attr in enumerate(sorted_tag_attributes):
             value_list = sorted(list(tag_data.get(attr, set()))) 
             
-            # Only show Tag name on the first attribute row
+            # Only show Tag name on the first attribute row to show hierarchy
             tag_cell = tag if attr_idx == 0 else ""
             
-            row = [tag_cell, attr] 
+            # Join sampled values (up to 20) into a single string
+            sampled_values_str = ", ".join(value_list[:20])
+            if len(value_list) > 20:
+                sampled_values_str += f", ... ({len(value_list) - 20} more unique values)"
             
-            # Add sampled values (up to 5)
-            row.extend(value_list[:5])
-            
-            # Pad with empty strings if fewer than 5 values
-            row.extend([""] * (5 - len(value_list))) 
-                
+            row = [tag_cell, attr, sampled_values_str] 
             table_data.append(row)
 
     # Convert to DataFrame
     structure_df_final = pd.DataFrame(table_data, columns=header)
+    # Apply styling for visual hierarchy
     return structure_df_final.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[:, ['Tag', 'Attribute']])
 
 
@@ -878,8 +878,10 @@ def parse_xml_content_to_df(file_source):
         # Enhancement: Check for 'lang' attribute in the root or an expected child ('text' or 'corpus')
         lang_code = root.get('lang')
         if not lang_code:
+            # Look for lang attribute in <text> or <corpus> tag in the raw string
             lang_match = re.search(r'(<text\s+lang="([^"]+)">|<corpus\s+[^>]*lang="([^"]+)">)', xml_content)
             if lang_match:
+                # Group 2 is from <text>, Group 3 is from <corpus>
                 lang_code = lang_match.group(2) or lang_match.group(3)
                 
         if not lang_code:
@@ -965,7 +967,10 @@ def parse_xml_content_to_df(file_source):
             
         else:
             # Raw Text XML format (Linear) - content is inside the <sent> tag itself
-            inner_content = sent_elem.text.strip() if sent_elem.text else ""
+            
+            # FIX: Use itertext() to extract all text content robustly, ignoring child tags/attributes
+            raw_sentence_text = "".join(sent_elem.itertext()).strip() 
+            inner_content = raw_sentence_text
             
             # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
             normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
@@ -985,15 +990,17 @@ def parse_xml_content_to_df(file_source):
                     
                     df_data.append({"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id})
                     raw_tokens.append(token)
-                raw_sentence_text = " ".join(raw_tokens)
+                # Keep raw_sentence_text as is (extracted via itertext()) for the sent_map
             
             else:
                 # Pure Horizontal text (raw) - requires tokenization
-                raw_sentence_text = inner_content.replace('\n', ' ').replace('\t', ' ')
+                
+                # Use the clean raw_sentence_text derived from itertext()
+                raw_text_to_tokenize = raw_sentence_text.replace('\n', ' ').replace('\t', ' ')
                 
                 # --- FIXED TOKENIZATION ---
                 # 1. Add spaces around punctuation/symbols 
-                cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
+                cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text_to_tokenize) 
                 # 2. Split by any whitespace that remains
                 tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
                 # --------------------------
@@ -1075,7 +1082,8 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                             engine="python", 
                             dtype=str, 
                             skipinitialspace=True,
-                            usecols=[0, 1, 2] 
+                            usecols=[0, 1, 2], 
+                            names=['token', 'pos', 'lemma'] # Assign names immediately
                         )
                         # Success check for T/P/L format
                         if df_attempt is not None and df_attempt.shape[1] >= 3:
@@ -1086,7 +1094,6 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                 
                 if df_attempt is not None and df_attempt.shape[1] >= 3:
                     df_file = df_attempt.copy()
-                    df_file.columns = ["token", "pos", "lemma"]
                     df_file["token"] = df_file["token"].fillna("").astype(str).str.strip() 
                     df_file["pos"] = df_file["pos"].fillna("###").astype(str)
                     df_file["lemma"] = df_file["lemma"].fillna("###").astype(str)
@@ -1652,7 +1659,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.36 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.37 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2162,7 +2169,7 @@ if st.session_state['view'] == 'overview':
         structure_df_styled = format_structure_data_for_display(structure_data, file_label)
 
         if structure_df_styled is not None:
-            st.caption(f"Showing structure from: **{file_label}**. Note: Only up to 5 unique values per attribute are displayed for brevity.")
+            st.caption(f"Showing structure from: **{file_label}**. Unique attribute values are sampled (Max 20 per attribute).")
             st.dataframe(structure_df_styled, 
                          hide_index=True, 
                          use_container_width=True)
@@ -2464,7 +2471,7 @@ if st.session_state['view'] == 'dictionary':
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
     
     # Add CEFR check here for robustness in dictionary
-    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus
+    cefr_active = CEFR_ANALYZER and is_english_corpus # Use CEFR_ANALYZER check here
 
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
@@ -2902,4 +2909,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
