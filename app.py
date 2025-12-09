@@ -480,7 +480,8 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
             # --- POS Line ---
             if show_pos:
                 pos_val = pos if pos not in ('##', '###') else ''
-                lines.pos_val = pos_val
+                # FIX APPLIED HERE: Must append to the list, not assign to an attribute
+                lines.append(pos_val) 
             
             # --- Lemma Line ---
             if show_lemma:
