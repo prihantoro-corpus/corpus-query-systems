@@ -2584,9 +2584,20 @@ if st.session_state['view'] == 'dictionary':
     
     # ------------------ CEFR Column Insertion (FIXED) ------------------
     if cefr_active: # This runs only if is_english_corpus is True
-        forms_list.insert(forms_list.shape[1], 'CEFR', forms_list['Token'].apply(lambda t: 
-            CEFR_ANALYZER.get_cefr_level(t.lower()).upper() if CEFR_ANALYZER else '##'
-        ))
+        
+        def safe_get_cefr(token):
+            """Safely calls CEFR_ANALYZER and catches exceptions from cefrpy library."""
+            if not CEFR_ANALYZER:
+                return '##'
+            try:
+                # The token is already lowercased by the main frequency counter, but applying lower() again for robustness
+                return CEFR_ANALYZER.get_cefr_level(token).upper()
+            except Exception:
+                # Catch any error (e.g., word not found, internal library error)
+                return '##'
+
+        forms_list.insert(forms_list.shape[1], 'CEFR', forms_list['Token'].apply(safe_get_cefr))
+        
     else: # Ensure column is present with '##' placeholder
         forms_list.insert(forms_list.shape[1], 'CEFR', '##')
     # -----------------------------------------------------------
