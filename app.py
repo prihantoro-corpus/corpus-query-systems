@@ -2604,11 +2604,11 @@ if st.session_state['view'] == 'dictionary':
         if is_indonesian_corpus: # This runs if corpus_lang is ID
             # Use KBBI for Indonesian dictionary
             pronunciation_url = lambda token: f"https://kbbi.kemdikbud.go.id/entri/{token.lower()}"
-            pronunciation_label = f"Dictionary ({corpus_lang} - KBBI)"
+            pronunciation_label = f"KBBI"
         elif is_english_corpus:
             # Default to YouGlish/generic for English 
             pronunciation_url = lambda token: f"https://dictionary.cambridge.org/dictionary/english/{token}"
-            pronunciation_label = "Pronunciation (EN - YouGlish)"
+            pronunciation_label = "CAMBRIDGE DICTIONARY"
         else:
             # Generic link for other languages / Fallback
             pronunciation_url = lambda token: f"https://forvo.com/word/{token}/#{corpus_lang.lower()}"
@@ -3015,5 +3015,6 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
 
 
