@@ -2635,7 +2635,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         }}
         /* Ensure all data columns use the primary text color */
         .breakdown-table td:nth-child(1), .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3) {{
-            color: #FAFAFA; 
+            color: #000000; 
         }}
         </style>
         """
@@ -3271,6 +3271,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
 
 
 
