@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.30 - KWIC Inline Display Fix
+# CORTEX Corpus Explorer v17.31 - KWIC Inline Display Fix (Syntax Error Corrected)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.30 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.31 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -969,7 +969,9 @@ def parse_xml_content_to_df(file_source):
             # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
             normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
             lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
-            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r дей+\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
+            
+            # SYNTAX ERROR FIXED HERE: r дей+\s+' corrected to r'\s+'
+            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
             
             if is_vertical_format:
                 raw_tokens = []
@@ -1622,7 +1624,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.30 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.31 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
