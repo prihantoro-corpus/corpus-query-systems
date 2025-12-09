@@ -2240,11 +2240,6 @@ if st.session_state['view'] == 'overview':
 
     st.markdown("---")
     
-# app.py (Around Line 2824 - MODULE: CORPUS OVERVIEW)
-# ... [Lines 2800-2823 (Col2, Top Frequency, etc.) unchanged]
-
-    st.markdown("---")
-    
     # --- XML CORPUS STRUCTURE DISPLAY (NEW HIERARCHICAL DISPLAY) ---
     structure_data = st.session_state.get('xml_structure_data')
     if structure_data:
@@ -2281,37 +2276,6 @@ if st.session_state['view'] == 'overview':
              st.json(structure_data)
              
              # Fallback 2: Show the unstyled raw text output if json fails or for comparison
-             def format_structure_data_raw_text(structure_data, max_values=20):
-                 lines = []
-                 for tag in sorted(structure_data.keys()):
-                     lines.append(f"\n<{tag}>")
-                     for attr in sorted(structure_data[tag].keys()):
-                         values = sorted(list(structure_data[tag][attr]))
-                         sampled_values_str = ", ".join(values[:max_values])
-                         if len(values) > max_values:
-                             sampled_values_str += f", ... ({len(values) - max_values} more unique)"
-                         lines.append(f"    @{attr}: [{sampled_values_str}]")
-                 return "\n".join(lines)
-                 
-             st.code(format_structure_data_raw_text(structure_data))
-             # --- END DIAGNOSTIC/FALLBACK ---
-             
-    # -----------------------------------------------------
-
-    st.markdown("---")
-# ... [Rest of the app.py file unchanged]
-        st.markdown(
-            f"""
-            <div style="font-family: monospace; font-size: 0.9em; padding: 10px; background-color: #282828; border-radius: 5px;">
-            {structure_html}
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-        
-        # --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY (NEW) ---
-        with st.expander("Show Raw XML Structure Data (for debugging)"):
-             # Regenerate structure for simple text display for robust fallback
              def format_structure_data_raw_text(structure_data, max_values=20):
                  lines = []
                  for tag in sorted(structure_data.keys()):
@@ -3132,4 +3096,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
