@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.38 - Robust XML Token Filtering & Structure Hierarchy & KOSLAT-ID
+# CORTEX Corpus Explorer v17.39 - Syntax Error Fix (Triple Quotes for HTML f-strings)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.38 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.39 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1686,7 +1686,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.38 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.39 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2304,7 +2304,8 @@ if st.session_state['view'] == 'n_gram':
     
     # Use a scrollable container
     html_table = n_gram_display_df.to_html(index=False, classes=['n-gram-table'])
-    st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+    # FIX 3.1: Change to triple quotes for robustness
+    st.markdown(f"""<div class='scrollable-table'>{html_table}</div>""", unsafe_allow_html=True)
 
     # --- Download Button ---
     st.markdown("---")
@@ -2450,7 +2451,8 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     # Use HTML table and escape=False to preserve the HTML formatting (inline styles)
     html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
-    scrollable_html = f"<div class='dataframe-container-scroll">{html_table}</div>"
+    # FIX 1: Change to triple quotes for robustness
+    scrollable_html = f"""<div class='dataframe-container-scroll'>{html_table}</div>"""
 
     st.markdown(scrollable_html, unsafe_allow_html=True)
 
@@ -2503,8 +2505,8 @@ if st.session_state['view'] == 'dictionary':
     english_langs = ('EN', 'ENG', 'ENGLISH') 
     is_english_corpus = corpus_lang in english_langs
     
-    # Explicitly check for Indonesian
-    if corpus_lang == 'ID':
+    # Explicitly check for Indonesian (or any non-English where IPA/CEFR is not supported)
+    if corpus_lang in ('ID', 'INDONESIAN'):
          is_english_corpus = False
 
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
@@ -2584,7 +2586,7 @@ if st.session_state['view'] == 'dictionary':
     
     if not IPA_FEATURE_AVAILABLE:
         st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
-    elif not is_english_corpus:
+    elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
         st.info(f"💡 Phonetic Transcription (IPA) is disabled for non-English corpus ({SOURCE_LANG_CODE}).")
         
     if not CEFR_FEATURE_AVAILABLE and is_english_corpus:
@@ -2694,7 +2696,8 @@ if st.session_state['view'] == 'dictionary':
         st.markdown(kwic_table_style, unsafe_allow_html=True)
         
         html_table = kwic_preview.to_html(escape=False, classes=['dict-kwic-table'], index=False)
-        scrollable_html = f"<div class='dictionary-kwic-container'>{html_table}</div>"
+        # FIX 2: Change to triple quotes for robustness
+        scrollable_html = f"""<div class='dictionary-kwic-container'>{html_table}</div>"""
         st.markdown(scrollable_html, unsafe_allow_html=True)
     else:
         st.info("No examples found.")
@@ -2876,7 +2879,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         
         # Use a scrollable container for the main table
         html_table = ll_display_df.to_html(index=False, classes=['collocate-table'])
-        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+        st.markdown(f"""<div class='scrollable-table'>{html_table}</div>""", unsafe_allow_html=True)
         
     with col_mi_table:
         st.markdown(f"**Mutual Information (MI) (obs ≥ {mi_min_freq}, Top {len(full_mi)})**")
@@ -2886,7 +2889,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         
         # Use a scrollable container for the main table
         html_table = mi_display_df.to_html(index=False, classes=['collocate-table'])
-        st.markdown(f"<div class='scrollable-table'>{html_table}</div>", unsafe_allow_html=True)
+        st.markdown(f"""<div class='scrollable-table'>{html_table}</div>""", unsafe_allow_html=True)
 
     # ---------- Download Buttons ----------
     st.markdown("---")
