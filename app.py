@@ -781,38 +781,66 @@ def download_file_to_bytesio(url):
     except Exception as e:
         st.error(f"Failed to download built-in corpus from {url}. Ensure the file is public and the URL is a RAW content link.")
         return None
+
+# --- NEW: Robust XML Sanitization Helper ---
+def sanitize_xml_content(file_source):
+    """
+    Reads file content, performs robust cleaning for control characters 
+    and unescaped entities, and returns the cleaned string.
+    """
+    file_source.seek(0)
+    
+    try:
+        xml_content_bytes = file_source.read()
+        xml_content = xml_content_bytes.decode('utf-8')
         
+        # 1. Remove illegal control characters (keep \t, \n, \r)
+        # XML 1.0 valid chars: #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+        # Python's re.sub below handles the main C0/C1 control blocks
+        illegal_chars_re = re.compile(u'[^\u0020-\uD7FF\uE000-\uFFFD\u0009\u000A\u000D]', re.IGNORECASE)
+        cleaned_xml_content = illegal_chars_re.sub('', xml_content)
+        
+        # 2. Fix unescaped ampersands (&) that are not part of an existing entity reference (e.g., &amp;)
+        cleaned_xml_content = re.sub(r'&(?![A-Za-z0-9#]{2,5};|#)', r'&amp;', cleaned_xml_content)
+        
+        # 3. Aggressive: Remove leading/trailing whitespace which sometimes confuses parsers
+        cleaned_xml_content = cleaned_xml_content.strip()
+        
+        return cleaned_xml_content
+        
+    except Exception as e:
+        st.session_state['xml_structure_error'] = f"File Read/Decode Error: {e}"
+        return None
+# ----------------------------------------------
+
+
 # ---------------------------------------------------------------------
-# XML PARSING HELPERS (Refactored)
+# XML PARSING HELPERS (Refactored to use sanitize_xml_content)
 # ---------------------------------------------------------------------
 
 def extract_xml_structure(file_source, max_values=20):
     """
-    Parses an XML file and extracts all unique tags, their attributes,
-    and a sample of their unique attribute values.
-    Returns: {tag_name: {attr_name: set_of_values, ...}, ...}
+    Parses an XML file and extracts structure, using ET.fromstring on the cleaned content.
     """
     if file_source is None:
         return None
     
-    # Must clone the file object before parsing to avoid modifying the original stream 
-    
     if isinstance(file_source, list):
         if not file_source: return None
-        # For multiple files, we only analyze the structure of the first file
         file_to_analyze = file_source[0]
     else:
         file_to_analyze = file_source
 
-    # Ensure the stream is reset for parsing
-    file_to_analyze.seek(0)
-    file_copy = BytesIO(file_to_analyze.read())
+    # Apply aggressive sanitization first
+    cleaned_xml_content = sanitize_xml_content(file_to_analyze)
+    
+    if cleaned_xml_content is None:
+        return None # Error already captured in session state if sanitization/read failed
 
     # --- AGGRESSIVE ERROR CAPTURE ---
     try:
-        file_copy.seek(0)
-        tree = ET.parse(file_copy)
-        root = tree.getroot()
+        # Parse from string (after cleaning)
+        root = ET.fromstring(cleaned_xml_content) 
         st.session_state['xml_structure_error'] = None # Clear previous error on success
     except Exception as e:
         # Store the exact parsing error string in session state
@@ -895,28 +923,15 @@ def parse_xml_content_to_df(file_source):
     Parses a single XML file, extracts sentences and IDs, and tokenizes/verticalizes if needed.
     Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
     """
-    file_source.seek(0)
+    
+    cleaned_xml_content = sanitize_xml_content(file_source)
+    
+    if cleaned_xml_content is None:
+        return None
     
     try:
-        # 1. Read full content as string and perform pre-cleaning for robustness
-        xml_content_bytes = file_source.read()
-        xml_content = xml_content_bytes.decode('utf-8')
-        
-        # --- ROBUST XML PRE-CLEANING (v17.40) ---
-        # 1. Remove illegal control characters (keep \t, \n, \r)
-        illegal_chars_re = re.compile(u'[^\u0020-\uD7FF\uE000-\uFFFD\u0009\u000A\u000D]', re.IGNORECASE)
-        cleaned_xml_content = illegal_chars_re.sub('', xml_content)
-        
-        # 2. Fix unescaped ampersands (&) that are not part of an existing entity reference (e.g., &amp;)
-        cleaned_xml_content = re.sub(r'&(?![A-Za-z0-9#]{2,5};|#)', r'&amp;', cleaned_xml_content)
-        
-        # --- END ROBUST XML PRE-CLEANING ---
-        
-        # Create a BytesIO stream from the cleaned content to pass to ET.parse
-        cleaned_stream = BytesIO(cleaned_xml_content.encode('utf-8'))
-        
-        tree = ET.parse(cleaned_stream)
-        root = tree.getroot()
+        # Use fromstring for robustness after cleaning
+        root = ET.fromstring(cleaned_xml_content)
         
         # 2. Extract Language Code: Check corpus > text > root attributes
         lang_code = root.get('lang')
@@ -937,6 +952,7 @@ def parse_xml_content_to_df(file_source):
         # Critical failure: XML is not well-formed even after cleaning
         file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
         st.error(f"Error reading or parsing XML file {file_name_label}: {e}")
+        st.session_state['xml_structure_error'] = f"Tokenization Parse Error: {e}" # Ensure tokenization error is also visible
         return None
 
     df_data = []
@@ -2262,8 +2278,8 @@ if st.session_state['view'] == 'overview':
         with st.expander("📊 XML Corpus Structure (Details)", expanded=True):
         
             if structure_error:
-                st.error(f"❌ **XML Parsing Failed in Parser Function.** The underlying Python `xml.etree.ElementTree.parse()` function raised the following error: \n\n`{structure_error}`")
-                st.info("This indicates your file may contain invalid XML characters, unescaped control characters, or be malformed (e.g., missing a closing tag).")
+                st.error(f"❌ **XML Parsing Failed in Parser Function.** The underlying Python `xml.etree.ElementTree.fromstring()` function raised the following error: \n\n`{structure_error}`")
+                st.info("This usually indicates severe malformation, an illegal XML character, or a missing closing tag in the raw corpus file.")
                 
             if structure_data:
                 st.subheader("Structure and Attributes (Hierarchical View)")
