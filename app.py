@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.29 - KWIC Styling and Horizontal Scroll Fix (Final)
+# CORTEX Corpus Explorer v17.30 - KWIC Inline Display Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.29 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.30 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -308,7 +308,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids)
     
-    MODIFIED: Added show_pos and show_lemma flags to control output format.
+    MODIFIED: Uses inline token/tag{lemma} format.
     """
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
@@ -428,7 +428,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     else:
         display_positions = final_positions[:limit]
     
-    # --- Format KWIC lines (MODIFIED for T/P/L display) ---
+    # --- Format KWIC lines (MODIFIED for T/P/L inline display) ---
     kwic_rows = []
     sent_ids = [] # List to store the sentence ID for each KWIC row
     
@@ -447,39 +447,38 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
             full_pos_regex = re.compile("^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$")
             collocate_pos_regex_highlight = full_pos_regex
 
-    # Custom separator for the tokens in the KWIC context (HTML line break for vertical stacking)
-    CONTEXT_SEP = "<br>"
     
-    # Helper to format a single token vertically
-    def format_token_vertical(token, pos, lemma, is_collocate_match=False):
+    # Helper to format a single token (inline format)
+    def format_token_inline(token, pos, lemma, is_collocate_match=False, is_node_word=False):
         
-        # --- Build Token Line (always present) ---
+        # --- 1. Token (main font) ---
         token_html = token
-        if is_collocate_match:
-            # Collocate BOLDED and BRIGHT YELLOW HIGHLIGHTED
-            token_html = f"<b><span style='color: black; background-color: #FFEA00;'>{token}</span></b>"
         
-        # Node word needs to be bolded for visual emphasis
+        # Yellow background for collocate match
+        if is_collocate_match:
+            token_html = f"<span style='color: black; background-color: #FFEA00;'>{token}</span>"
+        
+        # Bold if it's the node word
         if is_node_word:
              token_html = f"<b>{token_html}</b>"
-
-        lines = [token_html]
         
-        # --- POS Line ---
+        output = [token_html]
+        
+        # 2. POS Tagging: /TAG
         if show_pos:
             pos_val = pos if pos not in ('##', '###') else ''
-            # Apply styling: smaller font, gray color
-            styled_pos = f"<span style='font-size: 0.7em; color: #888888; font-weight: normal;'>{pos_val}</span>"
-            lines.append(styled_pos)
+            # Apply styling: smaller font, green color
+            styled_pos = f"<span style='font-size: 0.8em; color: #33CC33;'>{pos_val}</span>"
+            output.append("/" + styled_pos)
         
-        # --- Lemma Line ---
+        # 3. Lemma Tagging: {lemma}
         if show_lemma:
             lemma_val = lemma if lemma not in ('##', '###') else ''
-            # Apply styling: smallest font, light blue/cyan color
-            styled_lemma = f"<span style='font-size: 0.6em; color: #00AAAA; font-weight: normal;'>{lemma_val}</span>"
-            lines.append(styled_lemma)
+            # Apply styling: smallest font, cyan color
+            styled_lemma = f"<span style='font-size: 0.7em; color: #00AAAA;'>{lemma_val}</span>"
+            output.append("{" + styled_lemma + "}")
             
-        return CONTEXT_SEP.join(lines)
+        return "".join(output)
 
 
     for i in display_positions:
@@ -517,25 +516,22 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                     if collocate_to_display == "": # Capture the first matching collocate
                         collocate_to_display = token # Use the original token case
             
-            # NOTE: is_node_word is now a global variable used inside format_token_vertical
-            # We pass it as a default for the sake of the node word itself.
             if is_node_word:
-                # Node is always formatted bold/highlighted (but no yellow background for non-collocate)
-                # The format_token_vertical is designed to use is_node_word inside if it was passed.
-                node_orig_tokens.append(format_token_vertical(token, token_pos, token_lemma, is_collocate_match=False)) 
+                # Format node word(s) as inline, explicitly marking them as node words
+                node_orig_tokens.append(format_token_inline(token, token_pos, token_lemma, is_collocate_match=False, is_node_word=True)) 
             else:
-                formatted_line.append(format_token_vertical(token, token_pos, token_lemma, is_collocate_match=is_collocate_match))
+                # Format context tokens (potentially collocates)
+                formatted_line.append(format_token_inline(token, token_pos, token_lemma, is_collocate_match=is_collocate_match, is_node_word=False))
 
 
         node_start_rel = i - kwic_start
         node_end_rel = node_start_rel + primary_target_len
 
-        # The context lists contain strings already formatted with CONTEXT_SEP (<br>)
         left_context = formatted_line[:node_start_rel]
         right_context = formatted_line[node_end_rel:]
-        node_orig = " ".join(node_orig_tokens) # Node tokens are joined by a space, they internally use <br>
+        node_orig = " ".join(node_orig_tokens) 
         
-        # Join the token groups by a *single* space (tokens within a context are separated by space)
+        # Join the token groups by a *single* space
         kwic_rows.append({
             "Left": " ".join(left_context), 
             "Node": node_orig, 
@@ -973,7 +969,7 @@ def parse_xml_content_to_df(file_source):
             # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
             normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
             lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
-            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
+            is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r дей+\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
             
             if is_vertical_format:
                 raw_tokens = []
@@ -1354,7 +1350,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     Generates and displays KWIC examples for a list of top collocates.
     Displays up to KWIC_COLLOC_DISPLAY_LIMIT total examples.
     
-    MODIFIED: Now passes through show_pos and show_lemma flags.
+    MODIFIED: Uses inline token/tag{lemma} format and simplified styling.
     """
     if top_collocates_df.empty:
         st.info("No collocates to display examples for.")
@@ -1363,30 +1359,26 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     colloc_list = top_collocates_df.head(KWIC_COLLOC_DISPLAY_LIMIT)
     collex_rows_total = []
     
-    # Custom KWIC table style for 4 or 5 columns (Collocate, Left, Node, Right, [Translation])
-    # MODIFIED: Increased min-width and ensured horizontal scroll for wide contexts.
+    # Custom KWIC table style (reverted to standard Streamlit-friendly structure)
     collocate_example_table_style = f"""
         <style>
         .collex-table-container-fixed {{
             max-height: 400px; /* Fixed height for scrollable view */
-            overflow-x: auto; /* Allow horizontal scroll for wide context */
             overflow-y: auto;
             margin-bottom: 1rem;
             width: 100%;
         }}
         .collex-table-inner table {{ 
-            width: fit-content !important; /* Allow table to grow beyond container */
-            min-width: 1200px; /* Ensure table is wide enough to prevent unnecessary wrapping */
-            table-layout: auto; 
+            width: 100%; 
+            table-layout: auto; /* Revert to auto layout for responsive inline text */
             font-family: monospace; 
             color: white; 
         }}
         .collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; white-space: nowrap; }}
         
-        /* Apply vertical stacking properties to context cells */
+        /* Apply inline alignment to context cells */
         .collex-table-inner td:nth-child(2), .collex-table-inner td:nth-child(3), .collex-table-inner td:nth-child(4) {{
-             white-space: pre-wrap; /* Allows line breaks (from <br> in content) */
-             text-align: right; /* Default alignment */
+             white-space: normal; /* Allow normal wrap for inline text */
              vertical-align: top;
              padding: 5px 10px;
         }}
@@ -1451,7 +1443,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             header += f"<th>Translation ({TARGET_LANG_CODE})</th>"
         header += "</tr>"
         
-        # Use HTML table and escape=False to preserve the HTML formatting (line breaks)
+        # Use HTML table and escape=False to preserve the HTML formatting (inline styles)
         html_table = collex_df.to_html(header=False, escape=False, classes=['collex-table-inner'], index=False)
         # Insert the custom header before the table body
         html_table = html_table.replace("<thead></thead>", f"<thead>{header}</thead>", 1)
@@ -1630,7 +1622,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.29 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.30 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1851,7 +1843,7 @@ with st.sidebar:
         st.session_state['show_lemma'] = show_lemma
         
         if show_pos_tag or show_lemma:
-            st.caption("Context will display tokens, POS, and/or Lemma vertically (separated by a custom line break) and is scrollable horizontally.")
+            st.caption("Context displays in the format: **token/TAG{lemma}**")
 
         st.markdown("---")
         
@@ -2334,30 +2326,30 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
             kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
         
-        # --- KWIC Table Style (MODIFIED FOR SCROLL AND VERTICAL TEXT) ---
+        # --- KWIC Table Style (SIMPLIFIED FOR INLINE TEXT) ---
         kwic_table_style = f"""
              <style>
              .dataframe-container-scroll {{
                  max-height: 400px; /* Fixed vertical height */
-                 overflow-x: auto; /* Allow horizontal scroll */
                  overflow-y: auto;
                  margin-bottom: 1rem;
                  width: 100%;
              }}
              .dataframe table {{ 
-                 width: fit-content !important; /* Allow table to grow beyond container */
-                 min-width: 1200px; /* Ensure table is wide enough to prevent unnecessary wrapping */
+                 width: 100%; 
                  table-layout: auto; 
                  font-family: monospace; 
                  color: white;
+                 font-size: 0.9em;
              }}
              .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
              
-             /* Context columns: apply vertical stacking and alignment */
+             /* Context columns: revert to normal wrapping for inline content */
              .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
-                 white-space: pre-wrap; /* Allows line breaks inserted by <br> */
+                 white-space: normal;
                  vertical-align: top;
                  padding: 5px 10px;
+                 line-height: 1.5; /* Spacing for readability */
              }}
              
              .dataframe td:nth-child(2) {{ text-align: right; }} /* Left context is right aligned */
@@ -2371,14 +2363,14 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
              
              .dataframe td:nth-child(4) {{ text-align: left; }} /* Right context is left aligned */
              
-             .dataframe td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.9em; white-space: normal; }} /* Translation Column Style */
+             .dataframe td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column Style */
              
              .dataframe thead th:first-child {{ width: 30px; }}
              </style>
         """
         st.markdown(kwic_table_style, unsafe_allow_html=True)
         
-        # Use HTML table and escape=False to preserve the HTML formatting (line breaks and styling)
+        # Use HTML table and escape=False to preserve the HTML formatting (inline styles)
         html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
         scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
 
@@ -2575,30 +2567,30 @@ if st.session_state['view'] == 'dictionary':
             translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
             kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
 
-        # --- KWIC Table Style (MODIFIED FOR SCROLL AND VERTICAL TEXT) ---
+        # --- KWIC Table Style (SIMPLIFIED FOR INLINE TEXT) ---
         kwic_table_style = f"""
             <style>
             .dictionary-kwic-container {{
                 max-height: 250px; /* Fixed vertical height */
-                overflow-x: auto; /* Allow horizontal scroll */
                 overflow-y: auto;
                 margin-bottom: 1rem;
                 width: 100%;
             }}
             .dict-kwic-table table {{ 
-                width: fit-content !important; 
-                min-width: 1200px;
+                width: 100%; 
                 table-layout: auto; 
                 font-family: monospace; 
                 color: white;
+                font-size: 0.9em;
             }}
             .dict-kwic-table th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
             
-            /* Context columns: apply vertical stacking and alignment */
+            /* Context columns: revert to normal wrapping for inline content */
             .dict-kwic-table td:nth-child(2), .dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4) {{ 
-                white-space: pre-wrap; /* Allows line breaks inserted by <br> */
+                white-space: normal;
                 vertical-align: top;
                 padding: 5px 10px;
+                line-height: 1.5;
             }}
             
             .dict-kwic-table td:nth-child(2) {{ text-align: right; }} /* Left context is right aligned */
@@ -2612,7 +2604,7 @@ if st.session_state['view'] == 'dictionary':
             
             .dict-kwic-table td:nth-child(4) {{ text-align: left; }} /* Right context is left aligned */
             
-            .dict-kwic-table td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.9em; white-space: normal; }} /* Translation Column Style */
+            .dict-kwic-table td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column Style */
             
             .dict-kwic-table thead th:first-child {{ width: 30px; }}
             </style>
