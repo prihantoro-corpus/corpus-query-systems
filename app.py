@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.40 - XML Pre-cleaning for Malformed Data
+# CORTEX Corpus Explorer v17.41 - Explicit Language Selection & KBBI Dictionary Integration
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.40 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.41 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -120,6 +120,9 @@ if 'show_pos_tag' not in st.session_state:
     st.session_state['show_pos_tag'] = False
 if 'show_lemma' not in st.session_state:
     st.session_state['show_lemma'] = False
+# --- New Language State ---
+if 'user_explicit_lang_code' not in st.session_state:
+     st.session_state['user_explicit_lang_code'] = 'EN' # Default to English
 
 
 # ---------------------------
@@ -776,7 +779,6 @@ def extract_xml_structure(file_source, max_values=20):
         return None
     
     # Must clone the file object before parsing to avoid modifying the original stream 
-    # since we cannot know the stream's current position if it was already read.
     
     if isinstance(file_source, list):
         if not file_source: return None
@@ -875,14 +877,10 @@ def parse_xml_content_to_df(file_source):
         
         # --- ROBUST XML PRE-CLEANING (v17.40) ---
         # 1. Remove illegal control characters (keep \t, \n, \r)
-        # Pattern matches anything below ASCII 32, excluding \t, \n, \r.
-        # This is a common fix for malformed XML errors (invalid token)
         illegal_chars_re = re.compile(u'[^\u0020-\uD7FF\uE000-\uFFFD\u0009\u000A\u000D]', re.IGNORECASE)
         cleaned_xml_content = illegal_chars_re.sub('', xml_content)
         
         # 2. Fix unescaped ampersands (&) that are not part of an existing entity reference (e.g., &amp;)
-        # Pattern: & followed by anything that is NOT a space, #, or a word character.
-        # OR: & followed by a space.
         cleaned_xml_content = re.sub(r'&(?![A-Za-z0-9#]{2,5};|#)', r'&amp;', cleaned_xml_content)
         
         # --- END ROBUST XML PRE-CLEANING ---
@@ -1037,6 +1035,11 @@ def parse_xml_content_to_df(file_source):
         st.warning(f"No tokenized data was extracted from the XML file: {file_name_label}.")
         return None
         
+    # If the user selected 'OTHER', we use the detected lang_code from the XML
+    if st.session_state.get('user_explicit_lang_code') == 'OTHER':
+        # This detection is helpful, but we still respect the explicit choice if it was EN/ID
+        pass # The global SOURCE_LANG_CODE will be updated outside this cached function
+
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
 
 
@@ -1044,7 +1047,7 @@ def parse_xml_content_to_df(file_source):
 # Monolingual XML Loader 
 # ---------------------------------------------------------------------
 @st.cache_data
-def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_format):
+def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
     
     st.session_state['parallel_mode'] = False
@@ -1057,11 +1060,14 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
         
     all_df_data = []
     
-    # Set language code from user selection
-    SOURCE_LANG_CODE = selected_lang_code
+    # Set the global language code from the user's explicit selection initially
+    SOURCE_LANG_CODE = explicit_lang_code
     TARGET_LANG_CODE = 'NA'
     
     is_tagged_format = 'verticalised' in selected_format or 'TreeTagger' in selected_format
+    
+    # Track the language detected by the XML parser if explicit code was 'OTHER'
+    xml_detected_lang_code = None
 
     
     for file_source in file_sources:
@@ -1070,11 +1076,11 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
         if file_source.name.lower().endswith('.xml'):
             result = parse_xml_content_to_df(file_source)
             if result:
-                # Overwrite language code only if user chose 'Others' which is the default for parse_xml_content_to_df to override
-                if selected_lang_code == 'OTHER':
-                     SOURCE_LANG_CODE = result['lang_code']
+                # If user chose 'OTHER', we update the explicit and global codes with the XML detected code
+                if explicit_lang_code == 'OTHER' and result['lang_code'] not in ('XML', 'OTHER'):
+                    xml_detected_lang_code = result['lang_code'] # Cache this to set global code later
+                    
                 all_df_data.extend(result['df_data'])
-                # Structure extraction logic is now outside the loop/cached
                 st.session_state['monolingual_xml_file_upload'] = file_source # Keep the last file for structure if XML
         
         else: # TXT, CSV, or assumed RAW (non-XML)
@@ -1094,7 +1100,6 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                 for sep_char in ['\t', r'\s+']: 
                     try:
                         file_buffer_for_pandas.seek(0)
-                        # Explicitly read only 3 columns to mitigate splitting issues
                         df_attempt = pd.read_csv(
                             file_buffer_for_pandas, 
                             sep=sep_char, 
@@ -1103,9 +1108,8 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                             dtype=str, 
                             skipinitialspace=True,
                             usecols=[0, 1, 2], 
-                            names=['token', 'pos', 'lemma'] # Assign names immediately
+                            names=['token', 'pos', 'lemma']
                         )
-                        # Success check for T/P/L format
                         if df_attempt is not None and df_attempt.shape[1] >= 3:
                             break 
                         df_attempt = None 
@@ -1117,10 +1121,8 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                     df_file["token"] = df_file["token"].fillna("").astype(str).str.strip() 
                     df_file["pos"] = df_file["pos"].fillna("###").astype(str)
                     df_file["lemma"] = df_file["lemma"].fillna("###").astype(str)
-                    # Add dummy sent_id for compatibility
                     df_file['sent_id'] = 0 
                     all_df_data.extend(df_file.to_dict('records'))
-                    # Note: SOURCE_LANG_CODE is kept as selected_lang_mono or overridden in XML parsing logic for XML files.
                 else:
                     st.warning(f"File {file_source.name} was expected to be a vertical format but could not be parsed as 3+ columns. Falling back to raw text.")
                     is_tagged_format = False # Fallback to raw for this file
@@ -1137,13 +1139,16 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                     "sent_id": [0] * len(tokens)
                 })
                 all_df_data.extend(df_raw_file.to_dict('records'))
-                SOURCE_LANG_CODE = selected_lang_mono
 
     if not all_df_data:
         return None
         
     df_src = pd.DataFrame(all_df_data)
     df_src["_token_low"] = df_src["token"].str.lower()
+    
+    # If XML detection occurred and user chose 'OTHER', update SOURCE_LANG_CODE
+    if xml_detected_lang_code:
+        SOURCE_LANG_CODE = xml_detected_lang_code
     
     # Structure extraction for the first file (if XML)
     if st.session_state['monolingual_xml_file_upload']:
@@ -1269,6 +1274,7 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
     src_lang = df_raw.columns[0]
     tgt_lang = df_raw.columns[1]
     
+    # These set the global codes for Excel file headers
     SOURCE_LANG_CODE = src_lang
     TARGET_LANG_CODE = tgt_lang
     
@@ -1315,7 +1321,7 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
 
 # --- Monolingual File Dispatcher (Updated for Built-in) ---
 @st.cache_data
-def load_corpus_file_built_in(file_source, corpus_name):
+def load_corpus_file_built_in(file_source, corpus_name, explicit_lang_code):
     # This is a specific loader for built-in text files (old logic simplified)
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
     
@@ -1324,6 +1330,10 @@ def load_corpus_file_built_in(file_source, corpus_name):
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
     st.session_state['xml_structure_data'] = None 
+    
+    # Set the global language code from the user's explicit selection initially
+    SOURCE_LANG_CODE = explicit_lang_code
+    TARGET_LANG_CODE = 'NA'
          
     if file_source is None: return None
     
@@ -1343,7 +1353,10 @@ def load_corpus_file_built_in(file_source, corpus_name):
             if xml_result:
                 df = pd.DataFrame(xml_result['df_data'])
                 df["_token_low"] = df["token"].str.lower()
-                SOURCE_LANG_CODE = xml_result['lang_code']
+                
+                # If user explicitly selected 'OTHER', update SOURCE_LANG_CODE with the detected code
+                if explicit_lang_code == 'OTHER' and xml_result['lang_code'] not in ('XML', 'OTHER'):
+                    SOURCE_LANG_CODE = xml_result['lang_code']
                 
                 # IMPORTANT: Extract structure from the copy before it's garbage collected
                 file_copy_for_parsing.seek(0)
@@ -1373,11 +1386,6 @@ def load_corpus_file_built_in(file_source, corpus_name):
         st.error(f"Error reading built-in file content: {e}")
         return None
 
-    # Set default global codes for built-in files if not already set by XML parser
-    if SOURCE_LANG_CODE not in ('EN', 'ID'):
-         SOURCE_LANG_CODE = 'EN'
-    TARGET_LANG_CODE = 'NA'
-
     df = pd.DataFrame()
     
     # --- Built-in T/P/L logic (for Europarl, etc.) ---
@@ -1403,10 +1411,6 @@ def load_corpus_file_built_in(file_source, corpus_name):
             df["lemma"] = df["lemma"].fillna("###").astype(str)
             df['sent_id'] = 0 
             
-            # Infer language for the built-in if necessary
-            if not df.empty and df['pos'].str.contains('ID', na=False).sum() > 0:
-                 SOURCE_LANG_CODE = 'ID'
-                 
         except Exception as e:
             st.warning(f"Failed to parse built-in corpus '{corpus_name}' as T/P/L: {e}. Falling back to raw tokenization.")
             df = pd.DataFrame() 
@@ -1432,8 +1436,6 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     """
     Generates and displays KWIC examples for a list of top collocates.
     Displays up to KWIC_COLLOC_DISPLAY_LIMIT total examples.
-    
-    MODIFIED: Uses inline token/tag{lemma} format and flexible width styling.
     """
     if top_collocates_df.empty:
         st.info("No collocates to display examples for.")
@@ -1703,7 +1705,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.40 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.41 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1731,6 +1733,23 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # --- C. GLOBAL LANGUAGE SELECTION (NEW) ---
+    st.markdown("##### 🌐 Language Setting")
+    selected_lang_name = st.selectbox(
+        "Corpus Language (Explicit Selection):",
+        options=["English (EN)", "Indonesian (ID)", "Other (RAW/XML Tag)"],
+        key="global_lang_select",
+        index=1 if SOURCE_LANG_CODE == 'ID' else 0, # Default to ID if it was set globally, otherwise EN
+        on_change=reset_analysis # Reset analysis completely when language changes
+    )
+    
+    # Map selected language to code and store explicitly
+    lang_code_map_sidebar = {"English (EN)": "EN", "Indonesian (ID)": "ID", "Other (RAW/XML Tag)": "OTHER"}
+    explicit_lang_code = lang_code_map_sidebar.get(selected_lang_name, 'OTHER')
+    st.session_state['user_explicit_lang_code'] = explicit_lang_code
+    
+    st.markdown("---")
+    
     # --- B. CUSTOM CORPUS SELECTION MODE ---
     corpus_mode = st.radio(
         "Choose Corpus Type:",
@@ -1743,16 +1762,9 @@ with st.sidebar:
     if corpus_mode == "Monolingual Corpus":
         st.markdown("##### 📁 Monolingual File(s) Upload")
         
-        # Language Selection
-        selected_lang_mono = st.selectbox(
-            "1. Choose Language:",
-            options=["English", "Indonesian", "Other"],
-            key="mono_lang_select"
-        )
-        
-        # Format Selection
+        # Format Selection (Language selection is now explicit)
         selected_format_mono = st.selectbox(
-            "2. Choose Format:",
+            "1. Choose Format:",
             options=[
                 ".txt (Raw Text/Linear)",
                 ".xml (Raw Text/Linear)",
@@ -1766,23 +1778,19 @@ with st.sidebar:
         
         # File Uploader (Allow multiple)
         uploaded_files_mono = st.file_uploader(
-            "3. Upload Corpus File(s):", 
+            "2. Upload Corpus File(s):", 
             type=["txt","xml", "csv"], 
             accept_multiple_files=True,
             key="mono_file_upload",
             on_change=reset_analysis
         )
         
-        # Map selected language to code
-        lang_code_map = {"English": "EN", "Indonesian": "ID", "Other": "OTHER"}
-        mono_lang_code = lang_code_map.get(selected_lang_mono, 'OTHER')
-        
         # Custom Monolingual Loading Logic
         if uploaded_files_mono:
              with st.spinner(f"Processing Monolingual Corpus ({len(uploaded_files_mono)} file(s))..."):
                 df_source_lang_for_analysis = load_monolingual_corpus_files(
                     uploaded_files_mono, 
-                    mono_lang_code, 
+                    explicit_lang_code, # Use the new explicit selection
                     selected_format_mono
                 )
                 if df_source_lang_for_analysis is not None:
@@ -1860,7 +1868,7 @@ with st.sidebar:
         else:
              corpus_source = download_file_to_bytesio(corpus_url) 
         corpus_name = selected_corpus_name
-        df_source_lang_for_analysis = load_corpus_file_built_in(corpus_source, corpus_name)
+        df_source_lang_for_analysis = load_corpus_file_built_in(corpus_source, corpus_name, explicit_lang_code)
     
     # Use the loaded DF for the rest of the sidebar logic
     df_sidebar = df_source_lang_for_analysis
@@ -2090,16 +2098,21 @@ if df is None:
     st.stop()
 # ---------------------------------------------------------------------
 
-# --- Define Language Suffix for Headers (FIX IMPLEMENTATION) ---
+# --- Define Language Suffix for Headers ---
 is_parallel_mode_active = st.session_state.get('parallel_mode', False)
+# Ensure SOURCE_LANG_CODE is set globally based on the last explicit selection or internal detection
+# This logic must be outside the cached functions but after they run.
+if not is_parallel_mode_active:
+    # If monolingual and was set to 'OTHER', the loader might have detected a code (e.g., KOSLAT detects ID).
+    # We prioritize the global SOURCE_LANG_CODE set by the loader functions.
+    pass # SOURCE_LANG_CODE is already globally updated by the loading functions
+else:
+    # In parallel mode, SOURCE_LANG_CODE is set by the two text inputs/Excel headers, which is fine.
+    pass
+
 lang_display_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
 lang_input_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
 is_monolingual_xml_loaded = st.session_state.get('monolingual_xml_file_upload') is not None
-if is_monolingual_xml_loaded and not is_parallel_mode_active:
-    # Overwrite the suffix if we are in monolingual XML mode
-    lang_display_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
-    lang_input_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
-# --- Adjusted detection for built-in XML (KOSLAT) ---
 if st.session_state.get('xml_structure_data', None) is not None and not is_parallel_mode_active:
      lang_display_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
      lang_input_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
@@ -2517,25 +2530,22 @@ if st.session_state['view'] == 'dictionary':
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
     # --------------------------------------------------------
-    # IPA Feature Logic (REVISED)
+    # IPA/CEFR/Pronunciation Feature Logic (REVISED for KBBI)
     # --------------------------------------------------------
-    # Use the detected/set language code
     corpus_lang = SOURCE_LANG_CODE.upper() 
     
-    # List English/Supported languages for IPA/CEFR
     english_langs = ('EN', 'ENG', 'ENGLISH') 
-    is_english_corpus = corpus_lang in english_langs
+    indonesian_langs = ('ID', 'INDONESIAN')
     
-    # Explicitly check for Indonesian (or any non-English where IPA/CEFR is not supported)
-    if corpus_lang in ('ID', 'INDONESIAN'):
-         is_english_corpus = False
-
+    is_english_corpus = corpus_lang in english_langs
+    is_indonesian_corpus = corpus_lang in indonesian_langs
+    
+    # IPA/CEFR are enabled ONLY for English.
     ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
     cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus
 
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
-        # Continue to Collocation if possible, but skip forms/regex.
     elif not forms_list.empty:
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
         
@@ -2558,15 +2568,19 @@ if st.session_state['view'] == 'dictionary':
                 st.error(f"Error during IPA transcription: {e}")
                 ipa_active = False 
                 
-        # --- Pronunciation Link Logic (REVISED) ---
-        if corpus_lang in ('ID', 'INDONESIAN'):
-             # Use Forvo for Indonesian pronunciation
-            pronunciation_url = lambda token: f"https://forvo.com/word/{token}/#{corpus_lang.lower()}"
-            pronunciation_label = f"Pronunciation ({corpus_lang})"
-        else:
-            # Default to YouGlish for English (or use a placeholder/generic for others)
+        # --- Pronunciation Link Logic (REVISED for KBBI) ---
+        if is_indonesian_corpus:
+             # Use KBBI for Indonesian dictionary
+            pronunciation_url = lambda token: f"https://kbbi.kemdikbud.go.id/entri/{token.lower()}"
+            pronunciation_label = f"Dictionary ({corpus_lang} - KBBI)"
+        elif is_english_corpus:
+            # Default to YouGlish/generic for English 
             pronunciation_url = lambda token: f"https://youglish.com/pronounce/{token}/english"
-            pronunciation_label = "Pronunciation (EN)"
+            pronunciation_label = "Pronunciation (EN - YouGlish)"
+        else:
+             # Generic link for other languages / Fallback
+            pronunciation_url = lambda token: f"https://forvo.com/word/{token}/#{corpus_lang.lower()}"
+            pronunciation_label = f"Pronunciation/Dictionary ({corpus_lang})"
 
 
         # Create a new column with the clickable link HTML
@@ -2605,7 +2619,7 @@ if st.session_state['view'] == 'dictionary':
             unsafe_allow_html=True
         )
     
-    if not IPA_FEATURE_AVAILABLE:
+    if not IPA_FEATURE_AVAILABLE and is_english_corpus:
         st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
     elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
         st.info(f"💡 Phonetic Transcription (IPA) is disabled for non-English corpus ({SOURCE_LANG_CODE}).")
