@@ -1,5 +1,6 @@
 # app.py
-# CORTEX Corpus Explorer v17.50 - Definitive Breakdown Fix
+# CORTEX -- Corpus Explorer Version Alpha (10-Dec-25)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +48,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.50 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX -- Corpus Explorer Version Alpha (10-Dec-25) by PRIHANTORO (www.prihantoro.com; prihantoro@live.undip.ac.id)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -3278,3 +3279,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
