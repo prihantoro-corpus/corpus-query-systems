@@ -2240,21 +2240,25 @@ if st.session_state['view'] == 'overview':
 
     st.markdown("---")
     
-    # --- XML CORPUS STRUCTURE DISPLAY (NEW HIERARCHICAL DISPLAY) ---
-    structure_data = st.session_state.get('xml_structure_data')
-    if structure_data:
-        st.subheader("📊 XML Corpus Structure (Hierarchical View)")
-        
-        file_label = f"Source ({SOURCE_LANG_CODE})" if is_parallel_mode_active else f"Monolingual ({SOURCE_LANG_CODE})"
-        if is_parallel_mode_active:
-             st.caption(f"Showing combined structure from **{SOURCE_LANG_CODE}** and **{TARGET_LANG_CODE}**.")
-        else:
-            st.caption(f"Showing structure from **{file_label}**.")
-            
-        st.caption("Attributes are sampled up to 20 unique values.")
-            
-        # Use the new hierarchical function
-        structure_html = format_structure_data_hierarchical(structure_data)
+# --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY (NEW) ---
+        with st.expander("Show Raw XML Structure Data (for debugging)"):
+             # Regenerate structure for simple text display for robust fallback
+             def format_structure_data_raw_text(structure_data, max_values=20):
+                 lines = []
+                 for tag in sorted(structure_data.keys()):
+                     lines.append(f"\n<{tag}>")
+                     for attr in sorted(structure_data[tag].keys()):
+                         values = sorted(list(structure_data[tag][attr]))
+                         sampled_values_str = ", ".join(values[:max_values])
+                         if len(values) > max_values:
+                             sampled_values_str += f", ... ({len(values) - max_values} more unique)"
+                         lines.append(f"    @{attr}: [{sampled_values_str}]")
+                 return "\n".join(lines)
+                 
+             st.code(format_structure_data_raw_text(structure_data))
+             # --- END DIAGNOSTIC/FALLBACK ---
+
+    st.markdown("---")
 
         st.markdown(
             f"""
@@ -3069,3 +3073,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
