@@ -59,6 +59,15 @@ SOURCE_LANG_CODE = 'EN' # Default source language code
 TARGET_LANG_CODE = 'ID' # Default target language code
 DEFAULT_LANG_CODE = 'RAW'
 
+# Define PMW Bands
+PMW_BANDS = {
+    "Band 1 (Very High)": (52001, 65000),
+    "Band 2 (High)": (39001, 52000),
+    "Band 3 (Mid)": (26001, 39000),
+    "Band 4 (Low)": (13001, 26000),
+    "Band 5 (Very Low)": (0, 13000)
+}
+
 # ---------------------------
 # Initializing Session State
 # ---------------------------
@@ -829,42 +838,48 @@ def extract_xml_structure(file_source, max_values=20):
     
     return structure
 
-# Helper to format structure data into a presentable DataFrame for Overview (ENHANCED)
-def format_structure_data_for_display(structure_data, file_label="Corpus"):
+# Helper to format structure data into an indented HTML list (NEW)
+def format_structure_data_hierarchical(structure_data, indent_level=0, max_values=20):
     """
-    Formats the hierarchical XML structure data into a flat DataFrame for display,
-    limiting sampled values to 20.
+    Formats the hierarchical XML structure data into an indented HTML list.
     """
     if not structure_data:
-        return None
+        return ""
 
-    table_data = []
-    header = ["Tag", "Attribute", "Sampled Values (Max 20)"]
+    html_list = []
     
-    # Iterate through tags to build rows
+    # Helper for indentation and basic styling
+    def get_indent(level):
+        # 1.5em per level for indentation
+        return f'<span style="padding-left: {level * 1.5}em;">'
+
+    # Sort tags alphabetically for consistent display
     for tag in sorted(structure_data.keys()):
         tag_data = structure_data[tag]
         
-        sorted_tag_attributes = sorted(tag_data.keys())
+        # Start the tag line
+        tag_line = f'{get_indent(indent_level)}<span style="color: #6A5ACD; font-weight: bold;">&lt;{tag}&gt;</span></span><br>'
+        html_list.append(tag_line)
+        
+        # Process attributes for this tag
+        if tag_data:
+            
+            # Sort attributes alphabetically for consistent display
+            for attr in sorted(tag_data.keys()):
+                values = sorted(list(tag_data.get(attr, set())))
+                
+                # Format sampled values
+                sampled_values_str = ", ".join(values[:max_values])
+                if len(values) > max_values:
+                    sampled_values_str += f", ... ({len(values) - max_values} more unique)"
 
-        for attr_idx, attr in enumerate(sorted_tag_attributes):
-            value_list = sorted(list(tag_data.get(attr, set()))) 
-            
-            # Only show Tag name on the first attribute row to show hierarchy
-            tag_cell = tag if attr_idx == 0 else ""
-            
-            # Join sampled values (up to 20) into a single string
-            sampled_values_str = ", ".join(value_list[:20])
-            if len(value_list) > 20:
-                sampled_values_str += f", ... ({len(value_list) - 20} more unique values)"
-            
-            row = [tag_cell, attr, sampled_values_str] 
-            table_data.append(row)
+                # Attribute line: indented, showing attribute name and sampled values
+                attr_line = f'{get_indent(indent_level + 1)}'
+                attr_line += f'<span style="color: #8B4513;">@{attr}</span> = '
+                attr_line += f'<span style="color: #3CB371;">"{sampled_values_str}"</span></span><br>'
+                html_list.append(attr_line)
 
-    # Convert to DataFrame
-    structure_df_final = pd.DataFrame(table_data, columns=header)
-    # Apply styling for visual hierarchy
-    return structure_df_final.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[:, ['Tag', 'Attribute']])
+    return "".join(html_list)
 
 
 # Core function to parse XML and extract tokens (used by both monolingual and parallel loaders)
@@ -2225,26 +2240,30 @@ if st.session_state['view'] == 'overview':
 
     st.markdown("---")
     
-    # --- XML CORPUS STRUCTURE DISPLAY (NEW LOCATION) ---
+    # --- XML CORPUS STRUCTURE DISPLAY (NEW HIERARCHICAL DISPLAY) ---
     structure_data = st.session_state.get('xml_structure_data')
     if structure_data:
-        st.subheader("📊 XML Corpus Structure (Tags & Sample Attributes)")
+        st.subheader("📊 XML Corpus Structure (Hierarchical View)")
         
-        # Determine the label based on the mode
         file_label = f"Source ({SOURCE_LANG_CODE})" if is_parallel_mode_active else f"Monolingual ({SOURCE_LANG_CODE})"
         if is_parallel_mode_active:
-             file_label = f"Combined Structure ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
-        
-        structure_df_styled = format_structure_data_for_display(structure_data, file_label)
-
-        if structure_df_styled is not None:
-            st.caption(f"Showing structure from: **{file_label}**. Unique attribute values are sampled (Max 20 per attribute).")
-            # The styled dataframe will be rendered here.
-            st.dataframe(structure_df_styled, 
-                          hide_index=True, 
-                          use_container_width=True)
+             st.caption(f"Showing combined structure from **{SOURCE_LANG_CODE}** and **{TARGET_LANG_CODE}**.")
         else:
-            st.info("Could not extract well-formed XML structure data.")
+            st.caption(f"Showing structure from **{file_label}**.")
+            
+        st.caption("Attributes are sampled up to 20 unique values.")
+            
+        # Use the new hierarchical function
+        structure_html = format_structure_data_hierarchical(structure_data)
+
+        st.markdown(
+            f"""
+            <div style="font-family: monospace; font-size: 0.9em; padding: 10px; background-color: #282828; border-radius: 5px;">
+            {structure_html}
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
     # -----------------------------------------------------
 
     st.markdown("---")
@@ -2581,6 +2600,19 @@ if st.session_state['view'] == 'dictionary':
     # --- ADD FREQUENCY COLUMNS (Absolute and Relative) ---
     forms_list.insert(forms_list.shape[1], 'Absolute Frequency', forms_list['Token'].apply(lambda t: token_counts.get(t.lower(), 0)))
     forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
+    
+    
+    # --- ADD PMW BAND COLUMN (NEW) ---
+    def get_pmw_band(rel_freq):
+        # Rel_freq is already scaled per million (PMW)
+        if rel_freq > PMW_BANDS["Band 1 (Very High)"][0]: return "Band 1 (Very High)"
+        if rel_freq >= PMW_BANDS["Band 2 (High)"][0]: return "Band 2 (High)"
+        if rel_freq >= PMW_BANDS["Band 3 (Mid)"][0]: return "Band 3 (Mid)"
+        if rel_freq >= PMW_BANDS["Band 4 (Low)"][0]: return "Band 4 (Low)"
+        if rel_freq >= PMW_BANDS["Band 5 (Very Low)"][0]: return "Band 5 (Very Low)"
+        return '##'
+        
+    forms_list.insert(forms_list.shape[1], 'PMW Band', forms_list['Relative Frequency (per M)'].apply(get_pmw_band))
     
     # ------------------ CEFR Column Insertion (FIXED) ------------------
     if cefr_active: # This runs only if is_english_corpus is True
