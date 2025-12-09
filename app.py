@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.49 - Finalized Dark Theme Styling for Breakdown Table
+# CORTEX Corpus Explorer v17.50 - Finalized User-Specified Dark Theme Styling
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.49 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.50 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -726,7 +726,7 @@ def compute_ll(k11, k12, k21, k22):
     e11 = (k11 + k12) * (k11 + k21) / total
     e12 = (k11 + k12) * (k12 + k22) / total
     e21 = (k21 + k22) * (k11 + k21) / total
-    e22 = (k21 + k22) * (k12 + kk22) / total
+    e22 = (k21 + k22) * (k12 + k22) / total
     s = 0.0
     for k,e in ((k11,e11),(k12,e12),(k21,e21),(k22,e22)):
         if k > 0 and e > 0: s += k * math.log(k / e)
@@ -944,22 +944,19 @@ def format_structure_data_hierarchical(structure_data, indent_level=0, max_value
         html_list.append(tag_line)
         
         # Process attributes for this tag
-        if tag_data:
+        for attr in sorted(tag_data.keys()):
+            values = sorted(list(tag_data.get(attr, set())))
             
-            # Sort attributes alphabetically for consistent display
-            for attr in sorted(tag_data.keys()):
-                values = sorted(list(tag_data.get(attr, set())))
-                
-                # Format sampled values
-                sampled_values_str = ", ".join(values[:max_values])
-                if len(values) > max_values:
-                    sampled_values_str += f", ... ({len(values) - max_values} more unique)"
+            # Format sampled values
+            sampled_values_str = ", ".join(values[:max_values])
+            if len(values) > max_values:
+                sampled_values_str += f", ... ({len(values) - max_values} more unique)"
 
-                # Attribute line: indented, showing attribute name and sampled values
-                attr_line = f'{get_indent(indent_level + 1)}'
-                attr_line += f'<span style="color: #8B4513;">@{attr}</span> = '
-                attr_line += f'<span style="color: #3CB371;">"{sampled_values_str}"</span></span><br>'
-                html_list.append(attr_line)
+            # Attribute line: indented, showing attribute name and sampled values
+            attr_line = f'{get_indent(indent_level + 1)}'
+            attr_line += f'<span style="color: #8B4513;">@{attr}</span> = '
+            attr_line += f'<span style="color: #3CB371;">"{sampled_values_str}"</span></span><br>'
+            html_list.append(attr_line)
 
     return "".join(html_list)
 
@@ -1795,7 +1792,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.49 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.50 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2602,7 +2599,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     st.markdown("---") # Separator
 
-    # --- NEW: Breakdown of Matching Forms (v17.49: Finalized Dark Theme Styling) ---
+    # --- NEW: Breakdown of Matching Forms (v17.50: Finalized User-Specified Dark Theme Styling) ---
     if not breakdown_df.empty:
         st.subheader(f"Token Breakdown for Query '{raw_target_input}'")
         
@@ -2616,7 +2613,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         .scrollable-breakdown-table {{
             max-height: 300px;
             overflow-y: auto;
-            border: 1px solid #444; 
+            border: 1px solid #444444; /* Use header background color for border */
         }}
         /* Style the table and cells */
         .breakdown-table {{
@@ -2625,20 +2622,20 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             font-size: 0.9em;
         }}
         .breakdown-table th {{
-            background-color: #383838; 
-            color: white;
+            background-color: #444444; /* User's Header Background */
+            color: #FAFAFA;          /* User's Text Color */
             padding: 8px;
             text-align: left;
         }}
         .breakdown-table td {{
-            background-color: #1E1E1E; /* Data cell background */
-            color: #E0E0E0; /* Standard light gray text for all data */
+            background-color: #1F1F1F; /* User's Row Background */
+            color: #FAFAFA;          /* User's Text Color */
             padding: 8px;
             border-bottom: 1px solid #333;
         }}
-        /* Explicitly setting all data column colors to the standard light gray */
+        /* Ensure all data columns use the primary text color */
         .breakdown-table td:nth-child(1), .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3) {{
-            color: #E0E0E0; /* Ensure all data columns are standard light gray */
+            color: #FAFAFA; 
         }}
         </style>
         """
