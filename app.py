@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.32 - KWIC Max Width Fix
+# CORTEX Corpus Explorer v17.31 - KWIC Inline Display Fix (Syntax Error Corrected)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.32 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.31 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -969,7 +969,8 @@ def parse_xml_content_to_df(file_source):
             # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
             normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
             lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
-            # FIX: Corrected Syntax Error in re.split pattern
+            
+            # SYNTAX ERROR FIXED HERE: r дей+\s+' corrected to r'\s+'
             is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
             
             if is_vertical_format:
@@ -1623,7 +1624,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.32 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.31 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2313,8 +2314,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         st.markdown("---")
     # ----------------------------------------
     
-    # --- LAYOUT FIX: Changed ratio from [3, 2] to [4, 1] to maximize KWIC width ---
-    col_kwic, col_freq = st.columns([4, 1], gap="large")
+    col_kwic, col_freq = st.columns([3, 2], gap="large")
 
     with col_kwic:
         st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
@@ -2569,6 +2569,7 @@ if st.session_state['view'] == 'dictionary':
             translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
             kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
 
+        # --- KWIC Table Style (SIMPLIFIED FOR INLINE TEXT) ---
         kwic_table_style = f"""
             <style>
             .dictionary-kwic-container {{
@@ -2864,3 +2865,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
