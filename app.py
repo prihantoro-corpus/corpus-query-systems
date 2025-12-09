@@ -2607,7 +2607,7 @@ if st.session_state['view'] == 'dictionary':
             pronunciation_label = f"Dictionary ({corpus_lang} - KBBI)"
         elif is_english_corpus:
             # Default to YouGlish/generic for English 
-            pronunciation_url = lambda token: f"https://youglish.com/pronounce/{token}/english"
+            pronunciation_url = lambda token: f"https://dictionary.cambridge.org/dictionary/english/{token}"
             pronunciation_label = "Pronunciation (EN - YouGlish)"
         else:
             # Generic link for other languages / Fallback
@@ -3015,4 +3015,5 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
 
