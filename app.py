@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.42 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Texts Explorer v17.42 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -2529,10 +2529,11 @@ if st.session_state['view'] == 'dictionary':
     else:
         forms_list, unique_pos_list, unique_lemma_list = get_all_lemma_forms_details(df, current_dict_word)
 
-    st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
+    # MODIFIED: Changed header to "Word Forms" globally
+    st.subheader(f"Word Forms")
 
     # --------------------------------------------------------
-    # IPA/CEFR/Pronunciation Feature Logic (REVISED for KBBI)
+    # IPA/CEFR/Pronunciation Feature Logic (REVISED for KBBI/Cambridge)
     # --------------------------------------------------------
     corpus_lang = SOURCE_LANG_CODE.upper() 
     
@@ -2549,109 +2550,110 @@ if st.session_state['view'] == 'dictionary':
     # Calculate initial frequency to determine if the token exists at all
     word_freq = token_counts.get(current_dict_word.lower(), 0)
 
-    # --- CUSTOM FIX: Force Forms List for Indonesian Raw Mode ---
-    # This section ensures that the table appears for ID words even if no lemma is found.
-    if is_indonesian_corpus and forms_list.empty and word_freq > 0:
+    # --- GLOBAL FIX: Force Forms List Generation in Raw Mode ---
+    # This section ensures the table appears if the token is found, regardless of POS/Lemma tags.
+    if forms_list.empty and word_freq > 0:
         # Manufacturing the form list for display (as requested)
         forms_list = pd.DataFrame([{
             'token': current_dict_word,
             'pos': '##',
             'lemma': '##'
         }])
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
 
-    if forms_list.empty and not is_raw_mode: 
-        # This block now only runs if the word wasn't found (word_freq == 0),
-        # or if it's not Indonesian and the form list is empty.
-        if word_freq == 0:
-            st.warning(f"Token **'{current_dict_word}'** not found in the corpus.")
-        else:
-            st.warning(f"Token **'{current_dict_word}'** found (Freq: {word_freq}), but no lemma data available to form the linguistic table.")
+    # If the word wasn't found at all (freq is 0 and the manufactured list is still empty)
+    if forms_list.empty:
+        st.warning(f"Token **'{current_dict_word}'** not found in the corpus.")
         st.stop()
-        
-    elif not forms_list.empty:
-        # This block now includes our manufactured table for the ID case
-        forms_list.rename(columns={
-            'token': 'Token', 
-            'pos': 'POS Tag', 
-            'lemma': 'Lemma'
-        }, inplace=True)
-        
-        # --- ADD FREQUENCY COLUMNS (Absolute and Relative) ---
-        forms_list.insert(forms_list.shape[1], 'Absolute Frequency', forms_list['Token'].apply(lambda t: token_counts.get(t.lower(), 0)))
-        forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
-        
-        if cefr_active: # This runs only if is_english_corpus is True
-            # Placeholder for CEFR logic
-            forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
-        
-        if ipa_active: # This runs only if is_english_corpus is True
-            try:
-                def get_ipa_transcription(token):
-                    try:
-                        import eng_to_ipa as ipa 
-                        return ipa.convert(token)
-                    except Exception:
-                        return "IPA N/A"
 
-                forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token'].apply(get_ipa_transcription))
-                
-            except Exception as e:
-                st.error(f"Error during IPA transcription: {e}")
-                ipa_active = False 
-                
-        # --- Pronunciation Link Logic (REVISED for KBBI) ---
-        if is_indonesian_corpus: # This runs if corpus_lang is ID
-            # Use KBBI for Indonesian dictionary
-            pronunciation_url = lambda token: f"https://kbbi.kemdikbud.go.id/entri/{token.lower()}"
-            pronunciation_label = f"KBBI"
-        elif is_english_corpus:
-            # Default to YouGlish/generic for English 
-            pronunciation_url = lambda token: f"https://dictionary.cambridge.org/dictionary/english/{token}"
-            pronunciation_label = "CAMBRIDGE DICTIONARY"
-        else:
-            # Generic link for other languages / Fallback
-            pronunciation_url = lambda token: f"https://forvo.com/word/{token}/#{corpus_lang.lower()}"
-            pronunciation_label = f"Pronunciation/Dictionary ({corpus_lang})"
-
-
-        # Create a new column with the clickable link HTML
-        # The column name is the 'pronunciation_label' determined above (e.g., 'Dictionary (ID - KBBI)')
-        forms_list.insert(forms_list.shape[1], pronunciation_label, forms_list['Token'].apply(
-            lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>Link</a>"
-        ))
+    # --- Table Generation (Runs for Tagged or Forced Raw Mode) ---
+    forms_list.rename(columns={
+        'token': 'Token', 
+        'pos': 'POS Tag', 
+        'lemma': 'Lemma'
+    }, inplace=True)
         
-        # Define table styling for cleaner look with markdown
-        html_style = """
-        <style>
-        .forms-list-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-family: Arial, sans-serif;
-            font-size: 0.9em;
-        }
-        .forms-list-table th {
-            background-color: #383838;
-            color: white;
-            padding: 8px;
-            text-align: left;
-        }
-        .forms-list-table td {
-            padding: 8px;
-            border-bottom: 1px solid #444444;
-        }
-        .forms-list-table tr:hover {
-            background-color: #333333;
-        }
-        </style>
-        """
-        st.markdown(html_style, unsafe_allow_html=True)
+    # --- ADD FREQUENCY COLUMNS (Absolute and Relative) ---
+    forms_list.insert(forms_list.shape[1], 'Absolute Frequency', forms_list['Token'].apply(lambda t: token_counts.get(t.lower(), 0)))
+    forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
+    
+    if cefr_active: # This runs only if is_english_corpus is True
+        # Placeholder for CEFR logic
+        forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
+    else: # NEW: Ensure column is present with '##' placeholder
+        forms_list.insert(forms_list.shape[1], 'CEFR', '##')
+    
+    if ipa_active: # This runs only if is_english_corpus is True
+        try:
+            def get_ipa_transcription(token):
+                try:
+                    import eng_to_ipa as ipa 
+                    return ipa.convert(token)
+                except Exception:
+                    return "IPA N/A"
 
-        st.markdown(
-            forms_list.to_html(index=False, escape=False, classes=['forms-list-table']), 
-            unsafe_allow_html=True
-        )
-        
+            forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token'].apply(get_ipa_transcription))
+            
+        except Exception as e:
+            st.error(f"Error during IPA transcription: {e}")
+            ipa_active = False 
+            
+    # NEW: Ensure column is present with '##' placeholder if not active/failed
+    if not ipa_active:
+        forms_list.insert(forms_list.shape[1], 'IPA Transcription', '##')
+            
+    # --- Pronunciation Link Logic (REVISED for KBBI/Cambridge) ---
+    if is_indonesian_corpus: # This runs if corpus_lang is ID
+        # Use KBBI for Indonesian dictionary
+        pronunciation_url = lambda token: f"https://kbbi.kemdikbud.go.id/entri/{token.lower()}"
+        pronunciation_label = f"Dictionary ({corpus_lang} - KBBI)"
+    elif is_english_corpus:
+        # Use Cambridge Dictionary for English
+        pronunciation_url = lambda token: f"https://dictionary.cambridge.org/dictionary/english/{token.lower()}"
+        pronunciation_label = "Dictionary (EN - Cambridge)"
+    else:
+        # Generic link for other languages / Fallback
+        pronunciation_url = lambda token: f"https://forvo.com/word/{token}/#{corpus_lang.lower()}"
+        pronunciation_label = f"Pronunciation/Dictionary ({corpus_lang})"
+
+
+    # Create a new column with the clickable link HTML
+    # The column name is the 'pronunciation_label' determined above (e.g., 'Dictionary (ID - KBBI)')
+    forms_list.insert(forms_list.shape[1], pronunciation_label, forms_list['Token'].apply(
+        lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>Link</a>" # Changed to 'Link' for brevity
+    ))
+    
+    # Define table styling for cleaner look with markdown
+    html_style = """
+    <style>
+    .forms-list-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: Arial, sans-serif;
+        font-size: 0.9em;
+    }
+    .forms-list-table th {
+        background-color: #383838;
+        color: white;
+        padding: 8px;
+        text-align: left;
+    }
+    .forms-list-table td {
+        padding: 8px;
+        border-bottom: 1px solid #444444;
+    }
+    .forms-list-table tr:hover {
+        background-color: #333333;
+    }
+    </style>
+    """
+    st.markdown(html_style, unsafe_allow_html=True)
+
+    st.markdown(
+        forms_list.to_html(index=False, escape=False, classes=['forms-list-table']), 
+        unsafe_allow_html=True
+    )
+    
     # Feature info messages based on current language
     if not IPA_FEATURE_AVAILABLE and is_english_corpus:
         st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
@@ -3015,6 +3017,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
-
-
