@@ -2240,6 +2240,11 @@ if st.session_state['view'] == 'overview':
 
     st.markdown("---")
     
+# app.py (Around Line 2824 - MODULE: CORPUS OVERVIEW)
+# ... [Lines 2800-2823 (Col2, Top Frequency, etc.) unchanged]
+
+    st.markdown("---")
+    
     # --- XML CORPUS STRUCTURE DISPLAY (NEW HIERARCHICAL DISPLAY) ---
     structure_data = st.session_state.get('xml_structure_data')
     if structure_data:
@@ -2253,9 +2258,48 @@ if st.session_state['view'] == 'overview':
             
         st.caption("Attributes are sampled up to 20 unique values.")
             
-        # Use the hierarchical function to generate HTML
-        structure_html = format_structure_data_hierarchical(structure_data)
+        try:
+            # Use the hierarchical function to generate HTML
+            structure_html = format_structure_data_hierarchical(structure_data)
 
+            st.markdown(
+                f"""
+                <div style="font-family: monospace; font-size: 0.9em; padding: 10px; background-color: #282828; border-radius: 5px;">
+                {structure_html}
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+        except Exception as e:
+            st.error(f"❌ **XML Hierarchical Display FAILED (Error: {e})**. Showing raw data structure below for debugging.")
+            
+        # --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY ---
+        with st.expander("Show Raw XML Structure Data (for debugging & diagnosis)", expanded=True):
+             st.info("The data below is the Python dictionary produced by the XML parser. If this is empty or invalid, the parser failed.")
+             
+             # Show the raw Python dictionary object
+             st.json(structure_data)
+             
+             # Fallback 2: Show the unstyled raw text output if json fails or for comparison
+             def format_structure_data_raw_text(structure_data, max_values=20):
+                 lines = []
+                 for tag in sorted(structure_data.keys()):
+                     lines.append(f"\n<{tag}>")
+                     for attr in sorted(structure_data[tag].keys()):
+                         values = sorted(list(structure_data[tag][attr]))
+                         sampled_values_str = ", ".join(values[:max_values])
+                         if len(values) > max_values:
+                             sampled_values_str += f", ... ({len(values) - max_values} more unique)"
+                         lines.append(f"    @{attr}: [{sampled_values_str}]")
+                 return "\n".join(lines)
+                 
+             st.code(format_structure_data_raw_text(structure_data))
+             # --- END DIAGNOSTIC/FALLBACK ---
+             
+    # -----------------------------------------------------
+
+    st.markdown("---")
+# ... [Rest of the app.py file unchanged]
         st.markdown(
             f"""
             <div style="font-family: monospace; font-size: 0.9em; padding: 10px; background-color: #282828; border-radius: 5px;">
@@ -3088,3 +3132,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
