@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.35 - General KWIC Width & Built-in Corpus Fix
+# CORTEX Corpus Explorer v17.36 - Robust Built-in TPL Parsing Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.35 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.36 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -128,7 +128,6 @@ if 'show_lemma' not in st.session_state:
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
-    "KOSLAT-ID": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
 }
 
@@ -1067,14 +1066,17 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                 for sep_char in ['\t', r'\s+']: 
                     try:
                         file_buffer_for_pandas.seek(0)
+                        # Explicitly read only 3 columns to mitigate splitting issues
                         df_attempt = pd.read_csv(
                             file_buffer_for_pandas, 
                             sep=sep_char, 
                             header=None, 
                             engine="python", 
                             dtype=str, 
-                            skipinitialspace=True
+                            skipinitialspace=True,
+                            usecols=[0, 1, 2] 
                         )
+                        # Success check for T/P/L format
                         if df_attempt is not None and df_attempt.shape[1] >= 3:
                             break 
                         df_attempt = None 
@@ -1082,7 +1084,7 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                         df_attempt = None 
                 
                 if df_attempt is not None and df_attempt.shape[1] >= 3:
-                    df_file = df_attempt.iloc[:, :3].copy()
+                    df_file = df_attempt.copy()
                     df_file.columns = ["token", "pos", "lemma"]
                     df_file["token"] = df_file["token"].fillna("").astype(str).str.strip() 
                     df_file["pos"] = df_file["pos"].fillna("###").astype(str)
@@ -1090,7 +1092,7 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                     # Add dummy sent_id for compatibility
                     df_file['sent_id'] = 0 
                     all_df_data.extend(df_file.to_dict('records'))
-                    SOURCE_LANG_CODE = selected_lang_code
+                    SOURCE_LANG_CODE = selected_lang_mono
                 else:
                     st.warning(f"File {file_source.name} was expected to be a vertical format but could not be parsed as 3+ columns. Falling back to raw text.")
                     is_tagged_format = False # Fallback to raw for this file
@@ -1107,7 +1109,7 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                     "sent_id": [0] * len(tokens)
                 })
                 all_df_data.extend(df_raw_file.to_dict('records'))
-                SOURCE_LANG_CODE = selected_lang_code
+                SOURCE_LANG_CODE = selected_lang_mono
 
     if not all_df_data:
         return None
@@ -1322,38 +1324,40 @@ def load_corpus_file_built_in(file_source, corpus_name):
     df = pd.DataFrame()
     
     # --- REVISED LOGIC FOR BUILT-IN CORPORA (Force vertical T/P/L for known tagged files) ---
-    # Heuristic for known tagged files
+    # Heuristic for known tagged files (Europarl is known to be TreeTagger format)
     is_vertical_format = ("europarl" in corpus_name.lower()) or ("corpus-query-systems" in BUILT_IN_CORPORA.get(corpus_name, "").lower())
 
     if is_vertical_format:
         try:
-            # Use the vertical file loading logic which uses space/tab delimiter and assumes 3 columns
             file_buffer_for_pandas = StringIO(raw_text)
-            df_file = pd.read_csv(
+            
+            # Use strict whitespace separator, but explicitly only read the first 3 columns
+            df = pd.read_csv(
                 file_buffer_for_pandas, 
                 sep=r'\s+', 
                 header=None, 
                 engine="python", 
                 dtype=str, 
-                skipinitialspace=True
+                skipinitialspace=True,
+                usecols=[0, 1, 2], # <--- FIX: ONLY READ T/P/L COLUMNS
+                names=['token', 'pos', 'lemma']
             )
-            # Must have at least 3 columns for T/P/L
-            if df_file.shape[1] >= 3:
-                df = df_file.iloc[:, :3].copy()
-                df.columns = ["token", "pos", "lemma"]
-                df["token"] = df["token"].fillna("").astype(str).str.strip() 
-                df["pos"] = df["pos"].fillna("###").astype(str)
-                df["lemma"] = df["lemma"].fillna("###").astype(str)
-                df['sent_id'] = 0 
-                # Attempt to infer language from token/pos/lemma data if possible
-                if not df.empty and df['pos'].str.contains('ID', na=False).sum() > 0:
-                     SOURCE_LANG_CODE = 'ID'
-            else:
-                # Fallback if it looked vertical but failed the 3-column check
-                raise ValueError("Built-in file could not be parsed as T/P/L vertical format.")
+            
+            # Data cleaning/standardization
+            df["token"] = df["token"].fillna("").astype(str).str.strip() 
+            df["pos"] = df["pos"].fillna("###").astype(str)
+            df["lemma"] = df["lemma"].fillna("###").astype(str)
+            df['sent_id'] = 0 
+            
+            # Attempt to infer language from token/pos/lemma data if possible (original logic)
+            if not df.empty and df['pos'].str.contains('ID', na=False).sum() > 0:
+                 SOURCE_LANG_CODE = 'ID'
+                 
         except Exception as e:
+            # Report the error but continue to raw fallback
             st.warning(f"Failed to parse built-in corpus '{corpus_name}' as T/P/L: {e}. Falling back to raw tokenization.")
             is_vertical_format = False
+            df = pd.DataFrame() # Clear df to force raw fallback
     
     if df.empty or not is_vertical_format:
         # Existing Raw Text Processing (if the file is truly raw or the T/P/L parse failed)
@@ -1647,7 +1651,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.35 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.36 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2379,7 +2383,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
          }}
          .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
          
-         /* KWIC Width Fix: Set proportional column widths */
+         /* KWIC Width Fix: Set proportional column widths (ensures full width is used even without POS/Lemma) */
          .dataframe td:nth-child(1) {{ width: 5%; }} /* No column */
          .dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
          .dataframe td:nth-child(3) {{ 
@@ -2897,4 +2901,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
