@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.33 - KWIC Max Width Fix (Layout Optimization)
+# CORTEX Corpus Explorer v17.34 - Concordance Layout Fix (Frequency Above KWIC)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.33 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.34 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -968,8 +968,7 @@ def parse_xml_content_to_df(file_source):
             # Check for embedded vertical format (multi-line, multi-column data *inside* the tag)
             normalized_content = inner_content.replace('\r\n', '\n').replace('\r', '\n')
             lines = [line.strip() for line in normalized_content.split('\n') if line.strip()]
-            
-            # SYNTAX ERROR FIXED IN v17.31: re.split pattern corrected from r дей+\s+' to r'\s+'
+            # FIX: Corrected Syntax Error in re.split pattern
             is_vertical_format = sum(line.count('\t') > 0 or len(re.split(r'\s+', line.strip())) >= 3 for line in lines) / len(lines) > 0.5
             
             if is_vertical_format:
@@ -1623,7 +1622,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.33 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.34 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2313,77 +2312,76 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         st.markdown("---")
     # ----------------------------------------
     
-    # --- LAYOUT FIX: Changed ratio from [3, 2] to [4, 1] to maximize KWIC width ---
-    col_kwic, col_freq = st.columns([4, 1], gap="large")
+    # --- NEW POSITION: TARGET FREQUENCY (Full Width) ---
+    st.subheader(f"Target Frequency")
+    st.dataframe(results_df, use_container_width=True, hide_index=True)
+    
+    st.markdown("---") # Separator
 
-    with col_kwic:
-        st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
+    # --- KWIC Display (Now Full Width) ---
+    st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
         
-        kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
-        kwic_preview = kwic_df.copy().reset_index(drop=True)
-        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+    kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
+    kwic_preview = kwic_df.copy().reset_index(drop=True)
+    kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
+    
+    # --- NEW: Add Translation Column ---
+    if is_parallel_mode:
+        translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
+        kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
+    
+    # --- KWIC Table Style (SIMPLIFIED FOR INLINE TEXT) ---
+    kwic_table_style = f"""
+        <style>
+        .dataframe-container-scroll {{
+            max-height: 400px; /* Fixed vertical height */
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            width: 100%;
+        }}
+        .dataframe table {{ 
+            width: 100%; 
+            table-layout: auto; 
+            font-family: monospace; 
+            color: white;
+            font-size: 0.9em;
+        }}
+        .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
         
-        # --- NEW: Add Translation Column ---
-        if is_parallel_mode:
-            translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
-            kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
+        /* Context columns: revert to normal wrapping for inline content */
+        .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
+            white-space: normal;
+            vertical-align: top;
+            padding: 5px 10px;
+            line-height: 1.5; /* Spacing for readability */
+        }}
         
-        # --- KWIC Table Style (SIMPLIFIED FOR INLINE TEXT) ---
-        kwic_table_style = f"""
-             <style>
-             .dataframe-container-scroll {{
-                 max-height: 400px; /* Fixed vertical height */
-                 overflow-y: auto;
-                 margin-bottom: 1rem;
-                 width: 100%;
-             }}
-             .dataframe table {{ 
-                 width: 100%; 
-                 table-layout: auto; 
-                 font-family: monospace; 
-                 color: white;
-                 font-size: 0.9em;
-             }}
-             .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
-             
-             /* Context columns: revert to normal wrapping for inline content */
-             .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
-                 white-space: normal;
-                 vertical-align: top;
-                 padding: 5px 10px;
-                 line-height: 1.5; /* Spacing for readability */
-             }}
-             
-             .dataframe td:nth-child(2) {{ text-align: right; }} /* Left context is right aligned */
-             
-             .dataframe td:nth-child(3) {{ 
-                 text-align: center; 
-                 font-weight: bold; 
-                 background-color: #f0f0f0; 
-                 color: black; 
-             }} /* Node is centered */
-             
-             .dataframe td:nth-child(4) {{ text-align: left; }} /* Right context is left aligned */
-             
-             .dataframe td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column Style */
-             
-             .dataframe thead th:first-child {{ width: 30px; }}
-             </style>
-        """
-        st.markdown(kwic_table_style, unsafe_allow_html=True)
+        .dataframe td:nth-child(2) {{ text-align: right; }} /* Left context is right aligned */
         
-        # Use HTML table and escape=False to preserve the HTML formatting (inline styles)
-        html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
-        scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
+        .dataframe td:nth-child(3) {{ 
+            text-align: center; 
+            font-weight: bold; 
+            background-color: #f0f0f0; 
+            color: black; 
+        }} /* Node is centered */
+        
+        .dataframe td:nth-child(4) {{ text-align: left; }} /* Right context is left aligned */
+        
+        .dataframe td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column Style */
+        
+        .dataframe thead th:first-child {{ width: 30px; }}
+        </style>
+    """
+    st.markdown(kwic_table_style, unsafe_allow_html=True)
+    
+    # Use HTML table and escape=False to preserve the HTML formatting (inline styles)
+    html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
+    scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
 
-        st.markdown(scrollable_html, unsafe_allow_html=True)
+    st.markdown(scrollable_html, unsafe_allow_html=True)
 
-        st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
-        st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    with col_freq:
-        st.subheader(f"Target Frequency")
-        st.dataframe(results_df, use_container_width=True, hide_index=True)
+    st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
+    st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # -----------------------------------------------------
