@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.34 - Concordance Layout Fix (Frequency Above KWIC)
+# CORTEX Corpus Explorer v17.35 - General KWIC Width & Built-in Corpus Fix
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.34 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.35 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -874,20 +874,21 @@ def parse_xml_content_to_df(file_source):
         root = tree.getroot()
         
         # 2. Extract Language Code
+        # Enhancement: Check for 'lang' attribute in the root or an expected child ('text' or 'corpus')
         lang_code = root.get('lang')
         if not lang_code:
-            lang_match = re.search(r'<text\s+lang="([^"]+)">', xml_content)
+            lang_match = re.search(r'(<text\s+lang="([^"]+)">|<corpus\s+[^>]*lang="([^"]+)">)', xml_content)
             if lang_match:
-                lang_code = lang_match.group(1).upper()
-            else:
-                # Default to XML if no language code is explicitly found
-                lang_code = 'XML' 
-        else:
-            lang_code = lang_code.upper()
+                lang_code = lang_match.group(2) or lang_match.group(3)
+                
+        if not lang_code:
+            # Default to XML if no language code is explicitly found
+            lang_code = 'XML' 
+        
+        lang_code = lang_code.upper()
             
     except Exception as e:
         # Critical failure: XML is not well-formed
-        # Use the name attribute if available, otherwise use a generic label
         file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
         st.error(f"Error reading or parsing XML file {file_name_label}: {e}")
         return None
@@ -1285,6 +1286,8 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
 @st.cache_data
 def load_corpus_file_built_in(file_source, corpus_name):
     # This is a specific loader for built-in text files (old logic simplified)
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
@@ -1311,36 +1314,59 @@ def load_corpus_file_built_in(file_source, corpus_name):
         return None
 
     # Set default global codes for built-in files
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
-    # Assume built-in are English for the defaults
+    # Assume built-in are English for the defaults, but try to infer tagging
     SOURCE_LANG_CODE = 'EN'
     TARGET_LANG_CODE = 'NA'
 
-    # Fallback to Raw Text Processing 
-    try:
-        # --- FIXED TOKENIZATION ---
+    df = pd.DataFrame()
+    
+    # --- REVISED LOGIC FOR BUILT-IN CORPORA (Force vertical T/P/L for known tagged files) ---
+    # Heuristic for known tagged files
+    is_vertical_format = ("europarl" in corpus_name.lower()) or ("corpus-query-systems" in BUILT_IN_CORPORA.get(corpus_name, "").lower())
+
+    if is_vertical_format:
+        try:
+            # Use the vertical file loading logic which uses space/tab delimiter and assumes 3 columns
+            file_buffer_for_pandas = StringIO(raw_text)
+            df_file = pd.read_csv(
+                file_buffer_for_pandas, 
+                sep=r'\s+', 
+                header=None, 
+                engine="python", 
+                dtype=str, 
+                skipinitialspace=True
+            )
+            # Must have at least 3 columns for T/P/L
+            if df_file.shape[1] >= 3:
+                df = df_file.iloc[:, :3].copy()
+                df.columns = ["token", "pos", "lemma"]
+                df["token"] = df["token"].fillna("").astype(str).str.strip() 
+                df["pos"] = df["pos"].fillna("###").astype(str)
+                df["lemma"] = df["lemma"].fillna("###").astype(str)
+                df['sent_id'] = 0 
+                # Attempt to infer language from token/pos/lemma data if possible
+                if not df.empty and df['pos'].str.contains('ID', na=False).sum() > 0:
+                     SOURCE_LANG_CODE = 'ID'
+            else:
+                # Fallback if it looked vertical but failed the 3-column check
+                raise ValueError("Built-in file could not be parsed as T/P/L vertical format.")
+        except Exception as e:
+            st.warning(f"Failed to parse built-in corpus '{corpus_name}' as T/P/L: {e}. Falling back to raw tokenization.")
+            is_vertical_format = False
+    
+    if df.empty or not is_vertical_format:
+        # Existing Raw Text Processing (if the file is truly raw or the T/P/L parse failed)
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
         tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
-        # --------------------------
-        nonsense_tag = "##"
-        nonsense_lemma = "##"
-        
-        pos_tags = [nonsense_tag] * len(tokens)
-        lemmas = [nonsense_lemma] * len(tokens)
-        
         df = pd.DataFrame({
             "token": tokens,
-            "pos": pos_tags,
-            "lemma": lemmas
+            "pos": ["##"] * len(tokens),
+            "lemma": ["##"] * len(tokens)
         })
-        
-        df["_token_low"] = df["token"].str.lower()
-        
-        return df
-        
-    except Exception as raw_e: 
-        st.error(f"Final fallback (Raw Mode) failed for built-in: {raw_e}")
-        return None 
+        df['sent_id'] = 0 
+            
+    df["_token_low"] = df["token"].str.lower()
+    return df 
 
 # -----------------------------------------------------
 # Function to display KWIC examples for collocates (MODIFIED FOR STYLING)
@@ -1350,7 +1376,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     Generates and displays KWIC examples for a list of top collocates.
     Displays up to KWIC_COLLOC_DISPLAY_LIMIT total examples.
     
-    MODIFIED: Uses inline token/tag{lemma} format and simplified styling.
+    MODIFIED: Uses inline token/tag{lemma} format and flexible width styling.
     """
     if top_collocates_df.empty:
         st.info("No collocates to display examples for.")
@@ -1359,7 +1385,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     colloc_list = top_collocates_df.head(KWIC_COLLOC_DISPLAY_LIMIT)
     collex_rows_total = []
     
-    # Custom KWIC table style (reverted to standard Streamlit-friendly structure)
+    # Custom KWIC table style (Now includes flexible width for columns)
     collocate_example_table_style = f"""
         <style>
         .collex-table-container-fixed {{
@@ -1370,29 +1396,27 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
         }}
         .collex-table-inner table {{ 
             width: 100%; 
-            table-layout: auto; /* Revert to auto layout for responsive inline text */
+            table-layout: fixed; /* Fixed layout for proportional columns */
             font-family: monospace; 
             color: white; 
+            font-size: 0.9em;
         }}
         .collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; white-space: nowrap; }}
         
-        /* Apply inline alignment to context cells */
-        .collex-table-inner td:nth-child(2), .collex-table-inner td:nth-child(3), .collex-table-inner td:nth-child(4) {{
-             white-space: normal; /* Allow normal wrap for inline text */
-             vertical-align: top;
-             padding: 5px 10px;
-        }}
+        /* Apply explicit proportional widths to Left, Node, Right, and optionally Translation */
+        .collex-table-inner td:nth-child(1) {{ width: 8%; text-align: left; font-weight: bold; border-right: 1px solid #444; white-space: nowrap; }} /* Collocate Column */
+        .collex-table-inner td:nth-child(2) {{ width: 35%; text-align: right; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Left Context */
         .collex-table-inner td:nth-child(3) {{ 
+             width: 15%; 
              text-align: center; 
              font-weight: bold; 
              background-color: #f0f0f0; 
              color: black; 
-             }} 
+             white-space: normal; vertical-align: top; padding: 5px 10px;
+        }} /* Node */
+        .collex-table-inner td:nth-child(4) {{ width: 35%; text-align: left; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Right Context */
+        .collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 7%; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column (if present, takes remaining width) */
 
-        /* Collocate Column */
-        .collex-table-inner td:nth-child(1) {{ text-align: left; font-weight: bold; width: 8%; border-right: 1px solid #444; white-space: nowrap; }} 
-        /* Translation Column */
-        .collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 15%; font-family: sans-serif; font-size: 0.9em; white-space: normal; }}
         </style>
     """
     st.markdown(collocate_example_table_style, unsafe_allow_html=True)
@@ -1622,7 +1646,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.34 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.35 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1787,7 +1811,8 @@ with st.sidebar:
     # Determine tagging mode safely for filter visibility
     is_raw_mode_sidebar = True
     if df_sidebar is not None and 'pos' in df_sidebar.columns and len(df_sidebar) > 0:
-        count_of_raw_tags = df_sidebar['pos'].str.contains('##', na=False).sum()
+        # Check if 99% or more of tags are the default "##" or "###"
+        count_of_raw_tags = df_sidebar['pos'].str.contains('##|###', na=False).sum()
         is_raw_mode_sidebar = (count_of_raw_tags / len(df_sidebar)) > 0.99
     
     # 2. NAVIGATION
@@ -2023,7 +2048,8 @@ if is_monolingual_xml_loaded and not is_parallel_mode_active:
 # --- CRITICAL STATUS MESSAGE FOR DEBUGGING (SUCCESS PATH) ---
 is_raw_mode = True
 if 'pos' in df.columns and len(df) > 0:
-    count_of_raw_tags = df['pos'].str.contains('##', na=False).sum()
+    # Check if 99% or more of tags are the default "##" or "###"
+    count_of_raw_tags = df['pos'].str.contains('##|###', na=False).sum()
     is_raw_mode = (count_of_raw_tags / len(df)) > 0.99
     
 if is_parallel_mode_active:
@@ -2047,9 +2073,13 @@ unique_types = len(set(tokens_lower_filtered))
 unique_lemmas = df["lemma"].nunique() if "lemma" in df.columns else "###"
 
 freq_df_filtered = df[~df['_token_low'].isin(PUNCTUATION) & ~df['_token_low'].str.isdigit()].copy()
-if is_raw_mode:
-    freq_df_filtered['pos'] = '##'
-freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+# Only include POS in the frequency table if it's a tagged corpus
+if not is_raw_mode:
+    freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+else:
+     freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
+     
+# -------------------------------------------------------------------------------------------------------
 
 
 st.header(app_mode)
@@ -2330,47 +2360,49 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
         kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
     
-    # --- KWIC Table Style (SIMPLIFIED FOR INLINE TEXT) ---
+    # --- KWIC Table Style (REVISED FOR EXPLICIT FLEXIBLE COLUMN WIDTHS) ---
     kwic_table_style = f"""
-        <style>
-        .dataframe-container-scroll {{
-            max-height: 400px; /* Fixed vertical height */
-            overflow-y: auto;
-            margin-bottom: 1rem;
-            width: 100%;
-        }}
-        .dataframe table {{ 
-            width: 100%; 
-            table-layout: auto; 
-            font-family: monospace; 
-            color: white;
-            font-size: 0.9em;
-        }}
-        .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
-        
-        /* Context columns: revert to normal wrapping for inline content */
-        .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
-            white-space: normal;
-            vertical-align: top;
-            padding: 5px 10px;
-            line-height: 1.5; /* Spacing for readability */
-        }}
-        
-        .dataframe td:nth-child(2) {{ text-align: right; }} /* Left context is right aligned */
-        
-        .dataframe td:nth-child(3) {{ 
-            text-align: center; 
-            font-weight: bold; 
-            background-color: #f0f0f0; 
-            color: black; 
-        }} /* Node is centered */
-        
-        .dataframe td:nth-child(4) {{ text-align: left; }} /* Right context is left aligned */
-        
-        .dataframe td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column Style */
-        
-        .dataframe thead th:first-child {{ width: 30px; }}
-        </style>
+         <style>
+         .dataframe-container-scroll {{
+             max-height: 400px; /* Fixed vertical height */
+             overflow-y: auto;
+             margin-bottom: 1rem;
+             width: 100%;
+         }}
+         .dataframe table {{ 
+             width: 100%; 
+             table-layout: fixed; /* Use fixed layout to enforce proportional width */
+             font-family: monospace; 
+             color: white;
+             font-size: 0.9em;
+         }}
+         .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
+         
+         /* KWIC Width Fix: Set proportional column widths */
+         .dataframe td:nth-child(1) {{ width: 5%; }} /* No column */
+         .dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
+         .dataframe td:nth-child(3) {{ 
+             width: 15%; /* Node */
+             text-align: center; 
+             font-weight: bold; 
+             background-color: #f0f0f0; 
+             color: black; 
+         }} 
+         .dataframe td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
+         
+         /* Ensure content can wrap */
+         .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
+             white-space: normal;
+             vertical-align: top;
+             padding: 5px 10px;
+             line-height: 1.5; 
+         }}
+         
+         /* Adjust for Translation column if present (total is 100%) */
+         .dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
+         .dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
+
+         </style>
     """
     st.markdown(kwic_table_style, unsafe_allow_html=True)
     
@@ -2577,14 +2609,26 @@ if st.session_state['view'] == 'dictionary':
             }}
             .dict-kwic-table table {{ 
                 width: 100%; 
-                table-layout: auto; 
+                table-layout: fixed; /* Fixed layout to enforce proportional width */
                 font-family: monospace; 
                 color: white;
                 font-size: 0.9em;
             }}
             .dict-kwic-table th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
             
-            /* Context columns: revert to normal wrapping for inline content */
+            /* KWIC Width Fix: Set proportional column widths */
+            .dict-kwic-table td:nth-child(1) {{ width: 5%; }} /* No column */
+            .dict-kwic-table td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
+            .dict-kwic-table td:nth-child(3) {{ 
+                width: 15%; /* Node */
+                text-align: center; 
+                font-weight: bold; 
+                background-color: #f0f0f0; 
+                color: black; 
+            }} 
+            .dict-kwic-table td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
+            
+            /* Ensure content can wrap */
             .dict-kwic-table td:nth-child(2), .dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4) {{ 
                 white-space: normal;
                 vertical-align: top;
@@ -2592,20 +2636,10 @@ if st.session_state['view'] == 'dictionary':
                 line-height: 1.5;
             }}
             
-            .dict-kwic-table td:nth-child(2) {{ text-align: right; }} /* Left context is right aligned */
-            
-            .dict-kwic-table td:nth-child(3) {{ 
-                text-align: center; 
-                font-weight: bold; 
-                background-color: #f0f0f0; 
-                color: black; 
-            }} /* Node is centered */
-            
-            .dict-kwic-table td:nth-child(4) {{ text-align: left; }} /* Right context is left aligned */
-            
-            .dict-kwic-table td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column Style */
-            
-            .dict-kwic-table thead th:first-child {{ width: 30px; }}
+            /* Adjust for Translation column if present (total is 100%) */
+            .dict-kwic-table th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
+            .dict-kwic-table td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
+
             </style>
         """
         st.markdown(kwic_table_style, unsafe_allow_html=True)
