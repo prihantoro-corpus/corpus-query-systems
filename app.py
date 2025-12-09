@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.44 - Robust XML and CEFR Status Check
+# CORTEX Corpus Explorer v17.45 - Zipf Band Calculation
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.44 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.45 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -59,14 +59,7 @@ SOURCE_LANG_CODE = 'EN' # Default source language code
 TARGET_LANG_CODE = 'ID' # Default target language code
 DEFAULT_LANG_CODE = 'RAW'
 
-# Define PMW Bands
-PMW_BANDS = {
-    "Band 1 (Very High)": (52001, 65000),
-    "Band 2 (High)": (39001, 52000),
-    "Band 3 (Mid)": (26001, 39000),
-    "Band 4 (Low)": (13001, 26000),
-    "Band 5 (Very Low)": (0, 13000)
-}
+# REMOVED: PMW_BANDS dictionary (Replaced by Zipf logic)
 
 # ---------------------------
 # Initializing Session State
@@ -157,6 +150,58 @@ POS_COLOR_MAP = {
 }
 
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
+
+# --------------------------------------------------------
+# NEW FUNCTIONS: Zipf Score and Band Calculation
+# --------------------------------------------------------
+def pmw_to_zipf(pmw):
+    """
+    Convert frequency per million (PMW) to Zipf scale.
+    Formula: Zipf = log10(PMW) + 3
+    """
+    if pmw <= 0:
+        return np.nan
+    # Use max(pmw, EPS) if log throws a domain error, but standard PMW should be > 0 here.
+    return math.log10(pmw) + 3
+
+def zipf_to_band_number(zipf):
+    """
+    Assigns 1–5 band number based on Zipf score.
+    """
+    if pd.isna(zipf):
+        return np.nan
+    elif zipf >= 7.0:
+        return 1
+    elif zipf >= 6.0:
+        return 2
+    elif zipf >= 5.0:
+        return 3
+    elif zipf >= 4.0:
+        return 4
+    else:
+        # Catch all from 1.0 to 3.9
+        return 5
+
+def get_zipf_band_string(pmw):
+    """
+    Calculates Zipf score from PMW and returns the descriptive band string.
+    """
+    zipf = pmw_to_zipf(pmw)
+    band = zipf_to_band_number(zipf)
+    
+    if pd.isna(band):
+        return 'NA'
+
+    band_map = {
+        1: "Band 1 (Zipf >= 7.0)",
+        2: "Band 2 (6.0 <= Zipf < 7.0)",
+        3: "Band 3 (5.0 <= Zipf < 6.0)",
+        4: "Band 4 (4.0 <= Zipf < 5.0)",
+        5: "Band 5 (Zipf < 4.0)"
+    }
+    return band_map.get(band, 'NA')
+# --------------------------------------------------------
+
 
 # --- Word Cloud Function ---
 @st.cache_data
@@ -1748,7 +1793,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.44 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.45 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2688,19 +2733,11 @@ if st.session_state['view'] == 'dictionary':
     forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
     
     
-    # --- ADD PMW BAND COLUMN (NEW) ---
-    def get_pmw_band(rel_freq):
-        # Rel_freq is already scaled per million (PMW)
-        if rel_freq > PMW_BANDS["Band 1 (Very High)"][0]: return "Band 1 (Very High)"
-        if rel_freq >= PMW_BANDS["Band 2 (High)"][0]: return "Band 2 (High)"
-        if rel_freq >= PMW_BANDS["Band 3 (Mid)"][0]: return "Band 3 (Mid)"
-        if rel_freq >= PMW_BANDS["Band 4 (Low)"][0]: return "Band 4 (Low)"
-        if rel_freq >= PMW_BANDS["Band 5 (Very Low)"][0]: return "Band 5 (Very Low)"
-        return '##'
-        
-    forms_list.insert(forms_list.shape[1], 'PMW Band', forms_list['Relative Frequency (per M)'].apply(get_pmw_band))
+    # --- ADD ZIPF BAND COLUMN (UPDATED LOGIC) ---
+    forms_list.insert(forms_list.shape[1], 'Zipf Band', forms_list['Relative Frequency (per M)'].apply(get_zipf_band_string))
     
-    # ------------------ CEFR Column Insertion (FIXED) ------------------
+    
+    # ------------------ CEFR Column Insertion ------------------
     if cefr_active: # This runs only if is_english_corpus is True
         
         def safe_get_cefr(token):
