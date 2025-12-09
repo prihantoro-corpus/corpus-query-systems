@@ -2602,26 +2602,53 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     st.markdown("---") # Separator
 
-    # --- NEW: Breakdown of Matching Forms ---
+# --- NEW: Breakdown of Matching Forms ---
     if not breakdown_df.empty:
         st.subheader(f"Token Breakdown for Query '{raw_target_input}'")
         
         # Display max 100 entries
         breakdown_display_df = breakdown_df.head(100).copy()
         
-        # Use a scrollable container
+        # Use a scrollable container and apply specific table styling
+        # --- MODIFIED CSS FOR VISIBILITY IN DARK THEME (v17.47) ---
         scroll_style_breakdown = f"""
         <style>
+        /* Container for scroll */
         .scrollable-breakdown-table {{
             max-height: 300px;
             overflow-y: auto;
+            border: 1px solid #444; 
+        }}
+        /* Style the table and cells */
+        .breakdown-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }}
+        .breakdown-table th {{
+            background-color: #383838; /* Darker header */
+            color: white;
+            padding: 8px;
+            text-align: left;
+        }}
+        .breakdown-table td {{
+            background-color: #1E1E1E; /* Dark background for cells */
+            color: #E0E0E0; /* Light text for general data */
+            padding: 8px;
+            border-bottom: 1px solid #333;
+        }}
+        /* Specific coloring for frequency columns (Absolute/Relative) for better contrast */
+        .breakdown-table td:nth-child(2), .breakdown-table td:nth-child(3) {{
+            color: #CCFFCC; /* Light green/cyan for numbers */
         }}
         </style>
         """
         st.markdown(scroll_style_breakdown, unsafe_allow_html=True)
 
-        html_table_breakdown = breakdown_display_df.to_html(index=False)
+        # Apply the CSS class 'breakdown-table' to the generated HTML
+        html_table_breakdown = breakdown_display_df.to_html(index=False, classes=['breakdown-table'])
         st.markdown(f"""<div class='scrollable-breakdown-table'>{html_table_breakdown}</div>""", unsafe_allow_html=True)
+        # --- END MODIFIED CSS ---
         
         st.download_button(
             "⬇ Download full token breakdown (xlsx)", 
@@ -3248,3 +3275,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
