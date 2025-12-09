@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.45 - Zipf Band Calculation
+# CORTEX Corpus Explorer v17.46 - Frequency Breakdown and Overview Update
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.45 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.46 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -58,8 +58,6 @@ KWIC_COLLOC_DISPLAY_LIMIT = 20 # Limit for KWIC examples below collocation table
 SOURCE_LANG_CODE = 'EN' # Default source language code
 TARGET_LANG_CODE = 'ID' # Default target language code
 DEFAULT_LANG_CODE = 'RAW'
-
-# REMOVED: PMW_BANDS dictionary (Replaced by Zipf logic)
 
 # ---------------------------
 # Initializing Session State
@@ -152,7 +150,7 @@ POS_COLOR_MAP = {
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'", '---', '--', '-', '...', '«', '»', '—'}
 
 # --------------------------------------------------------
-# NEW FUNCTIONS: Zipf Score and Band Calculation
+# NEW FUNCTIONS: Zipf and Band Calculation (from v17.45)
 # --------------------------------------------------------
 def pmw_to_zipf(pmw):
     """
@@ -161,12 +159,17 @@ def pmw_to_zipf(pmw):
     """
     if pmw <= 0:
         return np.nan
-    # Use max(pmw, EPS) if log throws a domain error, but standard PMW should be > 0 here.
     return math.log10(pmw) + 3
 
-def zipf_to_band_number(zipf):
+
+def zipf_to_band(zipf):
     """
-    Assigns 1–5 band number based on Zipf score.
+    Assign 1–5 Zipf band based on score:
+    Band 1: 7.0–7.9
+    Band 2: 6.0–6.9
+    Band 3: 5.0–5.9
+    Band 4: 4.0–4.9
+    Band 5: 1.0–3.9
     """
     if pd.isna(zipf):
         return np.nan
@@ -178,28 +181,8 @@ def zipf_to_band_number(zipf):
         return 3
     elif zipf >= 4.0:
         return 4
-    else:
-        # Catch all from 1.0 to 3.9
+    else: 
         return 5
-
-def get_zipf_band_string(pmw):
-    """
-    Calculates Zipf score from PMW and returns the descriptive band string.
-    """
-    zipf = pmw_to_zipf(pmw)
-    band = zipf_to_band_number(zipf)
-    
-    if pd.isna(band):
-        return 'NA'
-
-    band_map = {
-        1: "Band 1 (Zipf >= 7.0)",
-        2: "Band 2 (6.0 <= Zipf < 7.0)",
-        3: "Band 3 (5.0 <= Zipf < 6.0)",
-        4: "Band 4 (4.0 <= Zipf < 5.0)",
-        5: "Band 5 (Zipf < 4.0)"
-    }
-    return band_map.get(band, 'NA')
 # --------------------------------------------------------
 
 
@@ -367,9 +350,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
 def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=KWIC_MAX_DISPLAY_LINES, random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False):
     """
     Generalized function to generate KWIC lines based on target and optional collocate filter.
-    Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids)
-    
-    MODIFIED: Uses inline token/tag{lemma} format.
+    Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids, breakdown_df)
     """
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
@@ -404,12 +385,16 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     search_components = [create_structural_matcher(term) for term in search_terms]
     all_target_positions = []
     
+    # --- NEW: Store the actual token that matched at the first position for breakdown ---
+    matching_tokens_at_node_one = []
+    
     # Execute Search Loop (find all positions)
     if primary_target_len == 1 and not is_structural_search:
         target_pattern = search_components[0]['pattern']
         for i, token in enumerate(tokens_lower):
             if target_pattern.fullmatch(token):
                 all_target_positions.append(i)
+                matching_tokens_at_node_one.append(df_corpus['token'].iloc[i]) # Store the original token
     else:
         for i in range(len(tokens_lower) - primary_target_len + 1):
             match = True
@@ -433,10 +418,27 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                         
             if match:
                 all_target_positions.append(i)
+                matching_tokens_at_node_one.append(df_corpus['token'].iloc[i]) # Store the original token (first word in MWU)
                 
     literal_freq = len(all_target_positions)
     if literal_freq == 0:
-        return ([], 0, raw_target_input, 0, []) # Added empty sent_ids
+        return ([], 0, raw_target_input, 0, [], pd.DataFrame()) 
+        
+    # --- NEW: Generate Frequency Breakdown DataFrame ---
+    breakdown_data = Counter(matching_tokens_at_node_one)
+    breakdown_list = []
+    total_tokens_float = float(total_tokens)
+    
+    for token, freq in breakdown_data.most_common():
+        rel_freq = (freq / total_tokens_float) * 1_000_000
+        breakdown_list.append({
+            "Token Form": token, 
+            "Absolute Frequency": freq, 
+            "Relative Frequency (per M)": round(rel_freq, 4)
+        })
+        
+    breakdown_df = pd.DataFrame(breakdown_list)
+    # ---------------------------------------------------
         
     # --- Apply Pattern Filtering ---
     final_positions = all_target_positions
@@ -478,7 +480,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 
     total_matches = len(final_positions)
     if total_matches == 0:
-        return ([], 0, raw_target_input, 0, [])
+        return ([], 0, raw_target_input, 0, [], breakdown_df)
 
     # --- Sample Positions ---
     if random_sample:
@@ -605,7 +607,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
             "Collocate": collocate_to_display # Only filled if pattern search is active
         })
         
-    return (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids) # Added sent_ids
+    return (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids, breakdown_df) # Added breakdown_df
 
 # --- N-GRAM LOGIC FUNCTION (FIXED: Added corpus_id argument for better caching) ---
 @st.cache_data(show_spinner=False)
@@ -1573,8 +1575,8 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
         for rank, (index, row) in enumerate(colloc_list.iterrows()):
             collocate_word = row['Collocate']
             
-            # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
-            kwic_rows, total_matches, _, _, sent_ids = generate_kwic(
+            # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids, breakdown_df)
+            kwic_rows, total_matches, _, _, sent_ids, _ = generate_kwic(
                 df_corpus, node_word, window, window, 
                 pattern_collocate_input=collocate_word, 
                 pattern_collocate_pos_input="", 
@@ -1793,7 +1795,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.45 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.46 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2318,15 +2320,31 @@ if st.session_state['view'] == 'overview':
 
     with col2:
         st.subheader("Top frequency")
-        # FIX: Ensure freq_df is not empty before slicing
+        
+        # --- MODIFICATION START ---
         if not freq_df.empty:
             freq_head = freq_df.head(10).copy()
+            
+            # Calculate Relative Frequency (per M) for the Overview table
+            total_tokens_float = float(total_tokens)
+            freq_head['Relative Frequency (per M)'] = freq_head['frequency'].apply(lambda f: round((f / total_tokens_float) * 1_000_000, 4))
+            
+            # Reorder columns for display
+            display_cols = ["token", "frequency", "Relative Frequency (per M)"]
+            if 'pos' in freq_head.columns:
+                display_cols.insert(1, 'pos')
+            
+            freq_head = freq_head[display_cols]
+            
             freq_head.insert(0,"No", range(1, len(freq_head)+1))
+            freq_head.rename(columns={'token': 'Token', 'frequency': 'Abs. Freq'}, inplace=True)
+            
             st.dataframe(freq_head, use_container_width=True, hide_index=True) 
             st.download_button("⬇ Download full frequency list (xlsx)", data=df_to_excel_bytes(freq_df), file_name="full_frequency_list_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
              st.info("Frequency data not available.")
-
+        # --- MODIFICATION END ---
+        
     st.markdown("---")
     
     # --- XML CORPUS STRUCTURE DISPLAY (NEW HIERARCHICAL DISPLAY) ---
@@ -2536,8 +2554,8 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     # Generate KWIC lines using the reusable function
     with st.spinner("Searching corpus and generating concordance..."):
-        # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
-        kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids = generate_kwic(
+        # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, list_of_sent_ids, breakdown_df)
+        kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids, breakdown_df = generate_kwic(
             df, st.session_state['typed_target_input'], kwic_left, kwic_right, 
             pattern_collocate if is_pattern_search_active else "", 
             pattern_collocate_pos if is_pattern_search_active else "", 
@@ -2548,22 +2566,24 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             show_lemma=show_lemma
         )
     
-    if total_matches == 0:
-        st.warning(f"Target '{raw_target_input}' not found or matched 0 instances after filtering.")
+    if literal_freq == 0: # Check literal_freq here, not total_matches, for consistency with breakdown
+        st.warning(f"Target '{raw_target_input}' not found in corpus.")
         st.stop()
         
     # Prepare metadata for display
     rel_freq = (literal_freq / total_tokens) * 1_000_100
-    wildcard_freq_df = pd.DataFrame([{"Query Result": raw_target_input, "Raw Frequency": literal_freq, "Relative Frequency": f"{rel_freq:.4f}"}])
-    results_df = wildcard_freq_df.rename(columns={"Relative Frequency": "Expected Frequency"})
+    
+    # --- MODIFICATION: Renamed column and updated value ---
+    wildcard_freq_df = pd.DataFrame([{"Query Result": raw_target_input, "Absolute Frequency": literal_freq, "Relative Frequency (per M)": f"{rel_freq:.4f}"}])
+    results_df = wildcard_freq_df 
 
     # --- KWIC Display ---
     st.subheader("📚 Concordance Results")
     
     if is_pattern_search_active:
-        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{raw_target_input}' co-occurring with the specified criteria. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
+        st.success(f"Pattern search successful! Found **{total_matches}** filtered instances of '{raw_target_input}' co-occurring with the specified criteria. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
     else:
-        st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
+        st.success(f"Found **{literal_freq}** total occurrences of the primary target word matching the criteria. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
     
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
@@ -2577,12 +2597,43 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     # ----------------------------------------
     
     # --- NEW POSITION: TARGET FREQUENCY (Full Width) ---
-    st.subheader(f"Target Frequency")
+    st.subheader(f"Target Query Summary")
     st.dataframe(results_df, use_container_width=True, hide_index=True)
     
     st.markdown("---") # Separator
 
+    # --- NEW: Breakdown of Matching Forms ---
+    if not breakdown_df.empty:
+        st.subheader(f"Token Breakdown for Query '{raw_target_input}'")
+        
+        # Display max 100 entries
+        breakdown_display_df = breakdown_df.head(100).copy()
+        
+        # Use a scrollable container
+        scroll_style_breakdown = f"""
+        <style>
+        .scrollable-breakdown-table {{
+            max-height: 300px;
+            overflow-y: auto;
+        }}
+        </style>
+        """
+        st.markdown(scroll_style_breakdown, unsafe_allow_html=True)
+
+        html_table_breakdown = breakdown_display_df.to_html(index=False)
+        st.markdown(f"""<div class='scrollable-breakdown-table'>{html_table_breakdown}</div>""", unsafe_allow_html=True)
+        
+        st.download_button(
+            "⬇ Download full token breakdown (xlsx)", 
+            data=df_to_excel_bytes(breakdown_df), 
+            file_name=f"{raw_target_input.replace(' ', '_')}_token_breakdown.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        st.markdown("---")
+    # -----------------------------------------
+
     # --- KWIC Display (Now Full Width) ---
+    # NOTE: The KWIC display logic uses total_matches, which accounts for the collocate pattern filter.
     st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
         
     kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
@@ -2642,7 +2693,6 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     # Use HTML table and escape=False to preserve the HTML formatting (inline styles)
     html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
-    # FIX 1: Change to triple quotes for robustness
     scrollable_html = f"""<div class='dataframe-container-scroll'>{html_table}</div>"""
 
     st.markdown(scrollable_html, unsafe_allow_html=True)
@@ -2733,11 +2783,15 @@ if st.session_state['view'] == 'dictionary':
     forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
     
     
-    # --- ADD ZIPF BAND COLUMN (UPDATED LOGIC) ---
-    forms_list.insert(forms_list.shape[1], 'Zipf Band', forms_list['Relative Frequency (per M)'].apply(get_zipf_band_string))
+    # ------------------ ZIPF BAND CALCULATION (NEW) ------------------
+    # Calculate Zipf score from Relative Frequency (which is PMW)
+    forms_list.insert(forms_list.shape[1], 'Zipf Score', forms_list['Relative Frequency (per M)'].apply(pmw_to_zipf).round(2))
     
+    # Assign Zipf Band (1-5)
+    forms_list.insert(forms_list.shape[1], 'Zipf Band (1-5)', forms_list['Zipf Score'].apply(zipf_to_band))
+    # -----------------------------------------------------------
     
-    # ------------------ CEFR Column Insertion ------------------
+    # ------------------ CEFR Column Insertion (FIXED) ------------------
     if cefr_active: # This runs only if is_english_corpus is True
         
         def safe_get_cefr(token):
@@ -2874,8 +2928,8 @@ if st.session_state['view'] == 'dictionary':
     show_lemma = st.session_state['show_lemma']
 
     with st.spinner(f"Fetching random concordance examples for '{current_dict_word}'..."):
-        # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
-        kwic_rows, total_matches, _, _, sent_ids = generate_kwic(
+        # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids, breakdown_df)
+        kwic_rows, total_matches, _, _, sent_ids, _ = generate_kwic(
             df, current_dict_word, kwic_left, kwic_right, 
             random_sample=True, limit=KWIC_MAX_DISPLAY_LINES,
             is_parallel_mode=is_parallel_mode,
