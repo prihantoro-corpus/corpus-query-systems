@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.41 - Explicit Language Selection & KBBI Dictionary Integration
+# CORTEX Corpus Explorer v17.42 - Fixed Language Code Propagation for Dictionary Features
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.41 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.42 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -1035,11 +1035,6 @@ def parse_xml_content_to_df(file_source):
         st.warning(f"No tokenized data was extracted from the XML file: {file_name_label}.")
         return None
         
-    # If the user selected 'OTHER', we use the detected lang_code from the XML
-    if st.session_state.get('user_explicit_lang_code') == 'OTHER':
-        # This detection is helpful, but we still respect the explicit choice if it was EN/ID
-        pass # The global SOURCE_LANG_CODE will be updated outside this cached function
-
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
 
 
@@ -1060,7 +1055,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         
     all_df_data = []
     
-    # Set the global language code from the user's explicit selection initially
+    # Set the global language code from the user's explicit selection initially (This is fine for initial state before XML parsing)
     SOURCE_LANG_CODE = explicit_lang_code
     TARGET_LANG_CODE = 'NA'
     
@@ -1076,12 +1071,12 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         if file_source.name.lower().endswith('.xml'):
             result = parse_xml_content_to_df(file_source)
             if result:
-                # If user chose 'OTHER', we update the explicit and global codes with the XML detected code
+                # If user chose 'OTHER', we cache the XML detected code for the global update later
                 if explicit_lang_code == 'OTHER' and result['lang_code'] not in ('XML', 'OTHER'):
-                    xml_detected_lang_code = result['lang_code'] # Cache this to set global code later
+                    xml_detected_lang_code = result['lang_code'] 
                     
                 all_df_data.extend(result['df_data'])
-                st.session_state['monolingual_xml_file_upload'] = file_source # Keep the last file for structure if XML
+                st.session_state['monolingual_xml_file_upload'] = file_source 
         
         else: # TXT, CSV, or assumed RAW (non-XML)
             try:
@@ -1148,7 +1143,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     
     # If XML detection occurred and user chose 'OTHER', update SOURCE_LANG_CODE
     if xml_detected_lang_code:
-        SOURCE_LANG_CODE = xml_detected_lang_code
+        SOURCE_LANG_CODE = xml_detected_lang_code # Update global var inside the cached function if auto-detected
     
     # Structure extraction for the first file (if XML)
     if st.session_state['monolingual_xml_file_upload']:
@@ -1205,8 +1200,9 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
         return None
         
     # 2. Finalize Session State
-    SOURCE_LANG_CODE = src_lang_code # Use user-defined code
-    TARGET_LANG_CODE = tgt_lang_code # Use user-defined code
+    # For Parallel mode, we use the codes provided in the text inputs
+    SOURCE_LANG_CODE = src_lang_code 
+    TARGET_LANG_CODE = tgt_lang_code 
 
     df_src["_token_low"] = df_src["token"].str.lower()
     
@@ -1705,7 +1701,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.41 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.42 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -1735,11 +1731,19 @@ with st.sidebar:
     
     # --- C. GLOBAL LANGUAGE SELECTION (NEW) ---
     st.markdown("##### 🌐 Language Setting")
+    
+    # Set the initial index based on the session state's explicit code
+    initial_lang_index = 0
+    if st.session_state.get('user_explicit_lang_code') == 'ID':
+        initial_lang_index = 1
+    elif st.session_state.get('user_explicit_lang_code') == 'OTHER':
+        initial_lang_index = 2
+
     selected_lang_name = st.selectbox(
         "Corpus Language (Explicit Selection):",
         options=["English (EN)", "Indonesian (ID)", "Other (RAW/XML Tag)"],
         key="global_lang_select",
-        index=1 if SOURCE_LANG_CODE == 'ID' else 0, # Default to ID if it was set globally, otherwise EN
+        index=initial_lang_index, 
         on_change=reset_analysis # Reset analysis completely when language changes
     )
     
@@ -2100,15 +2104,13 @@ if df is None:
 
 # --- Define Language Suffix for Headers ---
 is_parallel_mode_active = st.session_state.get('parallel_mode', False)
-# Ensure SOURCE_LANG_CODE is set globally based on the last explicit selection or internal detection
-# This logic must be outside the cached functions but after they run.
+
+# --- Language Code Override for Monolingual Mode (v17.42 FIX) ---
 if not is_parallel_mode_active:
-    # If monolingual and was set to 'OTHER', the loader might have detected a code (e.g., KOSLAT detects ID).
-    # We prioritize the global SOURCE_LANG_CODE set by the loader functions.
-    pass # SOURCE_LANG_CODE is already globally updated by the loading functions
-else:
-    # In parallel mode, SOURCE_LANG_CODE is set by the two text inputs/Excel headers, which is fine.
-    pass
+     # Force global code to match explicit user selection state for dictionary logic
+     # This is CRITICAL to ensure the dictionary module uses the correct language features
+     SOURCE_LANG_CODE = st.session_state.get('user_explicit_lang_code', 'EN')
+# --------------------------------------------------------------------
 
 lang_display_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
 lang_input_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
@@ -2549,11 +2551,11 @@ if st.session_state['view'] == 'dictionary':
     elif not forms_list.empty:
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
         
-        if cefr_active:
+        if cefr_active: # This runs only if is_english_corpus is True
             # Placeholder for CEFR logic
             forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
         
-        if ipa_active:
+        if ipa_active: # This runs only if is_english_corpus is True
             try:
                 def get_ipa_transcription(token):
                     try:
@@ -2569,7 +2571,7 @@ if st.session_state['view'] == 'dictionary':
                 ipa_active = False 
                 
         # --- Pronunciation Link Logic (REVISED for KBBI) ---
-        if is_indonesian_corpus:
+        if is_indonesian_corpus: # This runs if corpus_lang is ID
              # Use KBBI for Indonesian dictionary
             pronunciation_url = lambda token: f"https://kbbi.kemdikbud.go.id/entri/{token.lower()}"
             pronunciation_label = f"Dictionary ({corpus_lang} - KBBI)"
@@ -2619,6 +2621,7 @@ if st.session_state['view'] == 'dictionary':
             unsafe_allow_html=True
         )
     
+    # Feature info messages based on current language
     if not IPA_FEATURE_AVAILABLE and is_english_corpus:
         st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
     elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
