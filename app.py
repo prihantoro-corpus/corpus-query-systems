@@ -2622,8 +2622,8 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             font-size: 0.9em;
         }}
         .breakdown-table th {{
-            background-color: #444444; /* User's Header Background */
-            color: #FAFAFA;          /* User's Text Color */
+            background-color: #A9A9A9; /* User's Header Background */
+            color: #A9A9A9;          /* User's Text Color */
             padding: 8px;
             text-align: left;
         }}
@@ -3271,6 +3271,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
 
 
 
