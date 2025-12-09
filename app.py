@@ -115,6 +115,11 @@ if 'monolingual_xml_file_upload' not in st.session_state:
 # --- XML Structure Cache ---
 if 'xml_structure_data' not in st.session_state:
      st.session_state['xml_structure_data'] = None
+# --- Display Settings ---
+if 'show_pos_tag' not in st.session_state:
+    st.session_state['show_pos_tag'] = False
+if 'show_lemma' not in st.session_state:
+    st.session_state['show_lemma'] = False
 
 
 # ---------------------------
@@ -298,10 +303,12 @@ def interpret_results_llm(target_word, analysis_type, data_description, data):
     
 # --- KWIC/Concordance Helper Function (Reusable by Dictionary) ---
 @st.cache_data(show_spinner=False)
-def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=KWIC_MAX_DISPLAY_LINES, random_sample=False, is_parallel_mode=False):
+def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=KWIC_MAX_DISPLAY_LINES, random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False):
     """
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids)
+    
+    MODIFIED: Added show_pos and show_lemma flags to control output format.
     """
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
@@ -396,7 +403,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 if i <= j < i + primary_target_len: continue # Skip node word(s)
                 
                 token_lower = tokens_lower[j]
-                token_pos = df_corpus["pos"].iloc[j]
+                token_pos = df_corpus["pos"].iloc[j] if "pos" in df_corpus.columns else '##'
                 
                 word_matches = collocate_word_regex is None or collocate_word_regex.fullmatch(token_lower)
                 pos_matches = collocate_pos_regex is None or (collocate_pos_regex.fullmatch(token_pos) if not is_raw_mode else False)
@@ -421,7 +428,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     else:
         display_positions = final_positions[:limit]
     
-    # --- Format KWIC lines ---
+    # --- Format KWIC lines (MODIFIED for T/P/L display) ---
     kwic_rows = []
     sent_ids = [] # List to store the sentence ID for each KWIC row
     
@@ -439,6 +446,9 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         if pos_patterns:
             full_pos_regex = re.compile("^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$")
             collocate_pos_regex_highlight = full_pos_regex
+
+    # Custom separator for the tokens in the KWIC context (to mimic tab-separated vertical)
+    CONTEXT_SEP = "<span class='tab-sep'></span>"
     
     for i in display_positions:
         kwic_start = max(0, i - current_kwic_left)
@@ -451,19 +461,43 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         else:
             sent_ids.append(None) # Not parallel mode or no ID available
             
-        full_line_tokens = df_corpus["token"].iloc[kwic_start:kwic_end].tolist()
-        
         formatted_line = []
         node_orig_tokens = []
         collocate_to_display = ""
 
         
-        for k, token in enumerate(full_line_tokens):
-            token_index_in_corpus = kwic_start + k
-            token_lower = token.lower()
-            token_pos = df_corpus["pos"].iloc[token_index_in_corpus]
+        # Helper to format a single token vertically
+        def format_token_vertical(token, pos, lemma, is_collocate_match=False):
             
-            is_node_word = (i <= token_index_in_corpus < i + primary_target_len)
+            # --- Build Token Line (always present) ---
+            token_html = token
+            if is_collocate_match:
+                # Collocate BOLDED and BRIGHT YELLOW HIGHLIGHTED
+                token_html = f"<b><span style='color: black; background-color: #FFEA00;'>{token}</span></b>"
+            
+            lines = [token_html]
+            
+            # --- POS Line ---
+            if show_pos:
+                pos_val = pos if pos not in ('##', '###') else ''
+                lines.pos_val = pos_val
+            
+            # --- Lemma Line ---
+            if show_lemma:
+                lemma_val = lemma if lemma not in ('##', '###') else ''
+                lines.append(lemma_val)
+                
+            return CONTEXT_SEP.join(lines)
+
+
+        # Iterate over the context window
+        for k in range(kwic_start, kwic_end):
+            token = df_corpus["token"].iloc[k]
+            token_lower = df_corpus["_token_low"].iloc[k]
+            token_pos = df_corpus["pos"].iloc[k] if "pos" in df_corpus.columns else '##'
+            token_lemma = df_corpus["lemma"].iloc[k] if "lemma" in df_corpus.columns else '##'
+
+            is_node_word = (i <= k < i + primary_target_len)
             
             is_collocate_match = False
             if is_pattern_search_active and not is_node_word:
@@ -476,23 +510,20 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                         collocate_to_display = token # Use the original token case
             
             if is_node_word:
-                node_orig_tokens.append(token)
-                formatted_line.append("") 
-                
-            elif is_collocate_match:
-                # Collocate BOLDED and BRIGHT YELLOW HIGHLIGHTED
-                html_token = f"<b><span style='color: black; background-color: #FFEA00;'>{token}</span></b>"
-                formatted_line.append(html_token)
+                node_orig_tokens.append(format_token_vertical(token, token_pos, token_lemma, is_collocate_match=False)) # Node is not a collocate
             else:
-                formatted_line.append(token)
+                formatted_line.append(format_token_vertical(token, token_pos, token_lemma, is_collocate_match=is_collocate_match))
+
 
         node_start_rel = i - kwic_start
         node_end_rel = node_start_rel + primary_target_len
 
+        # The context lists contain strings already formatted with CONTEXT_SEP
         left_context = formatted_line[:node_start_rel]
         right_context = formatted_line[node_end_rel:]
-        node_orig = " ".join(node_orig_tokens)
+        node_orig = CONTEXT_SEP.join(node_orig_tokens) # Join node tokens by CONTEXT_SEP
         
+        # Join the token groups by space
         kwic_rows.append({
             "Left": " ".join(left_context), 
             "Node": node_orig, 
@@ -737,8 +768,17 @@ def extract_xml_structure(file_source, max_values=20):
     
     # Must clone the file object before parsing to avoid modifying the original stream 
     # since we cannot know the stream's current position if it was already read.
-    file_source.seek(0)
-    file_copy = BytesIO(file_source.read())
+    # Note: file_source can be a list of files in the new Monolingual setup
+    
+    if isinstance(file_source, list):
+        if not file_source: return None
+        # For multiple files, we only analyze the structure of the first file
+        file_to_analyze = file_source[0]
+    else:
+        file_to_analyze = file_source
+
+    file_to_analyze.seek(0)
+    file_copy = BytesIO(file_to_analyze.read())
 
     try:
         file_copy.seek(0)
@@ -966,8 +1006,9 @@ def parse_xml_content_to_df(file_source):
 # ---------------------------------------------------------------------
 # Monolingual XML Loader 
 # ---------------------------------------------------------------------
+# New load function to handle multiple files
 @st.cache_data
-def load_monolingual_xml_corpus(file_source):
+def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_format):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
     
     st.session_state['parallel_mode'] = False
@@ -975,23 +1016,101 @@ def load_monolingual_xml_corpus(file_source):
     st.session_state['target_sent_map'] = {}
     st.session_state['xml_structure_data'] = None # Reset old structure
 
-    file_source.seek(0)
-    result = parse_xml_content_to_df(file_source)
-    
-    if result is None:
+    if not file_sources:
         return None
+        
+    all_df_data = []
     
-    df_src = pd.DataFrame(result['df_data'])
-    
-    # Set global codes for monolingual XML
-    SOURCE_LANG_CODE = result['lang_code']
+    # Set language code from user selection
+    SOURCE_LANG_CODE = selected_lang_code
     TARGET_LANG_CODE = 'NA'
+    
+    is_tagged_format = 'verticalised' in selected_format or 'TreeTagger' in selected_format
 
+    
+    for file_source in file_sources:
+        file_source.seek(0)
+        
+        if file_source.name.lower().endswith('.xml'):
+            result = parse_xml_content_to_df(file_source)
+            if result:
+                # Overwrite language code only if user chose 'Others' which is the default for parse_xml_content_to_df to override
+                if selected_lang_code == 'OTHER':
+                     SOURCE_LANG_CODE = result['lang_code']
+                all_df_data.extend(result['df_data'])
+                # Structure extraction logic is now outside the loop/cached
+                st.session_state['monolingual_xml_file_upload'] = file_source # Keep the last file for structure if XML
+        
+        else: # TXT, CSV, or assumed RAW (non-XML)
+            try:
+                file_bytes = file_source.read()
+                file_content_str = file_bytes.decode('utf-8', errors='ignore')
+                clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
+                clean_content = "\n".join(clean_lines)
+            except Exception as e:
+                st.error(f"Error reading raw file content: {e}")
+                continue
+
+            # Check if it is assumed to be a vertical T/P/L file
+            if is_tagged_format:
+                file_buffer_for_pandas = StringIO(clean_content)
+                df_attempt = None
+                for sep_char in ['\t', r'\s+']: 
+                    try:
+                        file_buffer_for_pandas.seek(0)
+                        df_attempt = pd.read_csv(
+                            file_buffer_for_pandas, 
+                            sep=sep_char, 
+                            header=None, 
+                            engine="python", 
+                            dtype=str, 
+                            skipinitialspace=True
+                        )
+                        if df_attempt is not None and df_attempt.shape[1] >= 3:
+                            break 
+                        df_attempt = None 
+                    except Exception:
+                        df_attempt = None 
+                
+                if df_attempt is not None and df_attempt.shape[1] >= 3:
+                    df_file = df_attempt.iloc[:, :3].copy()
+                    df_file.columns = ["token", "pos", "lemma"]
+                    df_file["token"] = df_file["token"].fillna("").astype(str).str.strip() 
+                    df_file["pos"] = df_file["pos"].fillna("###").astype(str)
+                    df_file["lemma"] = df_file["lemma"].fillna("###").astype(str)
+                    # Add dummy sent_id for compatibility
+                    df_file['sent_id'] = 0 
+                    all_df_data.extend(df_file.to_dict('records'))
+                    SOURCE_LANG_CODE = selected_lang_code
+                else:
+                    st.warning(f"File {file_source.name} was expected to be a vertical format but could not be parsed as 3+ columns. Falling back to raw text.")
+                    is_tagged_format = False # Fallback to raw for this file
+            
+            if not is_tagged_format or selected_format == '.txt': # Raw Text Processing
+                raw_text = clean_content
+                cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
+                tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
+                
+                df_raw_file = pd.DataFrame({
+                    "token": tokens,
+                    "pos": ["##"] * len(tokens),
+                    "lemma": ["##"] * len(tokens),
+                    "sent_id": [0] * len(tokens)
+                })
+                all_df_data.extend(df_raw_file.to_dict('records'))
+                SOURCE_LANG_CODE = selected_lang_code
+
+    if not all_df_data:
+        return None
+        
+    df_src = pd.DataFrame(all_df_data)
     df_src["_token_low"] = df_src["token"].str.lower()
     
-    # --- XML Structure Extraction for Overview ---
-    st.session_state['xml_structure_data'] = extract_xml_structure(file_source)
-    st.session_state['monolingual_xml_file_upload'] = file_source
+    # Structure extraction for the first file (if XML)
+    if st.session_state['monolingual_xml_file_upload']:
+        st.session_state['xml_structure_data'] = extract_xml_structure(st.session_state['monolingual_xml_file_upload'])
+    else:
+        st.session_state['xml_structure_data'] = None
     
     return df_src
 
@@ -1000,7 +1119,7 @@ def load_monolingual_xml_corpus(file_source):
 # Parallel XML Loader
 # ---------------------------------------------------------------------
 @st.cache_data
-def load_xml_parallel_corpus(src_file, tgt_file):
+def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
 
     st.session_state['parallel_mode'] = False
@@ -1042,8 +1161,8 @@ def load_xml_parallel_corpus(src_file, tgt_file):
         return None
         
     # 2. Finalize Session State
-    SOURCE_LANG_CODE = src_result['lang_code']
-    TARGET_LANG_CODE = tgt_result['lang_code']
+    SOURCE_LANG_CODE = src_lang_code # Use user-defined code
+    TARGET_LANG_CODE = tgt_lang_code # Use user-defined code
 
     df_src["_token_low"] = df_src["token"].str.lower()
     
@@ -1085,7 +1204,9 @@ def load_xml_parallel_corpus(src_file, tgt_file):
 # EXISTING: Excel Parallel Corpus Loading
 # ---------------------------------------------------------------------
 @st.cache_data
-def load_excel_parallel_corpus_file(file_source):
+def load_excel_parallel_corpus_file(file_source, excel_format):
+    global SOURCE_LANG_CODE, TARGET_LANG_CODE
+    
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
@@ -1109,7 +1230,6 @@ def load_excel_parallel_corpus_file(file_source):
     src_lang = df_raw.columns[0]
     tgt_lang = df_raw.columns[1]
     
-    global SOURCE_LANG_CODE, TARGET_LANG_CODE
     SOURCE_LANG_CODE = src_lang
     TARGET_LANG_CODE = tgt_lang
     
@@ -1147,26 +1267,24 @@ def load_excel_parallel_corpus_file(file_source):
     st.session_state['parallel_mode'] = True
     st.session_state['target_sent_map'] = target_sent_map
     
+    # Handle XML within Excel format (if tagged) - placeholder as it's complex
+    if 'with XML' in excel_format:
+        st.info("Note: 'Excel with XML' format is currently treated as standard Excel parallel text for tokenization purposes.")
+        
     return df_src
 
 
-# --- Monolingual File Dispatcher (Updated for Robust Vertical/Raw Reading) ---
+# --- Monolingual File Dispatcher (Updated for Built-in) ---
 @st.cache_data
-def load_corpus_file(file_source, sep=r"\s+"):
-    # Always reset parallel mode when loading standard file
+def load_corpus_file_built_in(file_source, corpus_name):
+    # This is a specific loader for built-in text files (old logic simplified)
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
-    st.session_state['xml_structure_data'] = None # Clear structure data
+    st.session_state['xml_structure_data'] = None 
          
     if file_source is None: return None
-    
-    # --- XML DISPATCHER ---
-    if hasattr(file_source, 'name') and file_source.name.lower().endswith('.xml'):
-        file_source.seek(0)
-        return load_monolingual_xml_corpus(file_source)
-    # ----------------------
     
     # --- Prepare content string ---
     try:
@@ -1180,60 +1298,19 @@ def load_corpus_file(file_source, sep=r"\s+"):
             file_content_str = file_bytes.decode('utf-8', errors='ignore')
         
         clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
-        clean_content = "\n".join(clean_lines)
-        file_buffer_for_pandas = StringIO(clean_content)
+        raw_text = "\n".join(clean_lines)
     except Exception as e: 
-        st.error(f"Error reading raw file content: {e}")
+        st.error(f"Error reading built-in file content: {e}")
         return None
 
-    # Set default global codes for non-parallel files
+    # Set default global codes for built-in files
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
-    SOURCE_LANG_CODE = 'RAW'
+    # Assume built-in are English for the defaults
+    SOURCE_LANG_CODE = 'EN'
     TARGET_LANG_CODE = 'NA'
 
-    # --- Attempt to load as Tagged/CSV/TSV (Vertical Format) ---
-    df_attempt = None
-    
-    # NEW: Aggressive loop to check for the 3-column format
-    for sep_char in ['\t', r'\s+']: 
-        try:
-            file_buffer_for_pandas.seek(0)
-            df_attempt = pd.read_csv(
-                file_buffer_for_pandas, 
-                sep=sep_char, 
-                header=None, 
-                engine="python", 
-                dtype=str, 
-                skipinitialspace=True
-            )
-            # Success check: Must have at least 3 columns for Token/POS/Lemma
-            if df_attempt is not None and df_attempt.shape[1] >= 3:
-                break # Exit loop on successful read
-            df_attempt = None # Reset if column count is too low, proceed to next separator
-        except Exception:
-            df_attempt = None # Reset on exception, proceed to next separator
-            
-    # Check final result of tagged attempts
-    if df_attempt is not None and df_attempt.shape[1] >= 3:
-        # Success. Process as a Tagged Corpus.
-        df = df_attempt.iloc[:, :3].copy()
-        df.columns = ["token", "pos", "lemma"]
-        
-        df["token"] = df["token"].fillna("").astype(str).str.strip() 
-        df["pos"] = df["pos"].fillna("###").astype(str)
-        df["lemma"] = df["lemma"].fillna("###").astype(str)
-        df["_token_low"] = df["token"].str.lower()
-        
-        # Set language code based on assumption of correct T/P/L format
-        # FIX: Removed the redundant global declaration here.
-        SOURCE_LANG_CODE = 'TAGGED'
-        
-        return df
-            
-
-    # Fallback to Raw Text Processing (Lowest priority)
+    # Fallback to Raw Text Processing 
     try:
-        raw_text = clean_content # Use the cleaned content from above
         # --- FIXED TOKENIZATION ---
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
         tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
@@ -1255,16 +1332,18 @@ def load_corpus_file(file_source, sep=r"\s+"):
         return df
         
     except Exception as raw_e: 
-        st.error(f"Final fallback (Raw Mode) failed: {raw_e}")
+        st.error(f"Final fallback (Raw Mode) failed for built-in: {raw_e}")
         return None 
 
 # -----------------------------------------------------
 # Function to display KWIC examples for collocates (omitted for brevity)
 # -----------------------------------------------------
-def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1, is_parallel_mode=False, target_sent_map=None):
+def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1, is_parallel_mode=False, target_sent_map=None, show_pos=False, show_lemma=False):
     """
     Generates and displays KWIC examples for a list of top collocates.
     Displays up to KWIC_COLLOC_DISPLAY_LIMIT total examples.
+    
+    MODIFIED: Added show_pos and show_lemma flags.
     """
     if top_collocates_df.empty:
         st.info("No collocates to display examples for.")
@@ -1273,6 +1352,9 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     colloc_list = top_collocates_df.head(KWIC_COLLOC_DISPLAY_LIMIT)
     collex_rows_total = []
     
+    # Custom separator for the tokens in the KWIC context (to mimic tab-separated vertical)
+    CONTEXT_SEP = "<span class='tab-sep'></span>"
+
     # Custom KWIC table style for 4 or 5 columns (Collocate, Left, Node, Right, [Translation])
     collocate_example_table_style = f"""
         <style>
@@ -1287,11 +1369,32 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
         /* Collocate Column */
         .collex-table-inner td:nth-child(1) {{ text-align: left; font-weight: bold; width: 10%; border-right: 1px solid #444; }} 
         /* Left Context Column */
-        .collex-table-inner td:nth-child(2) {{ text-align: right; color: white; width: 30%; }}
+        .collex-table-inner td:nth-child(2) {{ 
+             text-align: right; 
+             color: white; 
+             width: 30%; 
+             /* Enable multi-line display */
+             white-space: pre; 
+             /* Define the 'tab' separator style */
+             }}
+        .collex-table-inner td .tab-sep {{ display: block; height: 0; line-height: 0; }} 
+
         /* Node Column */
-        .collex-table-inner td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; width: 15%; }} 
+        .collex-table-inner td:nth-child(3) {{ 
+             text-align: center; 
+             font-weight: bold; 
+             background-color: #f0f0f0; 
+             color: black; 
+             width: 15%; 
+             white-space: pre; 
+             }} 
         /* Right Context Column */
-        .collex-table-inner td:nth-child(4) {{ text-align: left; color: white; width: 30%; }}
+        .collex-table-inner td:nth-child(4) {{ 
+             text-align: left; 
+             color: white; 
+             width: 30%; 
+             white-space: pre; 
+             }}
         /* Translation Column */
         .collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 15%; font-family: sans-serif; font-size: 0.9em; }}
         </style>
@@ -1310,7 +1413,9 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
                 pattern_collocate_pos_input="", 
                 pattern_window=window, # Use collocation window for context
                 limit=limit_per_collocate, # Show 1 example max
-                is_parallel_mode=is_parallel_mode # Pass parallel flag
+                is_parallel_mode=is_parallel_mode, # Pass parallel flag
+                show_pos=show_pos, # Pass display flags
+                show_lemma=show_lemma # Pass display flags
             )
             
             if kwic_rows:
@@ -1342,13 +1447,14 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             header += f"<th>Translation ({TARGET_LANG_CODE})</th>"
         header += "</tr>"
         
+        # Use HTML table and escape=False to preserve the HTML formatting (tab-sep)
         html_table = collex_df.to_html(header=False, escape=False, classes=['collex-table-inner'], index=False)
         # Insert the custom header before the table body
         html_table = html_table.replace("<thead></thead>", f"<thead>{header}</thead>", 1)
         
         scrollable_html = f"<div class='collex-table-container-fixed'>{html_table}</div>"
         st.markdown(scrollable_html, unsafe_allow_html=True)
-        st.caption(f"Context window is set to **±{window} tokens** (Collocation window). Matching collocate is **bolded and highlighted bright yellow**.")
+        st.caption(f"Context window is set to **±{window} tokens** (Collocation window). Matching collocate is **bolded and highlighted bright yellow**. POS/Lemma display: **{show_pos}**/**{show_lemma}**.")
     else:
         st.info(f"No specific KWIC examples found for the top {len(colloc_list)} collocates within the ±{window} window.")
 # -----------------------------------------------------
@@ -1437,7 +1543,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
             if w in PUNCTUATION_COLLOCATES or w.isdigit():
                  continue
                  
-            p = df_corpus["pos"].iloc[j]
+            p = df_corpus["pos"].iloc[j] if "pos" in df_corpus.columns else '##'
             l = df_corpus["lemma"].iloc[j].lower() if "lemma" in df_corpus.columns else "##"
             direction = 'L' if j < i else 'R'
             
@@ -1538,6 +1644,7 @@ with st.sidebar:
     st.header("1. Corpus Source")
     
     # --- A. BUILT-IN SELECTION ---
+    st.markdown("##### 📦 Built-in Corpus")
     selected_corpus_name = st.selectbox(
         "Select a pre-loaded corpus:", 
         options=list(BUILT_IN_CORPORA.keys()),
@@ -1545,63 +1652,129 @@ with st.sidebar:
         on_change=reset_analysis
     )
     
-    # --- B. MONOLINGUAL UPLOAD (UPDATED TO INCLUDE XML) ---
-    st.markdown("##### 📁 Upload your own monolingual corpus")
-    uploaded_file = st.file_uploader(
-        "Upload Monolingual file (TXT, CSV, **XML**)", 
-        type=["txt","csv", "xml"], # XML added here
-        key="file_upload",
-        on_change=reset_analysis
-    )
+    st.markdown("---")
     
-    # --- C. PARALLEL CORPUS UPLOAD (XML) ---
-    st.markdown("##### 🔗 Upload Unlinked XML Parallel Corpus")
-    xml_src_file = st.file_uploader(
-        f"Source Language XML (Must use aligned IDs)", 
-        type=["xml"],
-        key="xml_src_file_upload",
-        on_change=reset_analysis
-    )
-    xml_tgt_file = st.file_uploader(
-        f"Target Language XML (Must use aligned IDs)", 
-        type=["xml"],
-        key="xml_tgt_file_upload",
+    # --- B. CUSTOM CORPUS SELECTION MODE ---
+    corpus_mode = st.radio(
+        "Choose Corpus Type:",
+        options=["Monolingual Corpus", "Parallel Corpus"],
+        key="corpus_mode_radio",
         on_change=reset_analysis
     )
 
-    # --- D. PARALLEL CORPUS UPLOAD (EXCEL) ---
-    st.markdown("##### 📥 Upload Linked Excel Parallel Corpus")
-    parallel_excel_file = st.file_uploader(
-        "Upload Excel (Col 1: Source Text, Col 2: Target Text)", 
-        type=["xlsx"],
-        key="parallel_excel_file_upload",
-        on_change=reset_analysis
-    )
+    # --- B1. MONOLINGUAL CORPUS UPLOAD ---
+    if corpus_mode == "Monolingual Corpus":
+        st.markdown("##### 📁 Monolingual File(s) Upload")
+        
+        # Language Selection
+        selected_lang_mono = st.selectbox(
+            "1. Choose Language:",
+            options=["English", "Indonesian", "Other"],
+            key="mono_lang_select"
+        )
+        
+        # Format Selection
+        selected_format_mono = st.selectbox(
+            "2. Choose Format:",
+            options=[
+                ".txt (Raw Text/Linear)",
+                ".xml (Raw Text/Linear)",
+                ".txt verticalised (T/P/L columns)",
+                ".xml verticalised (XML with <w> tags)",
+                ".txt TreeTagger format",
+                ".xml TreeTagger format"
+            ],
+            key="mono_format_select"
+        )
+        
+        # File Uploader (Allow multiple)
+        uploaded_files_mono = st.file_uploader(
+            "3. Upload Corpus File(s):", 
+            type=["txt","xml", "csv"], 
+            accept_multiple_files=True,
+            key="mono_file_upload",
+            on_change=reset_analysis
+        )
+        
+        # Map selected language to code
+        lang_code_map = {"English": "EN", "Indonesian": "ID", "Other": "OTHER"}
+        mono_lang_code = lang_code_map.get(selected_lang_mono, 'OTHER')
+        
+        # Custom Monolingual Loading Logic
+        if uploaded_files_mono:
+             with st.spinner(f"Processing Monolingual Corpus ({len(uploaded_files_mono)} file(s))..."):
+                df_source_lang_for_analysis = load_monolingual_corpus_files(
+                    uploaded_files_mono, 
+                    mono_lang_code, 
+                    selected_format_mono
+                )
+                if df_source_lang_for_analysis is not None:
+                    corpus_name = f"Monolingual ({SOURCE_LANG_CODE}, {selected_format_mono})"
     
-    # --- CORPUS LOADING LOGIC (Prioritize XML Parallel > Excel Parallel > Uploaded Monolingual > Built-in) ---
-    
-    if xml_src_file is not None and xml_tgt_file is not None:
-        with st.spinner("Processing XML Parallel Corpus..."):
-            df_source_lang_for_analysis = load_xml_parallel_corpus(xml_src_file, xml_tgt_file)
-            if df_source_lang_for_analysis is not None:
-                corpus_name = f"Parallel (XML) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
-                parallel_uploaded = True
-    
-    elif parallel_excel_file is not None:
-        with st.spinner("Processing Excel Parallel Corpus..."):
-            df_source_lang_for_analysis = load_excel_parallel_corpus_file(parallel_excel_file)
-            if df_source_lang_for_analysis is not None:
-                corpus_name = f"Parallel (Excel) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
-                parallel_uploaded = True
-    
-    elif uploaded_file is not None:
-        corpus_source = uploaded_file
-        corpus_name = uploaded_file.name
-        # load_corpus_file now handles dispatching XML to the correct loader
-        df_source_lang_for_analysis = load_corpus_file(corpus_source)
-        # If it was an XML file, the name/mode will be updated inside the loader
+    # --- B2. PARALLEL CORPUS UPLOAD ---
+    else: # Parallel Corpus
+        st.markdown("##### 🔗 Parallel Corpus Upload")
+        
+        parallel_file_mode = st.radio(
+            "1. Choose File Structure:",
+            options=["One corpus file", "Two corpus files (aligned IDs required)"],
+            key="parallel_file_mode_radio"
+        )
+        
+        if parallel_file_mode == "One corpus file":
+            excel_format = st.radio(
+                "2. Choose Format:",
+                options=[".xlsx (Col 1: Source, Col 2: Target)", ".xlsx with XML (Aligned Text/Tags)"],
+                key="excel_format_radio"
+            )
+            parallel_excel_file = st.file_uploader(
+                "3. Upload Excel File:", 
+                type=["xlsx"],
+                key="parallel_excel_file_upload",
+                on_change=reset_analysis
+            )
+            
+            if parallel_excel_file is not None:
+                with st.spinner("Processing Excel Parallel Corpus..."):
+                    df_source_lang_for_analysis = load_excel_parallel_corpus_file(parallel_excel_file, excel_format)
+                    if df_source_lang_for_analysis is not None:
+                        corpus_name = f"Parallel (Excel) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
+                        parallel_uploaded = True
 
-    elif selected_corpus_name != "Select built-in corpus...":
+        else: # Two corpus files
+            xml_format = st.radio(
+                "2. Choose Format:",
+                options=[".xml verticalised", ".xml TreeTagger format"],
+                key="xml_format_parallel_radio"
+            )
+            
+            src_lang_input = st.text_input("Source Language Code (e.g., EN)", value=st.session_state.get('src_lang_code', 'EN'), key='src_lang_code_input')
+            tgt_lang_input = st.text_input("Target Language Code (e.g., ID)", value=st.session_state.get('tgt_lang_code', 'ID'), key='tgt_lang_code_input')
+            st.session_state['src_lang_code'] = src_lang_input
+            st.session_state['tgt_lang_code'] = tgt_lang_input
+
+            xml_src_file = st.file_uploader(
+                f"3. Upload Source Language XML ({src_lang_input})", 
+                type=["xml"],
+                key="xml_src_file_upload",
+                on_change=reset_analysis
+            )
+            xml_tgt_file = st.file_uploader(
+                f"4. Upload Target Language XML ({tgt_lang_input})", 
+                type=["xml"],
+                key="xml_tgt_file_upload",
+                on_change=reset_analysis
+            )
+            
+            if xml_src_file is not None and xml_tgt_file is not None:
+                with st.spinner("Processing XML Parallel Corpus..."):
+                    df_source_lang_for_analysis = load_xml_parallel_corpus(xml_src_file, xml_tgt_file, src_lang_input, tgt_lang_input)
+                    if df_source_lang_for_analysis is not None:
+                        corpus_name = f"Parallel (XML) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
+                        parallel_uploaded = True
+
+    # --- C. BUILT-IN FALLBACK (Only executes if no custom file was loaded) ---
+    if df_source_lang_for_analysis is None and selected_corpus_name != "Select built-in corpus...":
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
         # Check if we need to download/load the file
         if 'initial_load_complete' not in st.session_state or st.session_state['initial_load_complete'] == False:
@@ -1610,7 +1783,7 @@ with st.sidebar:
         else:
              corpus_source = download_file_to_bytesio(corpus_url) 
         corpus_name = selected_corpus_name
-        df_source_lang_for_analysis = load_corpus_file(corpus_source)
+        df_source_lang_for_analysis = load_corpus_file_built_in(corpus_source, corpus_name)
     
     # Use the loaded DF for the rest of the sidebar logic
     df_sidebar = df_source_lang_for_analysis
@@ -1647,8 +1820,40 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("3. Tool Settings")
         
+        # --- UNIVERSAL DISPLAY SETTINGS (NEW) ---
+        st.markdown("##### KWIC/Context Display")
+        
+        has_pos_lemma_data = not is_raw_mode_sidebar
+        
+        if not has_pos_lemma_data:
+            st.info("POS/Lemma display requires a tagged corpus.")
+            st.session_state['show_pos_tag'] = False
+            st.session_state['show_lemma'] = False
+        
+        show_pos_tag = st.checkbox(
+            "Show POS Tag", 
+            value=st.session_state.get('show_pos_tag', False), 
+            key='show_pos_tag_checkbox', 
+            disabled=not has_pos_lemma_data
+        )
+        st.session_state['show_pos_tag'] = show_pos_tag
+
+        show_lemma = st.checkbox(
+            "Show Lemma", 
+            value=st.session_state.get('show_lemma', False), 
+            key='show_lemma_checkbox',
+            disabled=not has_pos_lemma_data
+        )
+        st.session_state['show_lemma'] = show_lemma
+        
+        if show_pos_tag or show_lemma:
+            st.caption("Context will display tokens, POS, and/or Lemma vertically (separated by a custom tab/line-break).")
+
+        st.markdown("---")
+        
         # --- CONCORDANCE SETTINGS ---
         if st.session_state['view'] == 'concordance':
+            st.subheader("Concordance Parameters")
             st.write("KWIC Context (Display)")
             kwic_left = st.number_input("Left Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_left', 7), step=1, help="Number of tokens shown to the left of the node word.", key="concordance_kwic_left")
             kwic_right = st.number_input("Right Context (tokens)", min_value=1, max_value=20, value=st.session_state.get('kwic_right', 7), step=1, help="Number of tokens shown to the right of the node word.", key="concordance_kwic_right")
@@ -1812,7 +2017,7 @@ is_parallel_mode_active = st.session_state.get('parallel_mode', False)
 lang_display_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
 lang_input_suffix = f" in **{SOURCE_LANG_CODE}**" if is_parallel_mode_active else ""
 is_monolingual_xml_loaded = st.session_state.get('monolingual_xml_file_upload') is not None
-if is_monolingual_xml_loaded:
+if is_monolingual_xml_loaded and not is_parallel_mode_active:
     # Overwrite the suffix if we are in monolingual XML mode
     lang_display_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
     lang_input_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
@@ -2065,6 +2270,10 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     is_parallel_mode = st.session_state.get('parallel_mode', False)
     target_sent_map = st.session_state.get('target_sent_map', {})
     
+    # Display settings
+    show_pos_tag = st.session_state['show_pos_tag']
+    show_lemma = st.session_state['show_lemma']
+    
     # Generate KWIC lines using the reusable function
     with st.spinner("Searching corpus and generating concordance..."):
         # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
@@ -2074,7 +2283,9 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
             pattern_collocate_pos if is_pattern_search_active else "", 
             pattern_window if is_pattern_search_active else 0,
             limit=KWIC_MAX_DISPLAY_LINES,
-            is_parallel_mode=is_parallel_mode # Pass parallel flag
+            is_parallel_mode=is_parallel_mode, # Pass parallel flag
+            show_pos=show_pos_tag, 
+            show_lemma=show_lemma
         )
     
     if total_matches == 0:
@@ -2090,9 +2301,9 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     st.subheader("📚 Concordance Results")
     
     if is_pattern_search_active:
-        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{raw_target_input}' co-occurring with the specified criteria.")
+        st.success(f"Pattern search successful! Found **{total_matches}** instances of '{raw_target_input}' co-occurring with the specified criteria. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
     else:
-        st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria.")
+        st.success(f"Found **{total_matches}** occurrences of the primary target word matching the criteria. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
     
     # --- LLM INTERPRETATION BUTTON/EXPANDER ---
     if st.button("🧠 Interpret Concordance Results (LLM)", key="llm_concordance_btn"):
@@ -2130,15 +2341,31 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
              .dataframe {{ font-family: monospace; color: white; width: 100%; }}
              .dataframe table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
              .dataframe th {{ font-weight: bold; text-align: center; }}
-             .dataframe td:nth-child(2) {{ text-align: right; color: white; }}
-             .dataframe td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
-             .dataframe td:nth-child(4) {{ text-align: left; color: white; }}
+             .dataframe td:nth-child(2) {{ 
+                 text-align: right; 
+                 color: white; 
+                 white-space: pre; 
+                 }}
+             .dataframe td:nth-child(3) {{ 
+                 text-align: center; 
+                 font-weight: bold; 
+                 background-color: #f0f0f0; 
+                 color: black; 
+                 white-space: pre; 
+                 }}
+             .dataframe td:nth-child(4) {{ 
+                 text-align: left; 
+                 color: white; 
+                 white-space: pre; 
+                 }}
              .dataframe td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.9em; }} /* Translation Column Style */
+             .dataframe td .tab-sep {{ display: block; height: 0; line-height: 0; }} /* Custom separator for T/P/L vertical alignment */
              .dataframe thead th:first-child {{ width: 30px; }}
              </style>
         """
         st.markdown(kwic_table_style, unsafe_allow_html=True)
         
+        # Use HTML table and escape=False to preserve the HTML formatting (tab-sep)
         html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
         scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
 
@@ -2307,18 +2534,24 @@ if st.session_state['view'] == 'dictionary':
     kwic_right = st.session_state.get('kwic_right', 7)
     is_parallel_mode = st.session_state.get('parallel_mode', False)
     target_sent_map = st.session_state.get('target_sent_map', {})
+    
+    # Display settings
+    show_pos_tag = st.session_state['show_pos_tag']
+    show_lemma = st.session_state['show_lemma']
 
     with st.spinner(f"Fetching random concordance examples for '{current_dict_word}'..."):
         # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids)
         kwic_rows, total_matches, _, _, sent_ids = generate_kwic(
             df, current_dict_word, kwic_left, kwic_right, 
             random_sample=True, limit=KWIC_MAX_DISPLAY_LINES,
-            is_parallel_mode=is_parallel_mode
+            is_parallel_mode=is_parallel_mode,
+            show_pos=show_pos_tag,
+            show_lemma=show_lemma
         )
     
     if kwic_rows:
         display_limit = min(5, len(kwic_rows))
-        st.success(f"Showing {display_limit} random examples from {total_matches:,} total matches.")
+        st.success(f"Showing {display_limit} random examples from {total_matches:,} total matches. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
         
         kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
         kwic_preview = kwic_df.copy().reset_index(drop=True)
@@ -2339,10 +2572,25 @@ if st.session_state['view'] == 'dictionary':
             .dict-kwic-table {{ font-family: monospace; color: white; width: 100%; }}
             .dict-kwic-table table {{ width: 100%; table-layout: fixed; word-wrap: break-word; }}
             .dict-kwic-table th {{ font-weight: bold; text-align: center; }}
-            .dict-kwic-table td:nth-child(2) {{ text-align: right; color: white; }}
-            .dict-kwic-table td:nth-child(3) {{ text-align: center; font-weight: bold; background-color: #f0f0f0; color: black; }}
-            .dict-kwic-table td:nth-child(4) {{ text-align: left; color: white; }}
+            .dict-kwic-table td:nth-child(2) {{ 
+                text-align: right; 
+                color: white; 
+                white-space: pre; 
+                }}
+            .dict-kwic-table td:nth-child(3) {{ 
+                text-align: center; 
+                font-weight: bold; 
+                background-color: #f0f0f0; 
+                color: black; 
+                white-space: pre; 
+                }}
+            .dict-kwic-table td:nth-child(4) {{ 
+                text-align: left; 
+                color: white; 
+                white-space: pre; 
+                }}
             .dict-kwic-table td:nth-child(5) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.9em; }} /* Translation Column Style */
+            .dict-kwic-table td .tab-sep {{ display: block; height: 0; line-height: 0; }} /* Custom separator for T/P/L vertical alignment */
             .dict-kwic-table thead th:first-child {{ width: 30px; }}
             </style>
         """
@@ -2377,28 +2625,30 @@ if st.session_state['view'] == 'dictionary':
     
     if stats_df_sorted.empty:
         st.warning("No collocates found matching the criteria.")
-        st.stop()
+        # Only stop if the primary target itself wasn't found (handled above). Continue to show the rest of the dictionary info.
+    else:
+        top_collocates = stats_df_sorted.head(20)
         
-    top_collocates = stats_df_sorted.head(20)
-    
-    # 3a. Top Collocates List
-    collocate_list = ", ".join(top_collocates['Collocate'].tolist())
-    st.markdown(f"**Top {len(top_collocates)} Collocates (LL-ranked):**")
-    st.text_area("Collocate List", collocate_list, height=100)
-    
-    st.markdown("---")
-    st.subheader(f"Collocate Examples (Top {len(top_collocates)} LL Collocates)")
-    
-    # Use the dedicated KWIC display function (which now handles parallel mode)
-    display_collocation_kwic_examples(
-        df_corpus=df, 
-        node_word=current_dict_word, 
-        top_collocates_df=top_collocates, 
-        window=coll_window,
-        limit_per_collocate=1,
-        is_parallel_mode=is_parallel_mode,
-        target_sent_map=st.session_state['target_sent_map']
-    )
+        # 3a. Top Collocates List
+        collocate_list = ", ".join(top_collocates['Collocate'].tolist())
+        st.markdown(f"**Top {len(top_collocates)} Collocates (LL-ranked):**")
+        st.text_area("Collocate List", collocate_list, height=100)
+        
+        st.markdown("---")
+        st.subheader(f"Collocate Examples (Top {len(top_collocates)} LL Collocates)")
+        
+        # Use the dedicated KWIC display function (which now handles parallel mode)
+        display_collocation_kwic_examples(
+            df_corpus=df, 
+            node_word=current_dict_word, 
+            top_collocates_df=top_collocates, 
+            window=coll_window,
+            limit_per_collocate=1,
+            is_parallel_mode=is_parallel_mode,
+            target_sent_map=st.session_state['target_sent_map'],
+            show_pos=show_pos_tag,
+            show_lemma=show_lemma
+        )
 
 
 # -----------------------------------------------------
@@ -2419,6 +2669,10 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     
     raw_target_input = st.session_state.get('typed_target_input')
     
+    # Display settings
+    show_pos_tag = st.session_state['show_pos_tag']
+    show_lemma = st.session_state['show_lemma']
+    
     with st.spinner("Running collocation analysis..."):
         stats_df_sorted, freq, primary_target_mwu = generate_collocation_results(
             df, raw_target_input, coll_window, mi_min_freq, max_collocates, is_raw_mode,
@@ -2433,7 +2687,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     
     # FIX: Use conditional language suffix
     st.subheader(f"🔗 Collocation Analysis Results{lang_display_suffix}")
-    st.success(f"Analyzing target '{primary_target_mwu}'. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million.")
+    st.success(f"Analyzing target '{primary_target_mwu}'. Frequency: **{freq:,}**, Relative Frequency: **{primary_rel_freq:.4f}** per million. POS/Lemma Display: **{show_pos_tag}**/**{show_lemma}**.")
 
     if stats_df_sorted.empty:
         st.warning("No collocates found after applying filters.")
@@ -2571,7 +2825,9 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         window=coll_window,
         limit_per_collocate=1,
         is_parallel_mode=is_parallel_mode,
-        target_sent_map=st.session_state['target_sent_map']
+        target_sent_map=st.session_state['target_sent_map'],
+        show_pos=show_pos_tag,
+        show_lemma=show_lemma
     )
     
     st.markdown("---")
@@ -2585,7 +2841,9 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         window=coll_window,
         limit_per_collocate=1,
         is_parallel_mode=is_parallel_mode,
-        target_sent_map=st.session_state['target_sent_map']
+        target_sent_map=st.session_state['target_sent_map'],
+        show_pos=show_pos_tag,
+        show_lemma=show_lemma
     )
 
 
