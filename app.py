@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.39 - Syntax Error Fix (Triple Quotes for HTML f-strings)
+# CORTEX Corpus Explorer v17.40 - XML Pre-cleaning for Malformed Data
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.39 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.40 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -866,21 +866,38 @@ def parse_xml_content_to_df(file_source):
     Parses a single XML file, extracts sentences and IDs, and tokenizes/verticalizes if needed.
     Returns: {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
     """
+    file_source.seek(0)
+    
     try:
-        # 1. Read full content as string first, for safety and regex fallback
-        file_source.seek(0)
-        xml_content = file_source.read().decode('utf-8')
-        file_source.seek(0)
+        # 1. Read full content as string and perform pre-cleaning for robustness
+        xml_content_bytes = file_source.read()
+        xml_content = xml_content_bytes.decode('utf-8')
         
-        # Use ElementTree for robust XML structure parsing
-        tree = ET.parse(file_source)
+        # --- ROBUST XML PRE-CLEANING (v17.40) ---
+        # 1. Remove illegal control characters (keep \t, \n, \r)
+        # Pattern matches anything below ASCII 32, excluding \t, \n, \r.
+        # This is a common fix for malformed XML errors (invalid token)
+        illegal_chars_re = re.compile(u'[^\u0020-\uD7FF\uE000-\uFFFD\u0009\u000A\u000D]', re.IGNORECASE)
+        cleaned_xml_content = illegal_chars_re.sub('', xml_content)
+        
+        # 2. Fix unescaped ampersands (&) that are not part of an existing entity reference (e.g., &amp;)
+        # Pattern: & followed by anything that is NOT a space, #, or a word character.
+        # OR: & followed by a space.
+        cleaned_xml_content = re.sub(r'&(?![A-Za-z0-9#]{2,5};|#)', r'&amp;', cleaned_xml_content)
+        
+        # --- END ROBUST XML PRE-CLEANING ---
+        
+        # Create a BytesIO stream from the cleaned content to pass to ET.parse
+        cleaned_stream = BytesIO(cleaned_xml_content.encode('utf-8'))
+        
+        tree = ET.parse(cleaned_stream)
         root = tree.getroot()
         
         # 2. Extract Language Code: Check corpus > text > root attributes
         lang_code = root.get('lang')
         if not lang_code:
             # Look for lang attribute in <text> or <corpus> tag in the raw string
-            lang_match = re.search(r'(<text\s+lang="([^"]+)">|<corpus\s+[^>]*lang="([^"]+)">)', xml_content)
+            lang_match = re.search(r'(<text\s+lang="([^"]+)">|<corpus\s+[^>]*lang="([^"]+)">)', cleaned_xml_content)
             if lang_match:
                 # Group 2 is from <text>, Group 3 is from <corpus> (prioritize <corpus>)
                 lang_code = lang_match.group(3) or lang_match.group(2)
@@ -892,7 +909,7 @@ def parse_xml_content_to_df(file_source):
         lang_code = lang_code.upper()
             
     except Exception as e:
-        # Critical failure: XML is not well-formed
+        # Critical failure: XML is not well-formed even after cleaning
         file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
         st.error(f"Error reading or parsing XML file {file_name_label}: {e}")
         return None
@@ -1103,7 +1120,7 @@ def load_monolingual_corpus_files(file_sources, selected_lang_code, selected_for
                     # Add dummy sent_id for compatibility
                     df_file['sent_id'] = 0 
                     all_df_data.extend(df_file.to_dict('records'))
-                    SOURCE_LANG_CODE = selected_lang_mono
+                    # Note: SOURCE_LANG_CODE is kept as selected_lang_mono or overridden in XML parsing logic for XML files.
                 else:
                     st.warning(f"File {file_source.name} was expected to be a vertical format but could not be parsed as 3+ columns. Falling back to raw text.")
                     is_tagged_format = False # Fallback to raw for this file
@@ -1193,7 +1210,7 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
     st.session_state['target_sent_map'] = tgt_result['sent_map'] 
     
     # --- XML Structure Extraction for Overview (Combining structures) ---
-    # Need to pass fresh copies of the file streams for structure extraction
+    # We rely on the structure extraction to use a fresh read/copy inside.
     src_file.seek(0)
     tgt_file.seek(0)
     src_structure = extract_xml_structure(src_file)
@@ -1316,7 +1333,7 @@ def load_corpus_file_built_in(file_source, corpus_name):
     if is_xml_corpus_name:
         # --- Handle Built-in XML Corpus ---
         try:
-            # We must use a copy of the stream for structure extraction later if needed
+            # We must use a copy of the stream for parsing and structure extraction
             file_source.seek(0)
             file_copy_for_parsing = BytesIO(file_source.read())
             file_copy_for_parsing.seek(0)
@@ -1686,7 +1703,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.39 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.40 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2082,6 +2099,10 @@ if is_monolingual_xml_loaded and not is_parallel_mode_active:
     # Overwrite the suffix if we are in monolingual XML mode
     lang_display_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
     lang_input_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
+# --- Adjusted detection for built-in XML (KOSLAT) ---
+if st.session_state.get('xml_structure_data', None) is not None and not is_parallel_mode_active:
+     lang_display_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
+     lang_input_suffix = f" in **{SOURCE_LANG_CODE} (XML Monolingual)**"
 # ---------------------------------------------------------------
 
 
@@ -2496,7 +2517,7 @@ if st.session_state['view'] == 'dictionary':
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
     # --------------------------------------------------------
-    # IPA Feature Logic (Request 1 & 2) (REVISED)
+    # IPA Feature Logic (REVISED)
     # --------------------------------------------------------
     # Use the detected/set language code
     corpus_lang = SOURCE_LANG_CODE.upper() 
