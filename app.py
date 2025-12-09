@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Texts Explorer v17.42 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.42 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -528,11 +528,16 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                 formatted_line.append(format_token_inline(token, token_pos, token_lemma, is_collocate_match=is_collocate_match, is_node_word=False))
 
 
-        node_start_rel = k - kwic_start
-        node_end_rel = node_start_rel + primary_target_len
+        # FIX 2: Corrected slicing logic
+        
+        # 1. Determine the number of tokens in the left context
+        # This is the index 'i' relative to 'kwic_start'
+        left_context_count = i - kwic_start
+        
+        # 2. Slice the context tokens (formatted_line) correctly:
+        left_context = formatted_line[:left_context_count]
+        right_context = formatted_line[left_context_count:]
 
-        left_context = formatted_line[:node_start_rel]
-        right_context = formatted_line[node_end_rel:]
         node_orig = " ".join(node_orig_tokens) 
         
         # Join the token groups by a *single* space
@@ -2577,12 +2582,16 @@ if st.session_state['view'] == 'dictionary':
     forms_list.insert(forms_list.shape[1], 'Absolute Frequency', forms_list['Token'].apply(lambda t: token_counts.get(t.lower(), 0)))
     forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
     
+    # ------------------ CEFR Column Insertion (FIXED) ------------------
     if cefr_active: # This runs only if is_english_corpus is True
-        # Placeholder for CEFR logic
-        forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
-    else: # NEW: Ensure column is present with '##' placeholder
+        forms_list.insert(forms_list.shape[1], 'CEFR', forms_list['Token'].apply(lambda t: 
+            CEFR_ANALYZER.get_cefr_level(t.lower()).upper() if CEFR_ANALYZER else '##'
+        ))
+    else: # Ensure column is present with '##' placeholder
         forms_list.insert(forms_list.shape[1], 'CEFR', '##')
+    # -----------------------------------------------------------
     
+    # ------------------ IPA Column Insertion ------------------
     if ipa_active: # This runs only if is_english_corpus is True
         try:
             def get_ipa_transcription(token):
@@ -2590,17 +2599,17 @@ if st.session_state['view'] == 'dictionary':
                     import eng_to_ipa as ipa 
                     return ipa.convert(token)
                 except Exception:
-                    return "IPA N/A"
-
+                    return "##" # Changed from 'IPA N/A' to '##'
             forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token'].apply(get_ipa_transcription))
             
         except Exception as e:
             st.error(f"Error during IPA transcription: {e}")
             ipa_active = False 
             
-    # NEW: Ensure column is present with '##' placeholder if not active/failed
+    # Ensure column is present with '##' placeholder if not active/failed
     if not ipa_active:
         forms_list.insert(forms_list.shape[1], 'IPA Transcription', '##')
+    # -----------------------------------------------------------
             
     # --- Pronunciation Link Logic (REVISED for KBBI/Cambridge) ---
     if is_indonesian_corpus: # This runs if corpus_lang is ID
