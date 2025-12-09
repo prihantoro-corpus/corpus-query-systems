@@ -1,5 +1,5 @@
 # app.py
-# CORTEX Corpus Explorer v17.37 - Robust XML Token Filtering & Structure Hierarchy
+# CORTEX Corpus Explorer v17.38 - Robust XML Token Filtering & Structure Hierarchy & KOSLAT-ID
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -47,7 +47,7 @@ import xml.etree.ElementTree as ET # Import for XML parsing
 # We explicitly exclude external LLM libraries for the free, stable version.
 # The interpret_results_llm function is replaced with a placeholder.
 
-st.set_page_config(page_title="CORTEX - Corpus Explorer v17.37 (Parallel Ready)", layout="wide") 
+st.set_page_config(page_title="CORTEX - Corpus Explorer v17.38 (Parallel Ready)", layout="wide") 
 
 # --- CONSTANTS ---
 KWIC_MAX_DISPLAY_LINES = 100
@@ -123,12 +123,13 @@ if 'show_lemma' not in st.session_state:
 
 
 # ---------------------------
-# Built-in Corpus Configuration
+# Built-in Corpus Configuration (UPDATED)
 # ---------------------------
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
     "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
+    "KOSLAT-ID (XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
 }
 
 # Define color map constants globally (used for both graph and word cloud)
@@ -784,6 +785,7 @@ def extract_xml_structure(file_source, max_values=20):
     else:
         file_to_analyze = file_source
 
+    # Ensure the stream is reset for parsing
     file_to_analyze.seek(0)
     file_copy = BytesIO(file_to_analyze.read())
 
@@ -874,15 +876,14 @@ def parse_xml_content_to_df(file_source):
         tree = ET.parse(file_source)
         root = tree.getroot()
         
-        # 2. Extract Language Code
-        # Enhancement: Check for 'lang' attribute in the root or an expected child ('text' or 'corpus')
+        # 2. Extract Language Code: Check corpus > text > root attributes
         lang_code = root.get('lang')
         if not lang_code:
             # Look for lang attribute in <text> or <corpus> tag in the raw string
             lang_match = re.search(r'(<text\s+lang="([^"]+)">|<corpus\s+[^>]*lang="([^"]+)">)', xml_content)
             if lang_match:
-                # Group 2 is from <text>, Group 3 is from <corpus>
-                lang_code = lang_match.group(2) or lang_match.group(3)
+                # Group 2 is from <text>, Group 3 is from <corpus> (prioritize <corpus>)
+                lang_code = lang_match.group(3) or lang_match.group(2)
                 
         if not lang_code:
             # Default to XML if no language code is explicitly found
@@ -905,16 +906,18 @@ def parse_xml_content_to_df(file_source):
         sent_tags = list(root)
     
     if not sent_tags:
-        # Try to process raw content in root if present (as a fallback for very simple XML)
-        if root.text and root.text.strip():
-             raw_text = root.text.strip()
-             cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text) 
-             tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
-             if tokens:
-                for token in tokens:
-                    df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
-                sent_map[1] = raw_text
-             return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
+        # Fallback 1: Try to process *all* text content in root
+        raw_sentence_text = "".join(root.itertext()).strip() 
+        if raw_sentence_text:
+            # Tokenize the entire raw text
+            cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
+            tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+            if tokens:
+               for token in tokens:
+                   df_data.append({"token": token, "pos": "##", "lemma": "##", "sent_id": 1})
+               sent_map[1] = raw_sentence_text
+            return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
+            
         file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
         st.warning(f"No parseable content found in corpus file: {file_name_label}.")
         return None
@@ -1307,7 +1310,36 @@ def load_corpus_file_built_in(file_source, corpus_name):
          
     if file_source is None: return None
     
-    # --- Prepare content string ---
+    # Check if the corpus name/URL suggests XML (KOSLAT-ID uses XML)
+    is_xml_corpus_name = "xml" in BUILT_IN_CORPORA.get(corpus_name, "").lower() or "xml" in corpus_name.lower()
+
+    if is_xml_corpus_name:
+        # --- Handle Built-in XML Corpus ---
+        try:
+            # We must use a copy of the stream for structure extraction later if needed
+            file_source.seek(0)
+            file_copy_for_parsing = BytesIO(file_source.read())
+            file_copy_for_parsing.seek(0)
+            
+            xml_result = parse_xml_content_to_df(file_copy_for_parsing) # Use the robust XML parser
+            
+            if xml_result:
+                df = pd.DataFrame(xml_result['df_data'])
+                df["_token_low"] = df["token"].str.lower()
+                SOURCE_LANG_CODE = xml_result['lang_code']
+                
+                # IMPORTANT: Extract structure from the copy before it's garbage collected
+                file_copy_for_parsing.seek(0)
+                st.session_state['xml_structure_data'] = extract_xml_structure(file_copy_for_parsing) 
+                
+                return df
+            # If XML parsing fails, fall through to raw text processing as a last resort.
+        except Exception as e:
+            st.warning(f"Failed to parse built-in XML corpus '{corpus_name}': {e}. Falling back to raw text processing.")
+            # Clear file_source to re-read as raw text below
+            file_source.seek(0) 
+
+    # --- Prepare content string for non-XML or failed XML built-ins ---
     try:
         file_source.seek(0)
         file_bytes = file_source.read()
@@ -1324,22 +1356,20 @@ def load_corpus_file_built_in(file_source, corpus_name):
         st.error(f"Error reading built-in file content: {e}")
         return None
 
-    # Set default global codes for built-in files
-    # Assume built-in are English for the defaults, but try to infer tagging
-    SOURCE_LANG_CODE = 'EN'
+    # Set default global codes for built-in files if not already set by XML parser
+    if SOURCE_LANG_CODE not in ('EN', 'ID'):
+         SOURCE_LANG_CODE = 'EN'
     TARGET_LANG_CODE = 'NA'
 
     df = pd.DataFrame()
     
-    # --- REVISED LOGIC FOR BUILT-IN CORPORA (Force vertical T/P/L for known tagged files) ---
-    # Heuristic for known tagged files (Europarl is known to be TreeTagger format)
-    is_vertical_format = ("europarl" in corpus_name.lower()) or ("corpus-query-systems" in BUILT_IN_CORPORA.get(corpus_name, "").lower())
+    # --- Built-in T/P/L logic (for Europarl, etc.) ---
+    is_vertical_format = ("europarl" in corpus_name.lower()) or ("corpus-query-systems" in BUILT_IN_CORPORA.get(corpus_name, "").lower() and not is_xml_corpus_name)
 
     if is_vertical_format:
         try:
             file_buffer_for_pandas = StringIO(raw_text)
             
-            # Use strict whitespace separator, but explicitly only read the first 3 columns
             df = pd.read_csv(
                 file_buffer_for_pandas, 
                 sep=r'\s+', 
@@ -1347,28 +1377,25 @@ def load_corpus_file_built_in(file_source, corpus_name):
                 engine="python", 
                 dtype=str, 
                 skipinitialspace=True,
-                usecols=[0, 1, 2], # <--- FIX: ONLY READ T/P/L COLUMNS
+                usecols=[0, 1, 2], 
                 names=['token', 'pos', 'lemma']
             )
             
-            # Data cleaning/standardization
             df["token"] = df["token"].fillna("").astype(str).str.strip() 
             df["pos"] = df["pos"].fillna("###").astype(str)
             df["lemma"] = df["lemma"].fillna("###").astype(str)
             df['sent_id'] = 0 
             
-            # Attempt to infer language from token/pos/lemma data if possible (original logic)
+            # Infer language for the built-in if necessary
             if not df.empty and df['pos'].str.contains('ID', na=False).sum() > 0:
                  SOURCE_LANG_CODE = 'ID'
                  
         except Exception as e:
-            # Report the error but continue to raw fallback
             st.warning(f"Failed to parse built-in corpus '{corpus_name}' as T/P/L: {e}. Falling back to raw tokenization.")
-            is_vertical_format = False
-            df = pd.DataFrame() # Clear df to force raw fallback
+            df = pd.DataFrame() 
     
-    if df.empty or not is_vertical_format:
-        # Existing Raw Text Processing (if the file is truly raw or the T/P/L parse failed)
+    if df.empty:
+        # Final Raw Text Processing 
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
         tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
         df = pd.DataFrame({
@@ -1659,7 +1686,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer v17.37 (Parallel Ready)")
+st.title("CORTEX - Corpus Texts Explorer v17.38 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2068,8 +2095,9 @@ if 'pos' in df.columns and len(df) > 0:
 if is_parallel_mode_active:
     app_mode = f"Analyzing Parallel Corpus: {corpus_name} (Source: {SOURCE_LANG_CODE})"
     st.info(f"✅ Parallel Corpus loaded successfully. Total tokens ({SOURCE_LANG_CODE}): **{len(df):,}**. Total sentences: **{len(st.session_state['target_sent_map']):,}**.")
-elif is_monolingual_xml_loaded:
-    app_mode = f"Analyzing Corpus: {corpus_name} (XML Monolingual)"
+elif st.session_state.get('xml_structure_data', None) is not None and not is_parallel_mode_active:
+     # This case handles both uploaded XML and built-in XML (like KOSLAT-ID)
+    app_mode = f"Analyzing Corpus: {corpus_name} (XML Monolingual - {SOURCE_LANG_CODE})"
     st.info(f"✅ Monolingual XML Corpus **'{corpus_name}'** loaded successfully. Total tokens: **{len(df):,}**.")
 else:
     app_mode = f"Analyzing Corpus: {corpus_name} ({'RAW/LINEAR MODE' if is_raw_mode else 'TAGGED MODE'})"
@@ -2170,6 +2198,7 @@ if st.session_state['view'] == 'overview':
 
         if structure_df_styled is not None:
             st.caption(f"Showing structure from: **{file_label}**. Unique attribute values are sampled (Max 20 per attribute).")
+            # The styled dataframe will be rendered here.
             st.dataframe(structure_df_styled, 
                          hide_index=True, 
                          use_container_width=True)
@@ -2421,7 +2450,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     # Use HTML table and escape=False to preserve the HTML formatting (inline styles)
     html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
-    scrollable_html = f"<div class='dataframe-container-scroll'>{html_table}</div>"
+    scrollable_html = f"<div class='dataframe-container-scroll">{html_table}</div>"
 
     st.markdown(scrollable_html, unsafe_allow_html=True)
 
@@ -2465,53 +2494,62 @@ if st.session_state['view'] == 'dictionary':
     st.subheader(f"Word Forms (Based on Lemma: **{', '.join(unique_lemma_list) if unique_lemma_list else 'N/A'}**)")
 
     # --------------------------------------------------------
-    # IPA Feature Logic (Request 1 & 2)
+    # IPA Feature Logic (Request 1 & 2) (REVISED)
     # --------------------------------------------------------
-    is_english_corpus = SOURCE_LANG_CODE.upper() in ('EN', 'ENG', 'ENGLISH')
-    ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
+    # Use the detected/set language code
+    corpus_lang = SOURCE_LANG_CODE.upper() 
     
-    # Add CEFR check here for robustness in dictionary
-    cefr_active = CEFR_ANALYZER and is_english_corpus # Use CEFR_ANALYZER check here
+    # List English/Supported languages for IPA/CEFR
+    english_langs = ('EN', 'ENG', 'ENGLISH') 
+    is_english_corpus = corpus_lang in english_langs
+    
+    # Explicitly check for Indonesian
+    if corpus_lang == 'ID':
+         is_english_corpus = False
+
+    ipa_active = IPA_FEATURE_AVAILABLE and is_english_corpus
+    cefr_active = CEFR_FEATURE_AVAILABLE and is_english_corpus
 
     if forms_list.empty and not is_raw_mode: 
         st.warning(f"Token **'{current_dict_word}'** not found in the corpus or no lemma data available.")
         # Continue to Collocation if possible, but skip forms/regex.
     elif not forms_list.empty:
-        # FIX 1: Rename columns (already done in v17.22 thought block)
         forms_list.rename(columns={'token': 'Token (lowercase)', 'pos': 'POS Tag', 'lemma': 'Lemma (lowercase)'}, inplace=True)
         
         if cefr_active:
-            # Placeholder for CEFR logic (must be fully implemented locally)
+            # Placeholder for CEFR logic
             forms_list.insert(forms_list.shape[1], 'CEFR', 'NA')
         
         if ipa_active:
             try:
-                # Function to safely get IPA transcription, handling common errors/empty results
                 def get_ipa_transcription(token):
                     try:
-                        # eng_to-ipa.convert handles single words or short phrases
-                        import eng_to_ipa as ipa # Import here for cache isolation
+                        import eng_to_ipa as ipa 
                         return ipa.convert(token)
                     except Exception:
                         return "IPA N/A"
 
-                # Forms list contains all-lowercase tokens (from get_all_lemma_forms_details)
-                # 2. Add 'IPA Transcription' column
                 forms_list.insert(forms_list.shape[1], 'IPA Transcription', forms_list['Token (lowercase)'].apply(get_ipa_transcription))
                 
             except Exception as e:
                 st.error(f"Error during IPA transcription: {e}")
-                ipa_active = False # Disable feature if an unhandled error occurs
+                ipa_active = False 
                 
-        # FIX 2: Add Pronunciation column with HTML link.
-        lang_for_pronunciation = "english" if SOURCE_LANG_CODE.lower() in ('en', 'raw', 'xml', 'tagged') else SOURCE_LANG_CODE.lower()
-        
+        # --- Pronunciation Link Logic (REVISED) ---
+        if corpus_lang in ('ID', 'INDONESIAN'):
+             # Use Forvo for Indonesian pronunciation
+            pronunciation_url = lambda token: f"https://forvo.com/word/{token}/#{corpus_lang.lower()}"
+            pronunciation_label = f"Pronunciation ({corpus_lang})"
+        else:
+            # Default to YouGlish for English (or use a placeholder/generic for others)
+            pronunciation_url = lambda token: f"https://youglish.com/pronounce/{token}/english"
+            pronunciation_label = "Pronunciation (EN)"
+
+
         # Create a new column with the clickable link HTML
-        forms_list.insert(forms_list.shape[1], 'Pronunciation', forms_list['Token (lowercase)'].apply(
-            lambda token: f"<a href='https://youglish.com/pronounce/{token}/{lang_for_pronunciation}' target='_blank'>Click here</a>"
+        forms_list.insert(forms_list.shape[1], pronunciation_label, forms_list['Token (lowercase)'].apply(
+            lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>Click here</a>"
         ))
-        
-        # FIX 3: Replaced st.dataframe with st.markdown(forms_list.to_html()) to resolve Streamlit internal error.
         
         # Define table styling for cleaner look with markdown
         html_style = """
@@ -2546,10 +2584,8 @@ if st.session_state['view'] == 'dictionary':
     
     if not IPA_FEATURE_AVAILABLE:
         st.info("💡 **Phonetic Transcription (IPA) feature requires the `eng-to-ipa` library to be installed** (`pip install eng-to-ipa`).")
-    elif is_english_corpus and not ipa_active:
-         st.warning("⚠️ IPA feature is available but encountered an error. Check logs.")
-    elif not is_english_corpus and IPA_FEATURE_AVAILABLE:
-        st.info(f"💡 IPA transcription feature is currently inactive because the identified source language is **{SOURCE_LANG_CODE}**, not English.")
+    elif not is_english_corpus:
+        st.info(f"💡 Phonetic Transcription (IPA) is disabled for non-English corpus ({SOURCE_LANG_CODE}).")
         
     if not CEFR_FEATURE_AVAILABLE and is_english_corpus:
         st.info("💡 **CEFR Categorization feature requires the `cefrpy` library to be installed** (`pip install cefrpy`).")
