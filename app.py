@@ -134,7 +134,8 @@ if 'user_explicit_lang_code' not in st.session_state:
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only (EN Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
-    "KOSLAT-ID (ID XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
+    "BROWN (EN XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/BrownCorpus.xml",
+    "KOSLAT (ID XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
 }
 
 # Define color map constants globally (used for both graph and word cloud)
@@ -3297,5 +3298,6 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
 
 
