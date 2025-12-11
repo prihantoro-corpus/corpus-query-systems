@@ -133,7 +133,7 @@ if 'user_explicit_lang_code' not in st.session_state:
 # ---------------------------
 BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
-    "BROWN (EN XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/BrownCorpus.xml",
+    "BROWN 50% (EN XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Brown-500.xml",
     "KOSLAT (ID XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
 }
 
@@ -3297,3 +3297,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
