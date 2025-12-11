@@ -126,6 +126,9 @@ if 'show_lemma' not in st.session_state:
 # --- New Language State ---
 if 'user_explicit_lang_code' not in st.session_state:
      st.session_state['user_explicit_lang_code'] = 'EN' # Default to English
+# --- Store the last downloaded corpus content
+if 'last_built_in_content' not in st.session_state:
+     st.session_state['last_built_in_content'] = None
 
 
 # ---------------------------
@@ -263,6 +266,7 @@ def reset_analysis():
     st.session_state['monolingual_xml_file_upload'] = None
     st.session_state['xml_structure_data'] = None # Clear structure data
     st.session_state['xml_structure_error'] = None # Clear structure error
+    st.session_state['last_built_in_content'] = None # NEW: Clear built-in content
     
     # --- Force a complete script rerun directly inside the callback ---
     st.rerun()
@@ -581,8 +585,8 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                  pos_matches_highlight = collocate_pos_regex_highlight is None or (collocate_pos_regex_highlight.fullmatch(token_pos) if not is_raw_mode else False)
                  
                  if word_matches_highlight and pos_matches_highlight:
-                      is_collocate_match = True
-                      if collocate_to_display == "": # Capture the first matching collocate
+                     is_collocate_match = True
+                     if collocate_to_display == "": # Capture the first matching collocate
                           collocate_to_display = token # Use the original token case
             
             if is_node_word:
@@ -757,6 +761,23 @@ def df_to_excel_bytes(df):
     buf.seek(0)
     return buf.getvalue()
 
+
+# --- MODIFIED: Built-in Download and Caching function ---
+@st.cache_data
+def get_corpus_data_from_url(corpus_url):
+    """Downloads a file and caches the raw binary content (robustly)."""
+    try:
+        response = requests.get(corpus_url, stream=True)
+        response.raise_for_status() 
+        # Store the raw content in the cache
+        return response.content 
+    except Exception as e:
+        # Catch and report external download errors cleanly
+        st.error(f"❌ **Download Error:** Failed to fetch built-in corpus from {corpus_url}. This may be due to network security or an invalid URL in this deployment environment. Error: {e}")
+        return None
+# --------------------------------------------------------
+
+
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
     if not PYVIS_FEATURE_AVAILABLE: return ""
@@ -825,15 +846,6 @@ def create_pyvis_graph(target_word, coll_df):
 
     return html_content
 
-@st.cache_data
-def download_file_to_bytesio(url):
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status() 
-        return BytesIO(response.content)
-    except Exception as e:
-        st.error(f"Failed to download built-in corpus from {url}. Ensure the file is public and the URL is a RAW content link.")
-        return None
 
 # --- NEW: Robust XML Sanitization Helper ---
 def sanitize_xml_content(file_source):
@@ -1413,8 +1425,11 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
 
 # --- Monolingual File Dispatcher (Updated for Built-in) ---
 @st.cache_data
-def load_corpus_file_built_in(file_source, corpus_name, explicit_lang_code):
-    # This is a specific loader for built-in text files (old logic simplified)
+def load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code):
+    """
+    Loads and processes built-in corpus from the raw binary content passed in.
+    FIX: Takes raw_content (bytes) as input, enabling stable caching via get_corpus_data_from_url.
+    """
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
     
     st.session_state['parallel_mode'] = False
@@ -1427,11 +1442,14 @@ def load_corpus_file_built_in(file_source, corpus_name, explicit_lang_code):
     # Set the global language code from the user's explicit selection initially
     SOURCE_LANG_CODE = explicit_lang_code
     TARGET_LANG_CODE = 'NA'
-        
-    if file_source is None: return None
     
-    # Check if the corpus name/URL suggests XML (KOSLAT-ID uses XML)
-    is_xml_corpus_name = "xml" in BUILT_IN_CORPORA.get(corpus_name, "").lower() or "xml" in corpus_name.lower()
+    if raw_content is None: return None
+    
+    # Create BytesIO object from the raw content for parsing functions
+    file_source = BytesIO(raw_content) 
+    file_source.name = corpus_name # Assign a name for logging/error messages
+    
+    is_xml_corpus_name = "xml" in corpus_name.lower() or "xml" in BUILT_IN_CORPORA.get(corpus_name, "").lower()
 
     if is_xml_corpus_name:
         # --- Handle Built-in XML Corpus ---
@@ -1459,7 +1477,7 @@ def load_corpus_file_built_in(file_source, corpus_name, explicit_lang_code):
             # If XML parsing fails, fall through to raw text processing as a last resort.
         except Exception as e:
             st.warning(f"Failed to parse built-in XML corpus '{corpus_name}': {e}. Falling back to raw text processing.")
-            # Clear file_source to re-read as raw text below
+            # Reset file_source to re-read as raw text below
             file_source.seek(0) 
 
     # --- Prepare content string for non-XML or failed XML built-ins ---
@@ -1714,7 +1732,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
             # FIX: Filter out punctuation collocates here
             if w in PUNCTUATION_COLLOCATES or w.isdigit():
                  continue
-                
+                 
             p = df_corpus["pos"].iloc[j]
             l = df_corpus["lemma"].iloc[j].lower() if "lemma" in df_corpus.columns else "##"
             direction = 'L' if j < i else 'R'
@@ -1962,14 +1980,23 @@ with st.sidebar:
     # --- C. BUILT-IN FALLBACK (Only executes if no custom file was loaded) ---
     if df_source_lang_for_analysis is None and selected_corpus_name != "Select built-in corpus...":
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
-        # Check if we need to download/load the file
-        if 'initial_load_complete' not in st.session_state or st.session_state['initial_load_complete'] == False:
-            with st.spinner(f"Downloading {selected_corpus_name}..."):
-                corpus_source = download_file_to_bytesio(corpus_url)
+        
+        # --- NEW Caching Logic: 
+        # 1. Try to download/fetch from Streamlit's cache
+        # 2. Store the raw content in session state for cross-rerun access (optional safety)
+        
+        with st.spinner(f"Downloading {selected_corpus_name} via network..."):
+            raw_content = get_corpus_data_from_url(corpus_url)
+            st.session_state['last_built_in_content'] = raw_content # Store raw content
+            
+        if raw_content is not None:
+            with st.spinner(f"Processing {selected_corpus_name}..."):
+                corpus_name = selected_corpus_name
+                df_source_lang_for_analysis = load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code)
         else:
-             corpus_source = download_file_to_bytesio(corpus_url) 
-        corpus_name = selected_corpus_name
-        df_source_lang_for_analysis = load_corpus_file_built_in(corpus_source, corpus_name, explicit_lang_code)
+             # Critical failure, clear state to ensure no stale data is used
+             st.session_state['last_built_in_content'] = None
+             df_source_lang_for_analysis = None
     
     # Use the loaded DF for the rest of the sidebar logic
     df_sidebar = df_source_lang_for_analysis
@@ -2225,14 +2252,40 @@ with st.sidebar:
 # load corpus (cached) for main body access - Use the result from the sidebar
 df = df_source_lang_for_analysis
 
-# --- Check for initial load failure and display better message ---
+# --- Check for initial load failure and display better message (THE FIX) ---
 if df is None:
-    st.header("👋 Welcome to CORTEX!")
-    st.markdown("---")
-    st.markdown("## Get Started")
-    st.markdown("**Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
-    st.error(f"❌ **CORPUS LOAD FAILED** or **NO CORPUS SELECTED**. Please check the sidebar selection and ensure files are correctly formatted/aligned.")
-    st.stop()
+    # We only show this if the selected corpus is NOT the initial placeholder
+    if selected_corpus_name != "Select built-in corpus..." or st.session_state.get('mono_file_upload') or st.session_state.get('parallel_excel_file_upload'):
+        
+        # Check if a built-in load failed
+        if selected_corpus_name != "Select built-in corpus..." and st.session_state.get('last_built_in_content') is None:
+            st.header(f"❌ Corpus Load Failed for: {selected_corpus_name}")
+            st.markdown("---")
+            st.error(f"**Critical Error:** Cannot proceed because the selected corpus data could not be downloaded or parsed.")
+            st.info("This is often due to **network/security restrictions** in the deployment environment preventing access to the external corpus URL. Please try again with a local file upload.")
+
+        # Check if an XML parsing error happened
+        elif st.session_state.get('xml_structure_error'):
+            st.header(f"❌ Corpus Load Failed (Parsing Error)")
+            st.markdown("---")
+            st.error(f"**Critical Error:** XML/Corpus parsing failed. Please check the file format and structure.")
+            st.warning(f"**Last Parsing Attempt Error:** {st.session_state['xml_structure_error']}")
+        
+        else:
+            # Generic error
+            st.header("❌ Corpus Load Failed")
+            st.markdown("---")
+            st.error("The corpus (uploaded or built-in) could not be loaded. Please ensure the file is correctly formatted (XML/TPL/Excel) and try selecting it again.")
+
+    else:
+        # Show welcome screen if nothing is selected or uploaded
+        st.header("👋 Welcome to CORTEX!")
+        st.markdown("---")
+        st.markdown("## Get Started")
+        st.markdown("**Choose a preloaded corpus or upload your own corpus** in the sidebar to begin analysis.")
+
+    # Stop here to prevent tool navigation when no data is loaded
+    st.stop() 
 # ---------------------------------------------------------------------
 
 # --- Define Language Suffix for Headers ---
@@ -2374,7 +2427,7 @@ if st.session_state['view'] == 'overview':
     structure_error = st.session_state.get('xml_structure_error')
 
     # Display the section only if an XML file was involved (either monoline XML or parallel mode)
-    if is_monolingual_xml_loaded or is_parallel_mode_active or selected_corpus_name == "KOSLAT-ID (XML Tagged)":
+    if is_monolingual_xml_loaded or is_parallel_mode_active or selected_corpus_name == "KOSLAT (ID XML Tagged)":
         
         # Use a large, always visible expander for structure details
         with st.expander("📊 XML Corpus Structure (Details)", expanded=True):
@@ -2388,7 +2441,7 @@ if st.session_state['view'] == 'overview':
                 
                 file_label = f"Source ({SOURCE_LANG_CODE})" if is_parallel_mode_active else f"Monolingual ({SOURCE_LANG_CODE})"
                 if is_parallel_mode_active:
-                     st.caption(f"Showing combined structure from **{SOURCE_LANG_CODE}** and **{TARGET_LANG_CODE}**.")
+                      st.caption(f"Showing combined structure from **{SOURCE_LANG_CODE}** and **{TARGET_LANG_CODE}**.")
                 else:
                     st.caption(f"Showing structure from **{file_label}**. Attributes are sampled up to 20 unique values.")
                     
@@ -2410,31 +2463,31 @@ if st.session_state['view'] == 'overview':
                     
                     # --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY ---
                     with st.expander("Show Raw Python Data (for diagnosis)"):
-                         st.info("The data below is the Python dictionary successfully produced by the XML parser.")
-                         
-                         # Show the raw Python dictionary object
-                         st.json(structure_data)
-                         
-                         # Fallback 2: Show the unstyled raw text output if json fails or for comparison
-                         def format_structure_data_raw_text(structure_data, max_values=20):
-                              lines = []
-                              for tag in sorted(structure_data.keys()):
-                                  lines.append(f"\n<{tag}>")
-                                  for attr in sorted(structure_data[tag].keys()):
-                                      values = sorted(list(structure_data[tag][attr]))
-                                      sampled_values_str = ", ".join(values[:max_values])
-                                      if len(values) > max_values:
-                                          sampled_values_str += f", ... ({len(values) - max_values} more unique)"
-                                      lines.append(f"    @{attr}: [{sampled_values_str}]")
-                              return "\n".join(lines)
-                              
-                         st.code(format_structure_data_raw_text(structure_data))
-                         # --- END DIAGNOSTIC/FALLBACK ---
+                           st.info("The data below is the Python dictionary successfully produced by the XML parser.")
+                           
+                           # Show the raw Python dictionary object
+                           st.json(structure_data)
+                           
+                           # Fallback 2: Show the unstyled raw text output if json fails or for comparison
+                           def format_structure_data_raw_text(structure_data, max_values=20):
+                                lines = []
+                                for tag in sorted(structure_data.keys()):
+                                     lines.append(f"\n<{tag}>")
+                                     for attr in sorted(structure_data[tag].keys()):
+                                         values = sorted(list(structure_data[tag][attr]))
+                                         sampled_values_str = ", ".join(values[:max_values])
+                                         if len(values) > max_values:
+                                             sampled_values_str += f", ... ({len(values) - max_values} more unique)"
+                                         lines.append(f"    @{attr}: [{sampled_values_str}]")
+                                return "\n".join(lines)
+                                 
+                           st.code(format_structure_data_raw_text(structure_data))
+                           # --- END DIAGNOSTIC/FALLBACK ---
                     
             elif not structure_error:
                 # Only show this if no error occurred AND no data was returned (i.e., parser ran but found nothing)
                 st.info("XML structure not found in the loaded corpus. The corpus must be an XML file and well-formed.")
-             
+              
     # -----------------------------------------------------
 
     st.markdown("---")
@@ -2648,13 +2701,13 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         }}
         .breakdown-table th {{
             background-color: #444444; /* User's Header Background */
-            color: #FAFAFA;           /* User's Text Color */
+            color: #FAFAFA;            /* User's Text Color */
             padding: 8px;
             text-align: left;
         }}
         .breakdown-table td {{
             background-color: #1F1F1F; /* *** FIXED ROW BACKGROUND: Matches KWIC/App BG *** */
-            color: #FAFAFA;           /* User's Text Color */
+            color: #FAFAFA;            /* User's Text Color */
             padding: 8px;
             border-bottom: 1px solid #333;
         }}
@@ -2881,7 +2934,7 @@ if st.session_state['view'] == 'dictionary':
     if not ipa_active:
         forms_list.insert(forms_list.shape[1], 'IPA Transcription', 'NA')
     # -----------------------------------------------------------
-            
+    
     # --- Pronunciation Link Logic (REVISED for KBBI/Cambridge) ---
     if is_indonesian_corpus: # This runs if corpus_lang is ID
         # Use KBBI for Indonesian dictionary
@@ -3297,7 +3350,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
-
-
-
