@@ -136,6 +136,7 @@ BUILT_IN_CORPORA = {
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
     "Brown 50% Only (XML EN TAGGED)" : "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Brown-500.xml",
     "KOSLAT-ID (XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
+    "DICO-JALF V1 (XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/DICO-JALF%20v1-raw.xml",
 }
 
 # ---------------------------
@@ -161,6 +162,12 @@ BUILT_IN_CORPUS_DETAILS = {
         KOSLAT-ID v.1.0 is the first narrative-annotated corpus of reviews of healthcare facilities in Indonesia. It is provided in a **tagged XML format** (token, POS, lemma).
         <br><br>
         **Source/Citation:** Prihantoro., Yuliawati, S., Ekawati, D., & Rachmat, A. (2026-in press). **KOSLAT-ID v.1.0: The first narrative-annotated corpus of reviews of healthcare facilities in Indonesia.** [Corpora, 21(1), xx–xx.](https://www.prihantoro.com)
+        """,
+    "DICO-JALF v1 (XML Tagged)":
+        """
+       This is DICO-JALF.
+        <br><br>
+        **Source/Citation:** Prihantoro, P., Ishikawa, S., Liu, T., Fadli, Z. A., Rini, E. I. H. A. N., & Kepirianto, C. (2025). DICO-JALF v.1.0: Diponegoro Corpus of Japanese Learners as a Foreign Language in Indonesia with AI Error Annotation and Human Supervision. Jurnal Arbitrer, 12(3), 274–288. https://doi.org/10.25077/ar.12.3.274-288.2025 
         """
 }
 # --------------------------
@@ -3325,5 +3332,6 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
 
 
