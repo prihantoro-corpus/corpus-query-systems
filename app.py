@@ -45,9 +45,6 @@ import streamlit.components.v1 as components
 import xml.etree.ElementTree as ET # Import for XML parsing
 
 
-# We explicitly exclude external LLM libraries for the free, stable version.
-# The interpret_results_llm function is replaced with a placeholder.
-
 st.set_page_config(page_title="CORTEX -- Corpus Explorer Version Alpha (10-Dec-25) by PRIHANTORO (www.prihantoro.com; prihantoro@live.undip.ac.id)", layout="wide") 
 
 # --- CONSTANTS ---
@@ -63,78 +60,47 @@ DEFAULT_LANG_CODE = 'RAW'
 # ---------------------------
 # Initializing Session State
 # ---------------------------
-if 'view' not in st.session_state:
-    st.session_state['view'] = 'overview'
-if 'trigger_analyze' not in st.session_state:
-    st.session_state['trigger_analyze'] = False
-if 'initial_load_complete' not in st.session_state:
-    st.session_state['initial_load_complete'] = False
-if 'collocate_pos_regex' not in st.session_state: 
-    st.session_state['collocate_pos_regex'] = ''
-if 'pattern_collocate_pos' not in st.session_state: 
-    st.session_state['pattern_collocate_pos'] = ''
-if 'collocate_lemma' not in st.session_state: 
-    st.session_state['collocate_lemma'] = ''
-if 'llm_interpretation_result' not in st.session_state:
-    st.session_state['llm_interpretation_result'] = None
+if 'view' not in st.session_state: st.session_state['view'] = 'overview'
+if 'trigger_analyze' not in st.session_state: st.session_state['trigger_analyze'] = False
+if 'initial_load_complete' not in st.session_state: st.session_state['initial_load_complete'] = False
+if 'collocate_pos_regex' not in st.session_state: st.session_state['collocate_pos_regex'] = ''
+if 'pattern_collocate_pos' not in st.session_state: st.session_state['pattern_collocate_pos'] = ''
+if 'collocate_lemma' not in st.session_state: st.session_state['collocate_lemma'] = ''
+if 'llm_interpretation_result' not in st.session_state: st.session_state['llm_interpretation_result'] = None
 # --- Input State (must be initialized for keyed widgets) ---
-if 'dict_word_input_main' not in st.session_state: 
-    st.session_state['dict_word_input_main'] = ''
-if 'collocate_regex_input' not in st.session_state: 
-    st.session_state['collocate_regex_input'] = ''
-if 'pattern_collocate_input' not in st.session_state:
-    st.session_state['pattern_collocate_input'] = ''
-if 'pattern_collocate_pos_input' not in st.session_state:
-     st.session_state['pattern_collocate_pos_input'] = ''
-if 'typed_target_input' not in st.session_state:
-     st.session_state['typed_target_input'] = ''
-if 'max_collocates' not in st.session_state:
-    st.session_state['max_collocates'] = 20
-if 'coll_window' not in st.session_state:
-    st.session_state['coll_window'] = 5
-if 'mi_min_freq' not in st.session_state:
-    st.session_state['mi_min_freq'] = 1
+if 'dict_word_input_main' not in st.session_state: st.session_state['dict_word_input_main'] = ''
+if 'collocate_regex_input' not in st.session_state: st.session_state['collocate_regex_input'] = ''
+if 'pattern_collocate_input' not in st.session_state: st.session_state['pattern_collocate_input'] = ''
+if 'pattern_collocate_pos_input' not in st.session_state: st.session_state['pattern_collocate_pos_input'] = ''
+if 'typed_target_input' not in st.session_state: st.session_state['typed_target_input'] = ''
+if 'max_collocates' not in st.session_state: st.session_state['max_collocates'] = 20
+if 'coll_window' not in st.session_state: st.session_state['coll_window'] = 5
+if 'mi_min_freq' not in st.session_state: st.session_state['mi_min_freq'] = 1
 # --- N-Gram State ---
-if 'n_gram_size' not in st.session_state:
-    st.session_state['n_gram_size'] = 2
-if 'n_gram_filters' not in st.session_state:
-    st.session_state['n_gram_filters'] = {} # Dictionary to hold positional filters: {'1': 'pattern', '2': 'pattern', ...}
-if 'n_gram_trigger_analyze' not in st.session_state:
-    st.session_state['n_gram_trigger_analyze'] = False
-if 'n_gram_results_df' not in st.session_state:
-    st.session_state['n_gram_results_df'] = pd.DataFrame()
+if 'n_gram_size' not in st.session_state: st.session_state['n_gram_size'] = 2
+if 'n_gram_filters' not in st.session_state: st.session_state['n_gram_filters'] = {}
+if 'n_gram_trigger_analyze' not in st.session_state: st.session_state['n_gram_trigger_analyze'] = False
+if 'n_gram_results_df' not in st.session_state: st.session_state['n_gram_results_df'] = pd.DataFrame()
 # --- Parallel Corpus State ---
-if 'parallel_mode' not in st.session_state:
-    st.session_state['parallel_mode'] = False
-if 'df_target_lang' not in st.session_state:
-    st.session_state['df_target_lang'] = pd.DataFrame()
-if 'target_sent_map' not in st.session_state:
-    st.session_state['target_sent_map'] = {}
+if 'parallel_mode' not in st.session_state: st.session_state['parallel_mode'] = False
+if 'df_target_lang' not in st.session_state: st.session_state['df_target_lang'] = pd.DataFrame()
+if 'target_sent_map' not in st.session_state: st.session_state['target_sent_map'] = {}
 # --- Monolingual XML state ---
-if 'monolingual_xml_file_upload' not in st.session_state:
-    st.session_state['monolingual_xml_file_upload'] = None
+if 'monolingual_xml_file_upload' not in st.session_state: st.session_state['monolingual_xml_file_upload'] = None
 # --- XML Structure Cache ---
-if 'xml_structure_data' not in st.session_state:
-     st.session_state['xml_structure_data'] = None
-if 'xml_structure_error' not in st.session_state: # NEW: To store XML parsing errors
-    st.session_state['xml_structure_error'] = None
+if 'xml_structure_data' not in st.session_state: st.session_state['xml_structure_data'] = None
+if 'xml_structure_error' not in st.session_state: st.session_state['xml_structure_error'] = None
 # --- Display Settings ---
-if 'show_pos_tag' not in st.session_state:
-    st.session_state['show_pos_tag'] = False
-if 'show_lemma' not in st.session_state:
-    st.session_state['show_lemma'] = False
+if 'show_pos_tag' not in st.session_state: st.session_state['show_pos_tag'] = False
+if 'show_lemma' not in st.session_state: st.session_state['show_lemma'] = False
 # --- New Language State ---
-if 'user_explicit_lang_code' not in st.session_state:
-     st.session_state['user_explicit_lang_code'] = 'EN' # Default to English
+if 'user_explicit_lang_code' not in st.session_state: st.session_state['user_explicit_lang_code'] = 'EN'
 # --- Store the last downloaded corpus content
-if 'last_built_in_content' not in st.session_state:
-     st.session_state['last_built_in_content'] = None
+if 'last_built_in_content' not in st.session_state: st.session_state['last_built_in_content'] = None
 # --- CRITICAL: Stored DataFrame for Navigation Reruns ---
-if 'processed_df' not in st.session_state:
-    st.session_state['processed_df'] = None
+if 'processed_df' not in st.session_state: st.session_state['processed_df'] = None
 # --- NEW: Flag to indicate successful load ---
-if 'corpus_loaded' not in st.session_state:
-    st.session_state['corpus_loaded'] = False
+if 'corpus_loaded' not in st.session_state: st.session_state['corpus_loaded'] = False
 
 
 # ---------------------------
@@ -146,7 +112,7 @@ BUILT_IN_CORPORA = {
     "KOSLAT (ID XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
 }
 
-# Define color map constants globally (used for both graph and word cloud)
+# Define color map constants globally
 POS_COLOR_MAP = {
     'N': '#33CC33',  # Noun (Green)
     'V': '#3366FF',  # Verb (Blue)
@@ -219,14 +185,17 @@ def create_word_cloud(freq_data, is_tagged_mode):
     
     return fig
 
-# --- NAVIGATION FUNCTIONS ---
+# --- NAVIGATION FUNCTIONS (CRITICAL FIX FOR NAVIGATION STABILITY) ---
 def set_view(view_name):
-    # Only allow navigation if a corpus is loaded
-    if st.session_state.get('corpus_loaded'):
+    
+    # CRITICAL CHECK: Ensure the DataFrame is present in session state before navigating.
+    if st.session_state.get('corpus_loaded') and st.session_state.get('processed_df') is not None:
         st.session_state['view'] = view_name
         st.session_state['llm_interpretation_result'] = None
     else:
-        st.error("Please load or select a corpus before navigating to tools.")
+        # If the load flag is missing or data is lost, do not change view.
+        st.error("❌ Data state lost during navigation. Please re-load the corpus using the '🚀 Load Corpus' button.")
+        st.session_state['view'] = 'overview' # Stay on the overview/error screen
     
 def reset_analysis():
     """Clear state for a fresh start/new upload."""
@@ -324,7 +293,6 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids, breakdown_df)
     """
-    # (KWIC logic is omitted for brevity, assumed functional based on previous iterations)
     
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
@@ -534,10 +502,8 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
 def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
     """
     Generates N-grams, applies positional filters (token, POS, lemma), and calculates frequencies.
-    corpus_id is included in the signature to ensure cache invalidation when the corpus changes.
     """
-    # (N-Gram logic is omitted for brevity, assumed functional based on previous iterations)
-
+    
     total_tokens = len(df_corpus)
     if total_tokens < n_size or n_size < 1: return pd.DataFrame()
     
@@ -619,14 +585,10 @@ def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
     return n_gram_df.sort_values("Frequency", ascending=False).reset_index(drop=True)
 # -----------------------------
 
-# --- Statistical Helpers (omitted for brevity) ---
-# ... (compute_ll, compute_mi, significance_from_ll, df_to_excel_bytes)
-
+# --- Statistical Helpers ---
 EPS = 1e-12
-def safe_log(x):
-    return math.log(max(x, EPS))
+def safe_log(x): return math.log(max(x, EPS))
 def compute_ll(k11, k12, k21, k22):
-    """Computes the Log-Likelihood (LL) statistic."""
     total = k11 + k12 + k21 + k22
     if total == 0: return 0.0
     e11 = (k11 + k12) * (k11 + k21) / total
@@ -638,12 +600,10 @@ def compute_ll(k11, k12, k21, k22):
         if k > 0 and e > 0: s += k * math.log(k / e)
     return 2.0 * s
 def compute_mi(k11, target_freq, coll_total, corpus_size):
-    """Compuutes the Mutual Information (MI) statistic."""
     expected = (target_freq * coll_total) / corpus_size
     if expected == 0 or k11 == 0: return 0.0
     return math.log2(k11 / expected)
 def significance_from_ll(ll_val):
-    """Converts Log-Likelihood value to significance level."""
     if ll_val >= 15.13: return '*** (p<0.001)'
     if ll_val >= 10.83: return '** (p<0.01)'
     if ll_val >= 3.84: return ' * (p<0.05)'
@@ -664,12 +624,11 @@ def get_corpus_data_from_url(corpus_url):
         response.raise_for_status() 
         return response.content 
     except Exception as e:
-        st.error(f"❌ **Download Error:** Failed to fetch built-in corpus from {corpus_url}. Error: {e}")
+        st.session_state['xml_structure_error'] = f"Download/Network Error: {e}" 
         return None
 # ----------------------------------
 
-# --- Graph and XML Helpers (omitted for brevity) ---
-# ... (create_pyvis_graph, sanitize_xml_content, extract_xml_structure, format_structure_data_hierarchical)
+# --- Graph and XML Helpers ---
 @st.cache_data
 def create_pyvis_graph(target_word, coll_df):
     if not PYVIS_FEATURE_AVAILABLE: return ""
@@ -698,11 +657,8 @@ def create_pyvis_graph(target_word, coll_df):
     for index, row in coll_df.iterrows():
         collocate = row['Collocate']
         ll_score = row['LL']
-        observed = row['Observed']
         pos_tag = row['POS']
         direction = row.get('Direction', 'R') 
-        obs_l = row.get('Obs_L', 0)
-        obs_r = row.get('Obs_R', 0)
         x_position = LEFT_BIAS if direction in ('L', 'B') else RIGHT_BIAS
 
         pos_code = pos_tag[0].upper() if pos_tag and len(pos_tag) > 0 else 'O'
@@ -718,7 +674,7 @@ def create_pyvis_graph(target_word, coll_df):
             
         tooltip_title = (
             f"POS: {row['POS']}\n"
-            f"Obs: {observed} (Left: {obs_l}, Right: {obs_r})\n"
+            f"Obs: {row['Observed']} (Left: {row.get('Obs_L', 0)}, Right: {row.get('Obs_R', 0)})\n"
             f"LL: {ll_score:.2f}\n"
             f"Dominant Direction: {direction}"
         )
@@ -807,8 +763,7 @@ def format_structure_data_hierarchical(structure_data, indent_level=0, max_value
 
 def parse_xml_content_to_df(file_source):
     """
-    Core parser (non-cached). Returns: 
-    {'lang_code': str, 'df_data': list of dicts, 'sent_map': {sent_id: raw_sentence_text}}
+    Core parser, wraps ET logic with sanitization.
     """
     
     cleaned_xml_content = sanitize_xml_content(file_source)
@@ -816,6 +771,7 @@ def parse_xml_content_to_df(file_source):
     
     try:
         root = ET.fromstring(cleaned_xml_content)
+        
         lang_code = root.get('lang')
         if not lang_code:
             lang_match = re.search(r'(<text\s+lang="([^"]+)">|<corpus\s+[^>]*lang="([^"]+)">)', cleaned_xml_content)
@@ -825,8 +781,7 @@ def parse_xml_content_to_df(file_source):
             
     except Exception as e:
         file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
-        st.error(f"Error reading or parsing XML file {file_name_label}: {e}")
-        st.session_state['xml_structure_error'] = f"Tokenization Parse Error: {e}" 
+        st.session_state['xml_structure_error'] = f"XML PARSING FAILURE (File: {file_name_label}): {e}"
         return None
 
     df_data = []
@@ -906,19 +861,18 @@ def parse_xml_content_to_df(file_source):
             
     if not df_data:
         file_name_label = getattr(file_source, 'name', 'Uploaded XML File')
-        st.warning(f"No tokenized data was extracted from the XML file: {file_name_label}.")
+        st.session_state['xml_structure_error'] = f"XML PARSING SUCCESSFUL, but no tokenized data extracted from file: {file_name_label}."
         return None
         
     return {'lang_code': lang_code, 'df_data': df_data, 'sent_map': sent_map}
 
 
 # ---------------------------------------------------------------------
-# Monolingual Load function (NO CACHE)
+# Monolingual Load function (NO CACHE, with robust file stream handling)
 # ---------------------------------------------------------------------
 def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
 
-    # Reset specific session states related to *this* load type
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
@@ -935,27 +889,39 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
 
     
     for file_source in file_sources:
-        file_source.seek(0)
         
-        if file_source.name.lower().endswith('.xml'):
-            result = parse_xml_content_to_df(file_source)
+        # --- ROBUST STREAM HANDLING (CRITICAL FIX) ---
+        try:
+            file_source.seek(0)
+            file_content = file_source.read()
+            stable_file_stream = BytesIO(file_content)
+            stable_file_stream.name = file_source.name 
+        except Exception as e:
+            st.error(f"Error reading uploaded file '{file_source.name}': {e}. Check file validity.")
+            continue
+        # ---------------------------------------------
+
+        if stable_file_stream.name.lower().endswith('.xml'):
+            
+            result = parse_xml_content_to_df(stable_file_stream) 
+            
             if result:
                 if explicit_lang_code == 'OTHER' and result['lang_code'] not in ('XML', 'OTHER'):
                     xml_detected_lang_code = result['lang_code'] 
                     
                 all_df_data.extend(result['df_data'])
-                st.session_state['monolingual_xml_file_upload'] = file_source 
+                st.session_state['monolingual_xml_file_upload'] = stable_file_stream 
         
         else: # TXT, CSV, or assumed RAW (non-XML)
             try:
-                file_bytes = file_source.read()
+                file_bytes = stable_file_stream.read()
                 file_content_str = file_bytes.decode('utf-8', errors='ignore')
                 clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
                 clean_content = "\n".join(clean_lines)
             except Exception as e:
                 st.error(f"Error reading raw file content: {e}")
                 continue
-
+            
             if is_tagged_format:
                 file_buffer_for_pandas = StringIO(clean_content)
                 df_attempt = None
@@ -984,7 +950,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     df_file['sent_id'] = 0 
                     all_df_data.extend(df_file.to_dict('records'))
                 else:
-                    st.warning(f"File {file_source.name} was expected to be a vertical format but could not be parsed. Falling back to raw text.")
+                    st.warning(f"File {stable_file_stream.name} was expected to be a vertical format but could not be parsed. Falling back to raw text.")
                     is_tagged_format = False
             
             if not is_tagged_format or selected_format == '.txt': 
@@ -1030,11 +996,17 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
 
     if src_file is None or tgt_file is None: return None
 
-    src_file.seek(0)
-    tgt_file.seek(0)
-    
-    src_result = parse_xml_content_to_df(src_file)
-    tgt_result = parse_xml_content_to_df(tgt_file)
+    # --- ROBUST STREAM HANDLING for PARALLEL XML ---
+    try:
+        src_file.seek(0); src_content = src_file.read(); stable_src_stream = BytesIO(src_content); stable_src_stream.name = src_file.name
+        tgt_file.seek(0); tgt_content = tgt_file.read(); stable_tgt_stream = BytesIO(tgt_content); stable_tgt_stream.name = tgt_file.name
+    except Exception as e:
+        st.error(f"Error reading parallel XML files: {e}.")
+        return None
+    # -----------------------------------------------
+
+    src_result = parse_xml_content_to_df(stable_src_stream)
+    tgt_result = parse_xml_content_to_df(stable_tgt_stream)
     
     if src_result is None or tgt_result is None: return None
         
@@ -1063,11 +1035,9 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
     st.session_state['df_target_lang'] = df_tgt
     st.session_state['target_sent_map'] = tgt_result['sent_map'] 
     
-    src_file.seek(0)
-    tgt_file.seek(0)
-    src_structure = extract_xml_structure(src_file)
-    tgt_file.seek(0)
-    tgt_structure = extract_xml_structure(tgt_file)
+    # Structure extraction from stable streams
+    src_structure = extract_xml_structure(stable_src_stream)
+    tgt_structure = extract_xml_structure(stable_tgt_stream)
     
     combined_structure = {}
     if src_structure: combined_structure.update(src_structure)
@@ -1107,7 +1077,8 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
     except Exception as e:
         st.error(f"Failed to read Excel file: {e}")
         return None
-
+    # ... (rest of parallel load logic)
+    
     if df_raw.shape[1] < 2:
         st.error("Excel file must contain at least two columns for source and target language.")
         return None
@@ -1134,10 +1105,7 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
         
         for token in src_tokens:
             data_src.append({
-                "token": token,
-                "pos": "##",
-                "lemma": "##",
-                "sent_id": sent_id_counter
+                "token": token, "pos": "##", "lemma": "##", "sent_id": sent_id_counter
             })
             
     if not data_src:
@@ -1184,7 +1152,7 @@ def load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code):
         try:
             file_source.seek(0)
             file_copy_for_parsing = BytesIO(file_source.read())
-            file_copy_for_parsing.seek(0)
+            file_copy_for_parsing.name = corpus_name
             
             xml_result = parse_xml_content_to_df(file_copy_for_parsing) 
             
@@ -1249,12 +1217,12 @@ def load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code):
     return df 
 
 # -----------------------------------------------------
-# MASTER LOADING HANDLER (NEW)
+# MASTER LOADING HANDLER 
 # -----------------------------------------------------
 
 def handle_corpus_loading():
     """
-    Executes the appropriate (non-cached) loading function based on the sidebar selection
+    Executes the appropriate loading function based on the sidebar selection
     and updates the session state only if successful.
     """
     selected_corpus_name = st.session_state.get('corpus_select')
@@ -1263,82 +1231,89 @@ def handle_corpus_loading():
     
     df_result = None
     corpus_loaded_name = ""
+    st.session_state['xml_structure_error'] = None 
     
     st.session_state['processed_df'] = None
     st.session_state['corpus_loaded'] = False
 
-    # 1. BUILT-IN CORPUS
-    if selected_corpus_name != "Select built-in corpus...":
-        corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
-        with st.spinner(f"Downloading {selected_corpus_name} via network..."):
-            # Use cached download result (only the download is cached)
-            raw_content = get_corpus_data_from_url(corpus_url)
-            st.session_state['last_built_in_content'] = raw_content
+    try:
+        # 1. BUILT-IN CORPUS
+        if selected_corpus_name != "Select built-in corpus...":
+            corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
+            with st.spinner(f"Downloading {selected_corpus_name} via network..."):
+                raw_content = get_corpus_data_from_url(corpus_url)
+                st.session_state['last_built_in_content'] = raw_content
+                
+            if raw_content is not None:
+                with st.spinner(f"Processing {selected_corpus_name}..."):
+                    df_result = load_corpus_file_built_in(raw_content, selected_corpus_name, explicit_lang_code)
+                    if df_result is not None:
+                        corpus_loaded_name = selected_corpus_name
+            elif st.session_state.get('xml_structure_error') and "Download/Network Error" in st.session_state['xml_structure_error']:
+                 pass 
             
-        if raw_content is not None:
-            with st.spinner(f"Processing {selected_corpus_name}..."):
-                df_result = load_corpus_file_built_in(raw_content, selected_corpus_name, explicit_lang_code)
-                if df_result is not None:
-                    corpus_loaded_name = selected_corpus_name
-        
-    # 2. CUSTOM UPLOAD (MONOLINGUAL)
-    elif corpus_mode == "Monolingual Corpus" and st.session_state.get('mono_file_upload'):
-         uploaded_files_mono = st.session_state['mono_file_upload']
-         selected_format_mono = st.session_state.get('mono_format_select')
-         
-         with st.spinner(f"Processing Monolingual Corpus ({len(uploaded_files_mono)} file(s))..."):
-             df_result = load_monolingual_corpus_files(uploaded_files_mono, explicit_lang_code, selected_format_mono)
-             if df_result is not None:
-                 corpus_loaded_name = f"Monolingual ({SOURCE_LANG_CODE}, {selected_format_mono})"
-                 
-    # 3. CUSTOM UPLOAD (PARALLEL)
-    elif corpus_mode == "Parallel Corpus":
-        parallel_file_mode = st.session_state.get('parallel_file_mode_radio')
-        
-        if parallel_file_mode == "One corpus file" and st.session_state.get('parallel_excel_file_upload'):
-            parallel_excel_file = st.session_state['parallel_excel_file_upload']
-            excel_format = st.session_state.get('excel_format_radio')
-            with st.spinner("Processing Excel Parallel Corpus..."):
-                df_result = load_excel_parallel_corpus_file(parallel_excel_file, excel_format)
-                if df_result is not None:
-                    corpus_loaded_name = f"Parallel (Excel) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
-                    st.session_state['parallel_mode'] = True
+        # 2. CUSTOM UPLOAD (MONOLINGUAL)
+        elif corpus_mode == "Monolingual Corpus" and st.session_state.get('mono_file_upload'):
+             uploaded_files_mono = st.session_state['mono_file_upload']
+             selected_format_mono = st.session_state.get('mono_format_select')
+             
+             with st.spinner(f"Processing Monolingual Corpus ({len(uploaded_files_mono)} file(s))..."):
+                 df_result = load_monolingual_corpus_files(uploaded_files_mono, explicit_lang_code, selected_format_mono)
+                 if df_result is not None:
+                     corpus_loaded_name = f"Monolingual ({SOURCE_LANG_CODE}, {selected_format_mono})"
+                     
+        # 3. CUSTOM UPLOAD (PARALLEL)
+        elif corpus_mode == "Parallel Corpus":
+            parallel_file_mode = st.session_state.get('parallel_file_mode_radio')
+            
+            if parallel_file_mode == "One corpus file" and st.session_state.get('parallel_excel_file_upload'):
+                parallel_excel_file = st.session_state['parallel_excel_file_upload']
+                excel_format = st.session_state.get('excel_format_radio')
+                with st.spinner("Processing Excel Parallel Corpus..."):
+                    df_result = load_excel_parallel_corpus_file(parallel_excel_file, excel_format)
+                    if df_result is not None:
+                        corpus_loaded_name = f"Parallel (Excel) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
+                        st.session_state['parallel_mode'] = True
 
-        elif parallel_file_mode == "Two corpus files (aligned IDs required)" and st.session_state.get('xml_src_file_upload') and st.session_state.get('xml_tgt_file_upload'):
-            xml_src_file = st.session_state['xml_src_file_upload']
-            xml_tgt_file = st.session_state['xml_tgt_file_upload']
-            src_lang_input = st.session_state.get('src_lang_code_input')
-            tgt_lang_input = st.session_state.get('tgt_lang_code_input')
-            
-            with st.spinner("Processing XML Parallel Corpus..."):
-                df_result = load_xml_parallel_corpus(xml_src_file, xml_tgt_file, src_lang_input, tgt_lang_input)
-                if df_result is not None:
-                    corpus_loaded_name = f"Parallel (XML) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
-                    st.session_state['parallel_mode'] = True
+            elif parallel_file_mode == "Two corpus files (aligned IDs required)" and st.session_state.get('xml_src_file_upload') and st.session_state.get('xml_tgt_file_upload'):
+                xml_src_file = st.session_state['xml_src_file_upload']
+                xml_tgt_file = st.session_state['xml_tgt_file_upload']
+                src_lang_input = st.session_state.get('src_lang_code_input')
+                tgt_lang_input = st.session_state.get('tgt_lang_code_input')
+                
+                with st.spinner("Processing XML Parallel Corpus..."):
+                    df_result = load_xml_parallel_corpus(xml_src_file, xml_tgt_file, src_lang_input, tgt_lang_input)
+                    if df_result is not None:
+                        corpus_loaded_name = f"Parallel (XML) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
+                        st.session_state['parallel_mode'] = True
+    
+    except Exception as e:
+        st.session_state['xml_structure_error'] = f"UNHANDLED CRITICAL LOAD ERROR: {type(e).__name__}: {e}"
+        print(f"CRITICAL ERROR LOG: {st.session_state['xml_structure_error']}") 
+        df_result = None
+
     
     # --- FINAL STATE UPDATE ---
     if df_result is not None:
         st.session_state['processed_df'] = df_result
         st.session_state['corpus_loaded'] = True
         st.session_state['corpus_name'] = corpus_loaded_name
-        st.session_state['view'] = 'overview' # Force move to overview after successful load
+        st.session_state['view'] = 'overview'
         st.rerun()
         
     elif st.session_state.get('corpus_name'):
-         # If load failed, but a previous name existed, clear it.
          st.session_state['corpus_name'] = None
 # -----------------------------------------------------
 
-# --- Collocation and KWIC Helpers (omitted for brevity) ---
-# ... (display_collocation_kwic_examples, generate_collocation_results)
+# --- Collocation and KWIC Helpers ---
 def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, window, limit_per_collocate=1, is_parallel_mode=False, target_sent_map=None, show_pos=False, show_lemma=False):
-    if top_collocates_df.empty:
-        st.info("No collocates to display examples for."); return
+    if top_collocates_df.empty: st.info("No collocates to display examples for."); return
 
     colloc_list = top_collocates_df.head(KWIC_COLLOC_DISPLAY_LIMIT)
     collex_rows_total = []
     
-    collocate_example_table_style = f"""<style> ... </style>""" # Omitted styling for brevity
+    # Custom KWIC table style (omitted for brevity)
+    collocate_example_table_style = "" 
     st.markdown(collocate_example_table_style, unsafe_allow_html=True)
     
     with st.spinner(f"Generating concordance examples for top {len(colloc_list)} collocates..."):
@@ -1383,13 +1358,13 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
 
 @st.cache_data(show_spinner=False)
 def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_min_freq, max_collocates, is_raw_mode, collocate_regex="", collocate_pos_regex_input="", selected_pos_tags=None, collocate_lemma=""):
-    # (Collocation calculation logic is omitted for brevity, assumed functional based on previous iterations)
     
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
     search_terms = raw_target_input.split()
     primary_target_len = len(search_terms)
     
+    # ... (Search logic remains the same)
     def create_structural_matcher(term):
         lemma_pattern = None; pos_pattern = None
         lemma_match = re.search(r"\[(.*?)\]", term)
@@ -1472,9 +1447,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
         dominant_direction = 'R' if data['R'] > data['L'] else ('L' if data['L'] > data['R'] else 'B')
         total_freq = token_counts_unfiltered.get(w, 0)
         
-        k11 = observed
-        k12 = freq - k11
-        k21 = total_freq - k11
+        k11 = observed; k12 = freq - k11; k21 = total_freq - k11
         k22 = total_tokens - (k11 + k12 + k21)
         
         ll = compute_ll(k11, k12, k21, k22)
@@ -1518,6 +1491,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
     stats_df_sorted = stats_df_filtered.sort_values("LL", ascending=False)
     
     return (stats_df_sorted, freq, primary_target_mwu)
+
 
 # ---------------------------
 # UI: header
@@ -1672,7 +1646,7 @@ with st.sidebar:
     nav_disabled = not st.session_state['corpus_loaded'] # Navigation disabled if DF is None
 
     is_active_o = st.session_state['view'] == 'overview'
-    st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary", disabled=False) # Overview always accessible
+    st.button("📖 Overview", key='nav_overview', on_click=set_view, args=('overview',), use_container_width=True, type="primary" if is_active_o else "secondary", disabled=False)
     
     is_active_d = st.session_state['view'] == 'dictionary' 
     st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary", disabled=nav_disabled)
@@ -1850,7 +1824,7 @@ with st.sidebar:
     )
     st.markdown(
         """
-        <a href="https://docs.google.com/document/d/1rqrj3X_uoKWL_5P2QBlSQMW06R3EoknxqmpIcxTRrKI/edit?usp=sharing" target="_blank" style="text-decoration: none;">
+        <a href="https://docs.google.com/document/d/1rqrj3X_uoKWL_5P2QBlSQMW06R3EoknxqmpIcxTRrKI/edit?usp=sharing" target='_blank' style="text-decoration: none;">
             <button style="background-color: #333333; color: white; border: none; padding: 10px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 4px;">
                 <span style="font-size: 1.2em;">📖</span> App Documentation
             </button>
@@ -1863,28 +1837,21 @@ with st.sidebar:
 # --- CHECK FOR LOAD SUCCESS OR FAILURE ---
 if not st.session_state['corpus_loaded']:
     
-    # Check if a built-in load failed during the manual load attempt
-    if st.session_state.get('last_built_in_content') is None and selected_corpus_name != "Select built-in corpus...":
-        st.header(f"❌ Corpus Load Failed for: {selected_corpus_name}")
-        st.markdown("---")
-        st.error(f"**Critical Error:** Cannot proceed because the selected built-in corpus data could not be downloaded or parsed.")
-        st.info("Please try again with a local file upload.")
+    xml_error = st.session_state.get('xml_structure_error')
 
-    # Check if an XML parsing error happened
-    elif st.session_state.get('xml_structure_error'):
-        st.header(f"❌ Corpus Load Failed (Parsing Error)")
+    if xml_error:
+        st.header(f"❌ Corpus Load Failed (Specific Error)")
         st.markdown("---")
-        st.error(f"**Critical Error:** XML/Corpus parsing failed. Please check the file format and structure.")
-        st.warning(f"**Last Parsing Attempt Error:** {st.session_state['xml_structure_error']}")
-    
-    elif st.session_state.get('corpus_name') != "No Corpus Loaded":
-        # Generic error after a failed manual load attempt
+        st.error(f"**Critical Error:** The file processing failed during download or parsing.")
+        st.warning(f"**Specific Error Details:** {xml_error}")
+        st.info("Please retry the manual upload (Monolingual Corpus mode) or check the file for malformed XML structure.")
+
+    elif st.session_state.get('corpus_name') != "No Corpus Loaded" or st.session_state.get('mono_file_upload') or st.session_state.get('parallel_excel_file_upload') or st.session_state.get('xml_src_file_upload'):
         st.header("❌ Corpus Load Failed")
         st.markdown("---")
-        st.error("The corpus could not be loaded. Check your file format, or try clicking 'Load Corpus' again.")
+        st.error("The corpus could not be loaded. Please click '🚀 Load Corpus' to process the selected file.")
 
     else:
-        # Show welcome screen if nothing is selected or uploaded
         st.header("👋 Welcome to CORTEX!")
         st.markdown("---")
         st.markdown("## Get Started")
@@ -1892,7 +1859,6 @@ if not st.session_state['corpus_loaded']:
         st.markdown("**2. Click '🚀 Load Corpus'** in the sidebar to process the data.")
 
     st.stop() 
-# ---------------------------------------------------------------------
 
 
 # --- START OF PROCESSING LOGIC (ONLY IF LOADED) ---
@@ -1980,8 +1946,7 @@ if st.session_state['view'] == 'overview':
                         , unsafe_allow_html=True)
                         
                     st.pyplot(wordcloud_fig)
-                else:
-                    st.info("Not enough single tokens remaining to generate a word cloud.")
+                else: st.info("Not enough single tokens remaining to generate a word cloud.")
 
         else: st.info("No tokens to generate a word cloud.")
 
@@ -2201,7 +2166,8 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         st.subheader(f"Token Breakdown for Query '{raw_target_input}'")
         breakdown_display_df = breakdown_df.head(100).copy()
         
-        scroll_style_breakdown = f"""<style> ... </style>""" # Omitted styling for brevity
+        # Custom CSS for table (omitted for brevity)
+        scroll_style_breakdown = "" 
         st.markdown(scroll_style_breakdown, unsafe_allow_html=True)
 
         html_table_breakdown = breakdown_display_df.to_html(index=False, classes=['breakdown-table'])
@@ -2224,7 +2190,8 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
         kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
     
-    kwic_table_style = f"""<style> ... </style>""" # Omitted styling for brevity
+    # KWIC Table Style (omitted for brevity)
+    kwic_table_style = "" 
     st.markdown(kwic_table_style, unsafe_allow_html=True)
     
     html_table = kwic_preview.to_html(escape=False, classes=['dataframe'], index=False)
@@ -2323,7 +2290,8 @@ if st.session_state['view'] == 'dictionary':
         lambda token: f"<a href='{pronunciation_url(token)}' target='_blank'>Link</a>"
     ))
     
-    html_style = """<style> ... </style>""" # Omitted styling for brevity
+    # HTML style (omitted for brevity)
+    html_style = "" 
     st.markdown(html_style, unsafe_allow_html=True)
 
     st.markdown(
@@ -2380,7 +2348,8 @@ if st.session_state['view'] == 'dictionary':
             translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
             kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
 
-        kwic_table_style = f"""<style> ... </style>""" # Omitted styling for brevity
+        # KWIC Table Style (omitted for brevity)
+        kwic_table_style = "" 
         st.markdown(kwic_table_style, unsafe_allow_html=True)
         
         html_table = kwic_preview.to_html(escape=False, classes=['dict-kwic-table'], index=False)
