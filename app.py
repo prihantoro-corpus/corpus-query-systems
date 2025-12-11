@@ -615,9 +615,9 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
                  pos_matches_highlight = collocate_pos_regex_highlight is None or (collocate_pos_regex_highlight.fullmatch(token_pos) if not is_raw_mode else False)
                  
                  if word_matches_highlight and pos_matches_highlight:
-                     is_collocate_match = True
-                     if collocate_to_display == "": # Capture the first matching collocate
-                         collocate_to_display = token # Use the original token case
+                      is_collocate_match = True
+                      if collocate_to_display == "": # Capture the first matching collocate
+                          collocate_to_display = token # Use the original token case
             
             if is_node_word:
                 # Format node word(s) as inline, explicitly marking them as node words
@@ -1573,37 +1573,37 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     
     # Custom KWIC table style (Now includes flexible width for columns)
     collocate_example_table_style = f"""
-        <style>
-        .collex-table-container-fixed {{
-            max-height: 400px; /* Fixed height for scrollable view */
-            overflow-y: auto;
-            margin-bottom: 1rem;
-            width: 100%;
-        }}
-        .collex-table-inner table {{ 
-            width: 100%; 
-            table-layout: fixed; /* Fixed layout for proportional columns */
-            font-family: monospace; 
-            color: white; 
-            font-size: 0.9em;
-        }}
-        .collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; white-space: nowrap; }}
-        
-        /* Apply explicit proportional widths to Left, Node, Right, and optionally Translation */
-        .collex-table-inner td:nth-child(1) {{ width: 8%; text-align: left; font-weight: bold; border-right: 1px solid #444; white-space: nowrap; }} /* Collocate Column */
-        .collex-table-inner td:nth-child(2) {{ width: 35%; text-align: right; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Left Context */
-        .collex-table-inner td:nth-child(3) {{ 
-             width: 15%; 
-             text-align: center; 
-             font-weight: bold; 
-             background-color: #f0f0f0; 
-             color: black; 
-             white-space: normal; vertical-align: top; padding: 5px 10px;
-        }} /* Node */
-        .collex-table-inner td:nth-child(4) {{ width: 35%; text-align: left; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Right Context */
-        .collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 7%; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column (if present, takes remaining width) */
+    	<style>
+    	.collex-table-container-fixed {{
+    		max-height: 400px; /* Fixed height for scrollable view */
+    		overflow-y: auto;
+    		margin-bottom: 1rem;
+    		width: 100%;
+    	}}
+    	.collex-table-inner table {{ 
+    		width: 100%; 
+    		table-layout: fixed; /* Fixed layout for proportional columns */
+    		font-family: monospace; 
+    		color: white; 
+    		font-size: 0.9em;
+    	}}
+    	.collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; white-space: nowrap; }}
+    	
+    	/* Apply explicit proportional widths to Left, Node, Right, and optionally Translation */
+    	.collex-table-inner td:nth-child(1) {{ width: 8%; text-align: left; font-weight: bold; border-right: 1px solid #444; white-space: nowrap; }} /* Collocate Column */
+    	.collex-table-inner td:nth-child(2) {{ width: 35%; text-align: right; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Left Context */
+    	.collex-table-inner td:nth-child(3) {{ 
+    		width: 15%; 
+    		text-align: center; 
+    		font-weight: bold; 
+    		background-color: #f0f0f0; 
+    		color: black; 
+    		white-space: normal; vertical-align: top; padding: 5px 10px;
+    	}} /* Node */
+    	.collex-table-inner td:nth-child(4) {{ width: 35%; text-align: left; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Right Context */
+    	.collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 7%; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column (if present, takes remaining width) */
 
-        </style>
+    	</style>
     """
     st.markdown(collocate_example_table_style, unsafe_allow_html=True)
     
@@ -1631,7 +1631,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
                 
                 translation = ""
                 if is_parallel_mode and sent_id is not None and target_sent_map:
-                     translation = target_sent_map.get(sent_id, "TRANSLATION N/A")
+                      translation = target_sent_map.get(sent_id, "TRANSLATION N/A")
                 
                 collex_rows_total.append({
                     "Collocate": f"{rank+1}. {collocate_word}",
@@ -1846,6 +1846,13 @@ parallel_uploaded = False
 # --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
 with st.sidebar:
     
+    # ----------------------------------------------------
+    # NEW: Documentation/Manual Link (User Request)
+    # ----------------------------------------------------
+    st.markdown("##### [📖 Documentation/Manual](https://docs.google.com/document/d/1rqrj3X_uoKWL_5P2QBlSQMW06R3EoknxqmpIcxTRrKI/edit?usp=sharing)")
+    st.markdown("---")
+    # ----------------------------------------------------
+
     # 1. CORPUS SELECTION (TOP)
     st.header("1. Corpus Source")
     
@@ -2303,7 +2310,7 @@ if not is_raw_mode:
     freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token","pos"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
 else:
      freq_df = freq_df_filtered[freq_df_filtered['token'] != ''].groupby(["token"]).size().reset_index(name="frequency").sort_values("frequency", ascending=False).reset_index(drop=True)
-     
+    
 # -------------------------------------------------------------------------------------------------------
 
 
@@ -2457,7 +2464,7 @@ if st.session_state['view'] == 'overview':
             elif not structure_error:
                 # Only show this if no error occurred AND no data was returned (i.e., parser ran but found nothing)
                 st.info("XML structure not found in the loaded corpus. The corpus must be an XML file and well-formed.")
-             
+            
     # -----------------------------------------------------
 
     st.markdown("---")
@@ -2671,13 +2678,13 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         }}
         .breakdown-table th {{
             background-color: #444444; /* User's Header Background */
-            color: #FAFAFA;           /* User's Text Color */
+            color: #FAFAFA;            /* User's Text Color */
             padding: 8px;
             text-align: left;
         }}
         .breakdown-table td {{
             background-color: #1F1F1F; /* *** FIXED ROW BACKGROUND: Matches KWIC/App BG *** */
-            color: #FAFAFA;           /* User's Text Color */
+            color: #FAFAFA;            /* User's Text Color */
             padding: 8px;
             border-bottom: 1px solid #333;
         }}
