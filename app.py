@@ -135,7 +135,6 @@ BUILT_IN_CORPORA = {
     "Select built-in corpus...": None,
     "Europarl 1M Only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/europarl_en-1M-only%20v2.txt",
     "Brown 50% Only (XML EN TAGGED)" : "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Brown-500.xml",
-    "sample speech 13kb only": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/Speech%20address.txt",
     "KOSLAT-ID (XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
 }
 
@@ -156,10 +155,6 @@ BUILT_IN_CORPUS_DETAILS = {
         A 50% subsample of the Brown Corpus, the first million-word electronic corpus of English. This sample is provided in a **TreeTagger-style XML format** containing token, POS, and lemma.
         <br><br>
         **Source/Citation:** Francis, W. N., & Kučera, H. (1979). **Brown Corpus Manual: Standard Corpus of Present-Day Edited American English for Use with Digital Computers.** Brown University.
-        """,
-    "sample speech 13kb only":
-        """
-        A very small sample of raw, linear English text for testing raw text processing and quick uploads.
         """,
     "KOSLAT-ID (XML Tagged)":
         """
@@ -3330,3 +3325,4 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
+
