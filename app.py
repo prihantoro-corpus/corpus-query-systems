@@ -129,6 +129,9 @@ if 'user_explicit_lang_code' not in st.session_state:
 # --- Store the last downloaded corpus content
 if 'last_built_in_content' not in st.session_state:
      st.session_state['last_built_in_content'] = None
+# --- CRITICAL: Stored DataFrame for Navigation Reruns ---
+if 'processed_df' not in st.session_state:
+    st.session_state['processed_df'] = None
 
 
 # ---------------------------
@@ -267,6 +270,7 @@ def reset_analysis():
     st.session_state['xml_structure_data'] = None # Clear structure data
     st.session_state['xml_structure_error'] = None # Clear structure error
     st.session_state['last_built_in_content'] = None # NEW: Clear built-in content
+    st.session_state['processed_df'] = None # CRITICAL: Clear processed DF
     
     # --- Force a complete script rerun directly inside the callback ---
     st.rerun()
@@ -1149,14 +1153,16 @@ def parse_xml_content_to_df(file_source):
 @st.cache_data
 def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
-    
+
+    # Reset specific session states related to *this* load type
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
-    st.session_state['xml_structure_data'] = None # Reset old structure
-    st.session_state['xml_structure_error'] = None # Reset old error
+    st.session_state['xml_structure_data'] = None 
+    st.session_state['xml_structure_error'] = None 
 
     if not file_sources:
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
         
     all_df_data = []
@@ -1242,6 +1248,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 all_df_data.extend(df_raw_file.to_dict('records'))
 
     if not all_df_data:
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
         
     df_src = pd.DataFrame(all_df_data)
@@ -1257,6 +1264,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     else:
         st.session_state['xml_structure_data'] = None
     
+    st.session_state['processed_df'] = df_src # CRITICAL: Store in session state
     return df_src
 
 
@@ -1267,14 +1275,17 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
 def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
 
+    # Reset specific session states related to *this* load type
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
-    st.session_state['monolingual_xml_file_upload'] = None # Clear mono XML state
-    st.session_state['xml_structure_data'] = None # Reset old structure
-    st.session_state['xml_structure_error'] = None # Reset old error
-    
-    if src_file is None or tgt_file is None: return None
+    st.session_state['monolingual_xml_file_upload'] = None 
+    st.session_state['xml_structure_data'] = None 
+    st.session_state['xml_structure_error'] = None 
+
+    if src_file is None or tgt_file is None: 
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
+        return None
 
     # Reset file pointers before parsing
     src_file.seek(0)
@@ -1284,6 +1295,7 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
     tgt_result = parse_xml_content_to_df(tgt_file)
     
     if src_result is None or tgt_result is None:
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
         
     df_src = pd.DataFrame(src_result['df_data'])
@@ -1304,6 +1316,7 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
             error_msg += f" Target ({tgt_result['lang_code']}) is missing sentence IDs: {sorted(list(missing_in_src))[:5]}..."
         
         st.error(error_msg)
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
         
     # 2. Finalize Session State
@@ -1344,6 +1357,7 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
 
     st.session_state['xml_structure_data'] = combined_structure
     
+    st.session_state['processed_df'] = df_src # CRITICAL: Store in session state
     return df_src
 
 
@@ -1354,14 +1368,17 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
 def load_excel_parallel_corpus_file(file_source, excel_format):
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
     
+    # Reset specific session states related to *this* load type
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
-    st.session_state['monolingual_xml_file_upload'] = None # Clear mono XML state
-    st.session_state['xml_structure_data'] = None # Clear structure data
-    st.session_state['xml_structure_error'] = None # Clear structure error
+    st.session_state['monolingual_xml_file_upload'] = None 
+    st.session_state['xml_structure_data'] = None 
+    st.session_state['xml_structure_error'] = None 
     
-    if file_source is None: return None
+    if file_source is None: 
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
+        return None
     
     try:
         # Reset file pointer
@@ -1369,10 +1386,12 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
         df_raw = pd.read_excel(file_source, engine='openpyxl')
     except Exception as e:
         st.error(f"Failed to read Excel file: {e}")
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
 
     if df_raw.shape[1] < 2:
         st.error("Excel file must contain at least two columns for source and target language.")
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
     
     src_lang = df_raw.columns[0]
@@ -1408,6 +1427,7 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
             
     if not data_src:
         st.error("No valid sentences found in the parallel corpus.")
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
 
     df_src = pd.DataFrame(data_src)
@@ -1420,6 +1440,7 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
     if 'with XML' in excel_format:
         st.info("Note: 'Excel with XML' format is currently treated as standard Excel parallel text for tokenization purposes.")
         
+    st.session_state['processed_df'] = df_src # CRITICAL: Store in session state
     return df_src
 
 
@@ -1432,18 +1453,21 @@ def load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code):
     """
     global SOURCE_LANG_CODE, TARGET_LANG_CODE
     
+    # Reset specific session states related to *this* load type
     st.session_state['parallel_mode'] = False
     st.session_state['df_target_lang'] = pd.DataFrame()
     st.session_state['target_sent_map'] = {}
     st.session_state['monolingual_xml_file_upload'] = None
     st.session_state['xml_structure_data'] = None 
-    st.session_state['xml_structure_error'] = None # Reset old error
+    st.session_state['xml_structure_error'] = None 
     
     # Set the global language code from the user's explicit selection initially
     SOURCE_LANG_CODE = explicit_lang_code
     TARGET_LANG_CODE = 'NA'
     
-    if raw_content is None: return None
+    if raw_content is None: 
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
+        return None
     
     # Create BytesIO object from the raw content for parsing functions
     file_source = BytesIO(raw_content) 
@@ -1473,6 +1497,7 @@ def load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code):
                 file_copy_for_parsing.seek(0)
                 st.session_state['xml_structure_data'] = extract_xml_structure(file_copy_for_parsing) 
                 
+                st.session_state['processed_df'] = df # CRITICAL: Store in session state
                 return df
             # If XML parsing fails, fall through to raw text processing as a last resort.
         except Exception as e:
@@ -1495,6 +1520,7 @@ def load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code):
         raw_text = "\n".join(clean_lines)
     except Exception as e: 
         st.error(f"Error reading built-in file content: {e}")
+        st.session_state['processed_df'] = None # Critical: Ensure state reflects absence of data
         return None
 
     df = pd.DataFrame()
@@ -1538,6 +1564,8 @@ def load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code):
         df['sent_id'] = 0 
             
     df["_token_low"] = df["token"].str.lower()
+    
+    st.session_state['processed_df'] = df # CRITICAL: Store in session state
     return df 
 
 # -----------------------------------------------------
@@ -1824,7 +1852,7 @@ st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal tex
 # ---------------------------
 corpus_source = None
 corpus_name = "Uploaded File"
-df_source_lang_for_analysis = None
+df_source_lang_for_analysis = st.session_state['processed_df'] # CRITICAL: Get DF from state
 parallel_uploaded = False
 
 # --- SIDEBAR: CORPUS SELECTION, NAVIGATION, & MODULE SETTINGS ---
@@ -1907,11 +1935,14 @@ with st.sidebar:
         # Custom Monolingual Loading Logic
         if uploaded_files_mono:
              with st.spinner(f"Processing Monolingual Corpus ({len(uploaded_files_mono)} file(s))..."):
-                 df_source_lang_for_analysis = load_monolingual_corpus_files(
+                 # The result of this function updates st.session_state['processed_df']
+                 load_monolingual_corpus_files(
                      uploaded_files_mono, 
                      explicit_lang_code, # Use the new explicit selection
                      selected_format_mono
                  )
+                 # Update the local variable with the state variable after caching/processing
+                 df_source_lang_for_analysis = st.session_state['processed_df'] 
                  if df_source_lang_for_analysis is not None:
                      corpus_name = f"Monolingual ({SOURCE_LANG_CODE}, {selected_format_mono})"
     
@@ -1940,7 +1971,8 @@ with st.sidebar:
             
             if parallel_excel_file is not None:
                 with st.spinner("Processing Excel Parallel Corpus..."):
-                    df_source_lang_for_analysis = load_excel_parallel_corpus_file(parallel_excel_file, excel_format)
+                    load_excel_parallel_corpus_file(parallel_excel_file, excel_format)
+                    df_source_lang_for_analysis = st.session_state['processed_df']
                     if df_source_lang_for_analysis is not None:
                         corpus_name = f"Parallel (Excel) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
                         parallel_uploaded = True
@@ -1972,7 +2004,8 @@ with st.sidebar:
             
             if xml_src_file is not None and xml_tgt_file is not None:
                 with st.spinner("Processing XML Parallel Corpus..."):
-                    df_source_lang_for_analysis = load_xml_parallel_corpus(xml_src_file, xml_tgt_file, src_lang_input, tgt_lang_input)
+                    load_xml_parallel_corpus(xml_src_file, xml_tgt_file, src_lang_input, tgt_lang_input)
+                    df_source_lang_for_analysis = st.session_state['processed_df']
                     if df_source_lang_for_analysis is not None:
                         corpus_name = f"Parallel (XML) ({SOURCE_LANG_CODE}/{TARGET_LANG_CODE})"
                         parallel_uploaded = True
@@ -1981,10 +2014,7 @@ with st.sidebar:
     if df_source_lang_for_analysis is None and selected_corpus_name != "Select built-in corpus...":
         corpus_url = BUILT_IN_CORPORA[selected_corpus_name] 
         
-        # --- NEW Caching Logic: 
         # 1. Try to download/fetch from Streamlit's cache
-        # 2. Store the raw content in session state for cross-rerun access (optional safety)
-        
         with st.spinner(f"Downloading {selected_corpus_name} via network..."):
             raw_content = get_corpus_data_from_url(corpus_url)
             st.session_state['last_built_in_content'] = raw_content # Store raw content
@@ -1992,9 +2022,12 @@ with st.sidebar:
         if raw_content is not None:
             with st.spinner(f"Processing {selected_corpus_name}..."):
                 corpus_name = selected_corpus_name
-                df_source_lang_for_analysis = load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code)
+                # The result of this function updates st.session_state['processed_df']
+                load_corpus_file_built_in(raw_content, corpus_name, explicit_lang_code)
+                # Update the local variable with the state variable after caching/processing
+                df_source_lang_for_analysis = st.session_state['processed_df']
         else:
-             # Critical failure, clear state to ensure no stale data is used
+             # Critical download failure, clear state to ensure no stale data is used
              st.session_state['last_built_in_content'] = None
              df_source_lang_for_analysis = None
     
@@ -2018,19 +2051,21 @@ with st.sidebar:
     # Removed Corpus Structure Navigation Button
     
     is_active_d = st.session_state['view'] == 'dictionary' 
-    st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary")
+    # Disable buttons if no corpus is loaded
+    nav_disabled = df_source_lang_for_analysis is None
+    st.button("📘 Dictionary", key='nav_dictionary', on_click=set_view, args=('dictionary',), use_container_width=True, type="primary" if is_active_d else "secondary", disabled=nav_disabled)
     
     is_active_c = st.session_state['view'] == 'concordance'
-    st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary")
+    st.button("📚 Concordance", key='nav_concordance', on_click=set_view, args=('concordance',), use_container_width=True, type="primary" if is_active_c else "secondary", disabled=nav_disabled)
     
     is_active_n = st.session_state['view'] == 'n_gram' # NEW N-GRAM BUTTON
-    st.button("🔢 N-Gram", key='nav_n_gram', on_click=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary")
+    st.button("🔢 N-Gram", key='nav_n_gram', on_click=set_view, args=('n_gram',), use_container_width=True, type="primary" if is_active_n else "secondary", disabled=nav_disabled)
 
     is_active_l = st.session_state['view'] == 'collocation'
-    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary")
+    st.button("🔗 Collocation", key='nav_collocation', on_click=set_view, args=('collocation',), use_container_width=True, type="primary" if is_active_l else "secondary", disabled=nav_disabled)
 
     # 3. TOOL SETTINGS (Conditional Block)
-    if st.session_state['view'] != 'overview':
+    if st.session_state['view'] != 'overview' and df_sidebar is not None:
         st.markdown("---")
         st.subheader("3. Tool Settings")
         
@@ -2103,7 +2138,7 @@ with st.sidebar:
                 )
                 st.session_state['pattern_collocate_pos'] = pattern_collocate_pos_input
             else:
-                st.info("POS filtering for collocates requires a tagged corpus.")
+                # Removed warning here to save space, relies on top sidebar warning
                 st.session_state['pattern_collocate_pos'] = ''
 
             st.session_state['pattern_search_window'] = pattern_search_window
@@ -2197,7 +2232,6 @@ with st.sidebar:
                     )
                     st.session_state['selected_pos_tags'] = selected_pos_tags
                 else:
-                    st.info("POS filtering requires a tagged corpus.")
                     st.session_state['collocate_pos_regex'] = ''
                     st.session_state['selected_pos_tags'] = None
 
@@ -2205,7 +2239,6 @@ with st.sidebar:
                 collocate_lemma_input = st.text_input("Filter by Lemma (case-insensitive, * for wildcard)", value=st.session_state.get('collocate_lemma_input', ''), key="collocate_lemma_input_coll")
                 st.session_state['collocate_lemma'] = collocate_lemma_input
             else:
-                st.info("Lemma filtering requires a lemmatized corpus.")
                 st.session_state['collocate_lemma'] = ''
             
         # --- DICTIONARY SETTINGS (Placeholder) ---
@@ -2261,7 +2294,7 @@ if df is None:
         if selected_corpus_name != "Select built-in corpus..." and st.session_state.get('last_built_in_content') is None:
             st.header(f"❌ Corpus Load Failed for: {selected_corpus_name}")
             st.markdown("---")
-            st.error(f"**Critical Error:** Cannot proceed because the selected corpus data could not be downloaded or parsed.")
+            st.error(f"**Critical Error:** Cannot proceed because the selected built-in corpus data could not be downloaded or parsed.")
             st.info("This is often due to **network/security restrictions** in the deployment environment preventing access to the external corpus URL. Please try again with a local file upload.")
 
         # Check if an XML parsing error happened
