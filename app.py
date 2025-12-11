@@ -666,7 +666,7 @@ def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
     tokens = df_corpus["token"].tolist()
     tokens_low = df_corpus["_token_low"].tolist()
     pos = df_corpus["pos"].tolist() if "pos" in df_corpus.columns else ["##"] * total_tokens
-    lemma = df_corpus["lemma"].tolist() if "lemma" in df_corpus.columns else ["##"] * total_tokens
+    lemma = df_corpus["lemma"].tolist() if "pos" in df_corpus.columns else ["##"] * total_tokens
 
     def matches_filter(token, token_low, pos_tag, lemma_tag, pattern_str, is_raw_mode):
         """Checks if a single token/tag set matches a positional pattern string."""
@@ -1946,7 +1946,7 @@ with st.sidebar:
         
         parallel_file_mode = st.radio(
             "1. Choose File Structure:",
-            options=["One corpus file", "Two corpus files (aligned IDs required)"],
+            options=["One corpus file", "Two corpus file (aligned IDs required)"],
             key="parallel_file_mode_radio"
         )
         
@@ -2881,8 +2881,8 @@ if st.session_state['view'] == 'dictionary':
             if not CEFR_ANALYZER:
                 return 'NA'
             try:
-                # FIX: Convert token to lowercase and strip whitespace for robust lookup
-                token_clean = str(token).lower().strip()
+                # REFINED FIX: Ensure token is a string, then lower and strip for robust lookup.
+                token_clean = str(token).lower().strip() 
                 level = CEFR_ANALYZER.get_cefr_level(token_clean).upper()
                 return level if level != 'NA' else 'NA' # Ensure NA is used for uncategorized
             except Exception:
