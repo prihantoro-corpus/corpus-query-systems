@@ -306,9 +306,11 @@ def trigger_analysis_callback():
     st.session_state['trigger_analyze'] = True
     st.session_state['llm_interpretation_result'] = None
 
-# --- N-Gram Analysis Trigger Callback ---
+# --- N-Gram Analysis Trigger Callback (FIXED: Sets view to n_gram) ---
 def trigger_n_gram_analysis_callback():
     st.session_state['n_gram_trigger_analyze'] = True
+    # FIX: Ensure we stay on the N-Gram page when parameters change
+    st.session_state['view'] = 'n_gram' 
 
 # --- Dictionary Helper: Get all forms by lemma ---
 @st.cache_data
@@ -1832,7 +1834,7 @@ def generate_collocation_results(df_corpus, raw_target_input, coll_window, mi_mi
 # ---------------------------
 # UI: header
 # ---------------------------
-st.title("CORTEX - Corpus Texts Explorer by PRIHANTORO -- see Documentation/Manual")
+st.title("CORTEX - Corpus Texts Explorer v17.50 (Parallel Ready)")
 st.caption("Upload vertical corpus (**token POS lemma**) or **raw horizontal text**, or **Parallel Corpus (Excel/XML)**.")
 
 # ---------------------------
@@ -2346,24 +2348,24 @@ if st.session_state['view'] == 'overview':
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         
         # --- Word Cloud Display logic ---
-        if not freq_df.empty:
+        if not WORDCLOUD_FEATURE_AVAILABLE:
+             # Ensure the feature is marked as disabled for the next step, even if Python is available.
+             st.info("⚠️ **Word Cloud Feature Disabled:** Visualization requires the external `wordcloud` library, which could not be initialized. Please ensure it is installed correctly in your local environment.")
+        elif not freq_df.empty:
             
-            if not WORDCLOUD_FEATURE_AVAILABLE:
-                st.info("⚠️ **Word Cloud Feature Disabled:** Visualization requires the external `wordcloud` library, which could not be initialized. Please ensure it is installed correctly in your local environment.")
+            wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
+            
+            if wordcloud_fig is not None: 
+                if not is_raw_mode:
+                    st.markdown(
+                        """
+                        **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
+                        """
+                    , unsafe_allow_html=True)
+                    
+                st.pyplot(wordcloud_fig)
             else:
-                wordcloud_fig = create_word_cloud(freq_df, not is_raw_mode)
-                
-                if wordcloud_fig is not None: 
-                    if not is_raw_mode:
-                        st.markdown(
-                            """
-                            **Word Cloud Color Key (POS):** | <span style="color:#33CC33;">**Green**</span> Noun | <span style="color:#3366FF;">**Blue**</span> Verb | <span style="color:#FF33B5;">**Pink**</span> Adjective | <span style="color:#FFCC00;">**Yellow**</span> Adverb |
-                            """
-                        , unsafe_allow_html=True)
-                        
-                    st.pyplot(wordcloud_fig)
-                else:
-                    st.info("Not enough single tokens remaining to generate a word cloud.")
+                st.info("Not enough single tokens remaining to generate a word cloud.")
 
         else:
             st.info("No tokens to generate a word cloud.")
@@ -2879,8 +2881,9 @@ if st.session_state['view'] == 'dictionary':
             if not CEFR_ANALYZER:
                 return 'NA'
             try:
-                # The token is already lowercased by the main frequency counter, but applying lower() again for robustness
-                level = CEFR_ANALYZER.get_cefr_level(token).upper()
+                # FIX: Convert token to lowercase and strip whitespace for robust lookup
+                token_clean = str(token).lower().strip()
+                level = CEFR_ANALYZER.get_cefr_level(token_clean).upper()
                 return level if level != 'NA' else 'NA' # Ensure NA is used for uncategorized
             except Exception:
                 # Catch any error (e.g., word not found, internal library error)
@@ -3327,4 +3330,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
