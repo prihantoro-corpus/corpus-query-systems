@@ -2447,7 +2447,8 @@ if st.session_state['view'] == 'overview':
                                         sampled_values_str = ", ".join(values[:max_values])
                                         if len(values) > max_values:
                                              sampled_values_str += f", ... ({len(values) - max_values} more unique)"
-                                         lines.append(f"    @{attr}: [{sampled_values_str}]")
+                                        # CORRECTED INDENTATION:
+                                        lines.append(f"    @{attr}: [{sampled_values_str}]") 
                               return "\n".join(lines)
                               
                          st.code(format_structure_data_raw_text(structure_data))
