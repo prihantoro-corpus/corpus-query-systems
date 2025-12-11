@@ -139,6 +139,38 @@ BUILT_IN_CORPORA = {
     "KOSLAT-ID (XML Tagged)": "https://raw.githubusercontent.com/prihantoro-corpus/corpus-query-systems/main/KOSLAT-full.xml",
 }
 
+# ---------------------------
+# Built-in Corpus Details (NEW)
+# ---------------------------
+BUILT_IN_CORPUS_DETAILS = {
+    "Select built-in corpus...": None,
+    "Europarl 1M Only": 
+        """
+        The Europarl Corpus is a large collection of European Parliament proceedings. This sample contains approximately 1 million tokens of English text. 
+        It is provided as a **verticalised T/P/L file** for demonstration.
+        <br><br>
+        **Source/Citation:** Koehn, Philipp. (2005). Europarl: A Parallel Corpus for Statistical Machine Translation. In: **Proceedings of the Tenth Machine Translation Summit (MT Summit X)**, Phuket, Thailand.
+        """,
+    "Brown 50% Only (XML EN TAGGED)":
+        """
+        A 50% subsample of the Brown Corpus, the first million-word electronic corpus of English. This sample is provided in a **TreeTagger-style XML format** containing token, POS, and lemma.
+        <br><br>
+        **Source/Citation:** Francis, W. N., & Kučera, H. (1979). **Brown Corpus Manual: Standard Corpus of Present-Day Edited American English for Use with Digital Computers.** Brown University.
+        """,
+    "sample speech 13kb only":
+        """
+        A very small sample of raw, linear English text for testing raw text processing and quick uploads.
+        """,
+    "KOSLAT-ID (XML Tagged)":
+        """
+        KOSLAT-ID v.1.0 is the first narrative-annotated corpus of reviews of healthcare facilities in Indonesia. It is provided in a **tagged XML format** (token, POS, lemma).
+        <br><br>
+        **Source/Citation:** Prihantoro., Yuliawati, S., Ekawati, D., & Rachmat, A. (2026-in press). **KOSLAT-ID v.1.0: The first narrative-annotated corpus of reviews of healthcare facilities in Indonesia.** [Corpora, 21(1), xx–xx.](https://www.prihantoro.com)
+        """
+}
+# --------------------------
+
+
 # Define color map constants globally (used for both graph and word cloud)
 POS_COLOR_MAP = {
     'N': '#33CC33',  # Noun (Green)
@@ -1292,7 +1324,7 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code):
             error_msg += f" Source ({src_result['lang_code']}) is missing sentence IDs: {sorted(list(missing_in_tgt))[:5]}..."
         if missing_in_src:
             error_msg += f" Target ({tgt_result['lang_code']}) is missing sentence IDs: {sorted(list(missing_in_src))[:5]}..."
-        
+            
         st.error(error_msg)
         return None
         
@@ -2297,6 +2329,13 @@ if st.session_state['view'] == 'overview':
         info_df = pd.DataFrame(info_data)
         st.dataframe(info_df, use_container_width=True, hide_index=True) 
 
+        # --- NEW: CORPUS DETAIL EXPANDER (INSERTED HERE) ---
+        corpus_detail_text = BUILT_IN_CORPUS_DETAILS.get(corpus_name)
+        if corpus_detail_text:
+            with st.expander("📚 Corpus Detail & Citation", expanded=True):
+                st.markdown(corpus_detail_text, unsafe_allow_html=True)
+        # --------------------------------------------------
+
         st.subheader("Word Cloud (Top Words - Stopwords Filtered)")
         
         # --- Word Cloud Display logic ---
@@ -2357,7 +2396,7 @@ if st.session_state['view'] == 'overview':
     structure_error = st.session_state.get('xml_structure_error')
 
     # Display the section only if an XML file was involved (either monoline XML or parallel mode)
-    if is_monolingual_xml_loaded or is_parallel_mode_active or selected_corpus_name == "KOSLAT-ID (XML Tagged)":
+    if is_monolingual_xml_loaded or is_parallel_mode_active or selected_corpus_name in BUILT_IN_CORPUS_DETAILS and "xml" in selected_corpus_name.lower():
         
         # Use a large, always visible expander for structure details
         with st.expander("📊 XML Corpus Structure (Details)", expanded=True):
@@ -2391,28 +2430,28 @@ if st.session_state['view'] == 'overview':
                     # AGGRESSIVE DEBUGGING - Show error message if rendering fails (not parsing)
                     st.error(f"❌ **XML Hierarchical Display FAILED (Rendering Error: {e})**. Showing raw data structure below for diagnosis.")
                     
-                # --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY ---
-                with st.expander("Show Raw Python Data (for diagnosis)"):
-                     st.info("The data below is the Python dictionary successfully produced by the XML parser.")
-                     
-                     # Show the raw Python dictionary object
-                     st.json(structure_data)
-                     
-                     # Fallback 2: Show the unstyled raw text output if json fails or for comparison
-                     def format_structure_data_raw_text(structure_data, max_values=20):
-                         lines = []
-                         for tag in sorted(structure_data.keys()):
-                             lines.append(f"\n<{tag}>")
-                             for attr in sorted(structure_data[tag].keys()):
-                                 values = sorted(list(structure_data[tag][attr]))
-                                 sampled_values_str = ", ".join(values[:max_values])
-                                 if len(values) > max_values:
-                                     sampled_values_str += f", ... ({len(values) - max_values} more unique)"
-                                 lines.append(f"    @{attr}: [{sampled_values_str}]")
-                         return "\n".join(lines)
+                    # --- DIAGNOSTIC/FALLBACK RAW TEXT DISPLAY ---
+                    with st.expander("Show Raw Python Data (for diagnosis)"):
+                         st.info("The data below is the Python dictionary successfully produced by the XML parser.")
                          
-                     st.code(format_structure_data_raw_text(structure_data))
-                     # --- END DIAGNOSTIC/FALLBACK ---
+                         # Show the raw Python dictionary object
+                         st.json(structure_data)
+                         
+                         # Fallback 2: Show the unstyled raw text output if json fails or for comparison
+                         def format_structure_data_raw_text(structure_data, max_values=20):
+                              lines = []
+                              for tag in sorted(structure_data.keys()):
+                                   lines.append(f"\n<{tag}>")
+                                   for attr in sorted(structure_data[tag].keys()):
+                                        values = sorted(list(structure_data[tag][attr]))
+                                        sampled_values_str = ", ".join(values[:max_values])
+                                        if len(values) > max_values:
+                                             sampled_values_str += f", ... ({len(values) - max_values} more unique)"
+                                         lines.append(f"    @{attr}: [{sampled_values_str}]")
+                              return "\n".join(lines)
+                              
+                         st.code(format_structure_data_raw_text(structure_data))
+                         # --- END DIAGNOSTIC/FALLBACK ---
             
             elif not structure_error:
                 # Only show this if no error occurred AND no data was returned (i.e., parser ran but found nothing)
@@ -2631,13 +2670,13 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
         }}
         .breakdown-table th {{
             background-color: #444444; /* User's Header Background */
-            color: #FAFAFA;          /* User's Text Color */
+            color: #FAFAFA;           /* User's Text Color */
             padding: 8px;
             text-align: left;
         }}
         .breakdown-table td {{
             background-color: #1F1F1F; /* *** FIXED ROW BACKGROUND: Matches KWIC/App BG *** */
-            color: #FAFAFA;          /* User's Text Color */
+            color: #FAFAFA;           /* User's Text Color */
             padding: 8px;
             border-bottom: 1px solid #333;
         }}
@@ -2679,47 +2718,47 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     
     # --- KWIC Table Style (REVISED FOR EXPLICIT FLEXIBLE COLUMN WIDTHS) ---
     kwic_table_style = f"""
-           <style>
-           .dataframe-container-scroll {{
-               max-height: 400px; /* Fixed vertical height */
-               overflow-y: auto;
-               margin-bottom: 1rem;
-               width: 100%;
-           }}
-           .dataframe table {{ 
-               width: 100%; 
-               table-layout: fixed; /* Use fixed layout to enforce proportional width */
-               font-family: monospace; 
-               color: white;
-               font-size: 0.9em;
-           }}
-           .dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
-           
-           /* KWIC Width Fix: Set proportional column widths (ensures full width is used even without POS/Lemma) */
-           .dataframe td:nth-child(1) {{ width: 5%; }} /* No column */
-           .dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
-           .dataframe td:nth-child(3) {{ 
-               width: 15%; /* Node */
-               text-align: center; 
-               font-weight: bold; 
-               background-color: #f0f0f0; 
-               color: black; 
-           }} 
-           .dataframe td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
-           
-           /* Ensure content can wrap */
-           .dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
-               white-space: normal;
-               vertical-align: top;
-               padding: 5px 10px;
-               line-height: 1.5; 
-           }}
-           
-           /* Adjust for Translation column if present (total is 100%) */
-           .dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
-           .dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
+    		<style>
+    		.dataframe-container-scroll {{
+    		 	max-height: 400px; /* Fixed vertical height */
+    		 	overflow-y: auto;
+    		 	margin-bottom: 1rem;
+    		 	width: 100%;
+    		}}
+    		.dataframe table {{ 
+    		 	width: 100%; 
+    		 	table-layout: fixed; /* Use fixed layout to enforce proportional width */
+    		 	font-family: monospace; 
+    		 	color: white;
+    		 	font-size: 0.9em;
+    		}}
+    		.dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
+    		
+    		/* KWIC Width Fix: Set proportional column widths (ensures full width is used even without POS/Lemma) */
+    		.dataframe td:nth-child(1) {{ width: 5%; }} /* No column */
+    		.dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
+    		.dataframe td:nth-child(3) {{ 
+    		 	width: 15%; /* Node */
+    		 	text-align: center; 
+    		 	font-weight: bold; 
+    		 	background-color: #f0f0f0; 
+    		 	color: black; 
+    		}} 
+    		.dataframe td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
+    		
+    		/* Ensure content can wrap */
+    		.dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
+    		 	white-space: normal;
+    		 	vertical-align: top;
+    		 	padding: 5px 10px;
+    		 	line-height: 1.5; 
+    		}}
+    		
+    		/* Adjust for Translation column if present (total is 100%) */
+    		.dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
+    		.dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
-           </style>
+    		</style>
     """
     st.markdown(kwic_table_style, unsafe_allow_html=True)
     
@@ -2864,7 +2903,7 @@ if st.session_state['view'] == 'dictionary':
     if not ipa_active:
         forms_list.insert(forms_list.shape[1], 'IPA Transcription', 'NA')
     # -----------------------------------------------------------
-            
+        
     # --- Pronunciation Link Logic (REVISED for KBBI/Cambridge) ---
     if is_indonesian_corpus: # This runs if corpus_lang is ID
         # Use KBBI for Indonesian dictionary
@@ -2983,47 +3022,47 @@ if st.session_state['view'] == 'dictionary':
             kwic_preview[f'Translation ({TARGET_LANG_CODE})'] = translations
 
         kwic_table_style = f"""
-            <style>
-            .dictionary-kwic-container {{
-                max-height: 250px; /* Fixed vertical height */
-                overflow-y: auto;
-                margin-bottom: 1rem;
-                width: 100%;
-            }}
-            .dict-kwic-table table {{ 
-                width: 100%; 
-                table-layout: fixed; /* Fixed layout to enforce proportional width */
-                font-family: monospace; 
-                color: white;
-                font-size: 0.9em;
-            }}
-            .dict-kwic-table th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
-            
-            /* KWIC Width Fix: Set proportional column widths */
-            .dict-kwic-table td:nth-child(1) {{ width: 5%; }} /* No column */
-            .dict-kwic-table td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
-            .dict-kwic-table td:nth-child(3) {{ 
-                width: 15%; /* Node */
-                text-align: center; 
-                font-weight: bold; 
-                background-color: #f0f0f0; 
-                color: black; 
-            }} 
-            .dict-kwic-table td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
-            
-            /* Ensure content can wrap */
-            .dict-kwic-table td:nth-child(2), .dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4) {{ 
-                white-space: normal;
-                vertical-align: top;
-                padding: 5px 10px;
-                line-height: 1.5;
-            }}
-            
-            /* Adjust for Translation column if present (total is 100%) */
-            .dict-kwic-table th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
-            .dict-kwic-table td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
+        	<style>
+        	.dictionary-kwic-container {{
+        		max-height: 250px; /* Fixed vertical height */
+        		overflow-y: auto;
+        		margin-bottom: 1rem;
+        		width: 100%;
+        	}}
+        	.dict-kwic-table table {{ 
+        		width: 100%; 
+        		table-layout: fixed; /* Fixed layout to enforce proportional width */
+        		font-family: monospace; 
+        		color: white;
+        		font-size: 0.9em;
+        	}}
+        	.dict-kwic-table th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
+        	
+        	/* KWIC Width Fix: Set proportional column widths */
+        	.dict-kwic-table td:nth-child(1) {{ width: 5%; }} /* No column */
+        	.dict-kwic-table td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
+        	.dict-kwic-table td:nth-child(3) {{ 
+        		width: 15%; /* Node */
+        		text-align: center; 
+        		font-weight: bold; 
+        		background-color: #f0f0f0; 
+        		color: black; 
+        	}} 
+        	.dict-kwic-table td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
+        	
+        	/* Ensure content can wrap */
+        	.dict-kwic-table td:nth-child(2), .dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4) {{ 
+        		white-space: normal;
+        		vertical-align: top;
+        		padding: 5px 10px;
+        		line-height: 1.5;
+        	}}
+        	
+        	/* Adjust for Translation column if present (total is 100%) */
+        	.dict-kwic-table th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
+        	.dict-kwic-table td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
-            </style>
+        	</style>
         """
         st.markdown(kwic_table_style, unsafe_allow_html=True)
         
@@ -3280,6 +3319,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
-
-
