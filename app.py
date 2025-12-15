@@ -165,7 +165,7 @@ BUILT_IN_CORPUS_DETAILS = {
         """,
     "DICO-JALF v1 (XML Tagged)":
         """
-       This is DICO-JALF.
+        This is DICO-JALF.
         <br><br>
         **Source/Citation:** Prihantoro, P., Ishikawa, S., Liu, T., Fadli, Z. A., Rini, E. I. H. A. N., & Kepirianto, C. (2025). DICO-JALF v.1.0: Diponegoro Corpus of Japanese Learners as a Foreign Language in Indonesia with AI Error Annotation and Human Supervision. Jurnal Arbitrer, 12(3), 274–288. https://doi.org/10.25077/ar.12.3.274-288.2025 
         """
@@ -1593,7 +1593,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     	}}
     	.collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; white-space: nowrap; }}
     	
-    	/* Apply explicit proportional widths to Left, Node, Right, and optionally Translation */
+    	/* Apply explicit proportional widths to Collocate, Left, Node, Right, and optionally Translation */
     	.collex-table-inner td:nth-child(1) {{ width: 8%; text-align: left; font-weight: bold; border-right: 1px solid #444; white-space: nowrap; }} /* Collocate Column */
     	.collex-table-inner td:nth-child(2) {{ width: 35%; text-align: right; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Left Context */
     	.collex-table-inner td:nth-child(3) {{ 
@@ -1635,7 +1635,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
                 
                 translation = ""
                 if is_parallel_mode and sent_id is not None and target_sent_map:
-                      translation = target_sent_map.get(sent_id, "TRANSLATION N/A")
+                        translation = target_sent_map.get(sent_id, "TRANSLATION N/A")
                 
                 collex_rows_total.append({
                     "Collocate": f"{rank+1}. {collocate_word}",
@@ -2452,14 +2452,14 @@ if st.session_state['view'] == 'overview':
                          def format_structure_data_raw_text(structure_data, max_values=20):
                               lines = []
                               for tag in sorted(structure_data.keys()):
-                                   lines.append(f"\n<{tag}>")
-                                   for attr in sorted(structure_data[tag].keys()):
-                                        values = sorted(list(structure_data[tag][attr]))
-                                        sampled_values_str = ", ".join(values[:max_values])
-                                        if len(values) > max_values:
-                                             sampled_values_str += f", ... ({len(values) - max_values} more unique)"
-                                        # CORRECTED INDENTATION:
-                                        lines.append(f"    @{attr}: [{sampled_values_str}]") 
+                                     lines.append(f"\n<{tag}>")
+                                     for attr in sorted(structure_data[tag].keys()):
+                                             values = sorted(list(structure_data[tag][attr]))
+                                             sampled_values_str = ", ".join(values[:max_values])
+                                             if len(values) > max_values:
+                                                     sampled_values_str += f", ... ({len(values) - max_values} more unique)"
+                                             # CORRECTED INDENTATION:
+                                             lines.append(f"    @{attr}: [{sampled_values_str}]") 
                               return "\n".join(lines)
                               
                          st.code(format_structure_data_raw_text(structure_data))
@@ -2747,7 +2747,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		.dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
     		
     		/* KWIC Width Fix: Set proportional column widths (ensures full width is used even without POS/Lemma) */
-    		.dataframe td:nth-child(1) {{ width: 5%; }} /* No column */
+    		.dataframe td:nth-child(1) {{ width: 5%; }} /* No column - Acts as File ID/Index */
     		.dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
     		.dataframe td:nth-child(3) {{ 
     		 	width: 15%; /* Node */
@@ -2756,7 +2756,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		 	background-color: #f0f0f0; 
     		 	color: black; 
     		}} 
-    		.dataframe td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
+    		.dataframe td:nth-child(4) {{ width: 30%; text-align: left; }} /* Right context (Reduced width for space) */
     		
     		/* Ensure content can wrap */
     		.dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
@@ -2766,8 +2766,8 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		 	line-height: 1.5; 
     		}}
     		
-    		/* Adjust for Translation column if present (total is 100%) */
-    		.dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column */
+    		/* Adjust for Translation column if present (remaining 10% width) */
+    		.dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column / File ID */
     		.dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
     		</style>
@@ -2780,7 +2780,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
 
     st.markdown(scrollable_html, unsafe_allow_html=True)
 
-    st.caption("Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
+    st.caption(f"Note: Pattern search collocates are **bolded and highlighted bright yellow**. The 'No' column acts as the File ID/Index in this corpus structure.")
     st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -3061,7 +3061,7 @@ if st.session_state['view'] == 'dictionary':
         		background-color: #f0f0f0; 
         		color: black; 
         	}} 
-        	.dict-kwic-table td:nth-child(4) {{ width: 40%; text-align: left; }} /* Right context */
+        	.dict-kwic-table td:nth-child(4) {{ width: 30%; text-align: left; }} /* Right context */
         	
         	/* Ensure content can wrap */
         	.dict-kwic-table td:nth-child(2), .dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4) {{ 
@@ -3332,6 +3332,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
 
 
 st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
-
-
-
