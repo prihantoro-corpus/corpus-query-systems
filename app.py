@@ -389,8 +389,6 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, corpus_nam
     """
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids, breakdown_df)
-    
-    MODIFIED: kwic_rows will contain sent_ids, but not explicitly the corpus_name (which is passed).
     """
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
@@ -1571,7 +1569,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     Generates and displays KWIC examples for a list of top collocates.
     Displays up to KWIC_COLLOC_DISPLAY_LIMIT total examples.
     
-    MODIFIED: Now accepts corpus_name as argument.
+    MODIFIED: Now includes Source Corpus in the output and updated CSS widths.
     """
     if top_collocates_df.empty:
         st.info("No collocates to display examples for.")
@@ -1581,6 +1579,9 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     collex_rows_total = []
     
     # Custom KWIC table style (Now includes flexible width for columns)
+    # Target Columns (Monolingual: Collocate, Source Corpus, Left, Node, Right)
+    # Target Col widths: Collocate (10%), Source Corpus (15%), Left (30%), Node (15%), Right (30%), Translation (Remaining 0%)
+    
     collocate_example_table_style = f"""
     	<style>
     	.collex-table-container-fixed {{
@@ -1598,19 +1599,22 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
     	}}
     	.collex-table-inner th {{ font-weight: bold; text-align: center; background-color: #383838; white-space: nowrap; }}
     	
-    	/* Apply explicit proportional widths to Collocate, Left, Node, Right, and optionally Translation */
-    	.collex-table-inner td:nth-child(1) {{ width: 8%; text-align: left; font-weight: bold; border-right: 1px solid #444; white-space: nowrap; }} /* Collocate Column */
-    	.collex-table-inner td:nth-child(2) {{ width: 35%; text-align: right; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Left Context */
-    	.collex-table-inner td:nth-child(3) {{ 
+    	/* Apply explicit proportional widths to Collocate, Source Corpus, Left, Node, Right, and optionally Translation */
+    	.collex-table-inner td:nth-child(1) {{ width: 10%; text-align: left; font-weight: bold; border-right: 1px solid #444; white-space: nowrap; }} /* Collocate Column */
+        .collex-table-inner td:nth-child(2) {{ width: 15%; text-align: center; font-size: 0.8em; white-space: normal; }} /* Source Corpus (NEW index 2) */
+    	.collex-table-inner td:nth-child(3) {{ width: 30%; text-align: right; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Left Context (NEW index 3) */
+    	.collex-table-inner td:nth-child(4) {{ 
     		width: 15%; 
     		text-align: center; 
     		font-weight: bold; 
     		background-color: #f0f0f0; 
     		color: black; 
     		white-space: normal; vertical-align: top; padding: 5px 10px;
-    	}} /* Node */
-    	.collex-table-inner td:nth-child(4) {{ width: 35%; text-align: left; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Right Context */
-    	.collex-table-inner td:nth-child(5) {{ text-align: left; color: #CCFFCC; width: 7%; font-family: sans-serif; font-size: 0.8em; white-space: normal; }} /* Translation Column (if present, takes remaining width) */
+    	}} /* Node (NEW index 4) */
+    	.collex-table-inner td:nth-child(5) {{ width: 30%; text-align: left; white-space: normal; vertical-align: top; padding: 5px 10px; }} /* Right Context (NEW index 5) */
+    	
+        /* Adjust for Translation column if present (index 6, takes remaining width) */
+        .collex-table-inner td:nth-child(6) {{ text-align: left; color: #CCFFCC; width: 8%; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
     	</style>
     """
@@ -1624,7 +1628,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids, breakdown_df)
             kwic_rows, total_matches, _, _, sent_ids, _ = generate_kwic(
                 df_corpus, node_word, window, window, 
-                corpus_name, # Pass corpus name for display
+                corpus_name, # Pass corpus name for caching/consistency
                 pattern_collocate_input=collocate_word, 
                 pattern_collocate_pos_input="", 
                 pattern_window=window, # Use collocation window for context
@@ -1646,6 +1650,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
                 
                 collex_rows_total.append({
                     "Collocate": f"{rank+1}. {collocate_word}",
+                    "Source Corpus": corpus_name, # **FIX 2: Add Source Corpus**
                     "Left Context": kwic_row['Left'],
                     "Node": kwic_row['Node'],
                     "Right Context": kwic_row['Right'],
@@ -1659,7 +1664,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             collex_df = collex_df.drop(columns=['Translation'])
 
         # Manually create header for the collocate example table
-        header = "<tr><th>Collocate (Rank)</th><th>Left Context</th><th>Node</th><th>Right Context</th>"
+        header = "<tr><th>Collocate (Rank)</th><th>Source Corpus</th><th>Left Context</th><th>Node</th><th>Right Context</th>"
         if is_parallel_mode:
             header += f"<th>Translation ({TARGET_LANG_CODE})</th>"
         header += "</tr>"
@@ -2729,10 +2734,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
     kwic_preview = kwic_df.copy().reset_index(drop=True)
     
-    # --- REMOVED: Sent ID was here ---
-    
     # --- CRITICAL FIX 1: Add Source Corpus Name (New Index 0) ---
-    # This replaces the Sent ID column
     kwic_preview.insert(0, "Source Corpus", corpus_name)
     
     # --- NEW: Add Translation Column ---
@@ -2763,16 +2765,16 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		.dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
     		
     		/* KWIC Width Fix: Set proportional column widths */
-            .dataframe td:nth-child(1) {{ width: 15%; text-align: center; font-size: 0.8em; white-space: normal; }} /* Source Corpus (NEW index 1) */
-    		.dataframe td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context (NEW index 2) */
+            .dataframe td:nth-child(1) {{ width: 15%; text-align: center; font-size: 0.8em; white-space: normal; }} /* Source Corpus (index 1) */
+    		.dataframe td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context (index 2) */
     		.dataframe td:nth-child(3) {{ 
-    		 	width: 15%; /* Node (NEW index 3) */
+    		 	width: 15%; /* Node (index 3) */
     		 	text-align: center; 
     		 	font-weight: bold; 
     		 	background-color: #f0f0f0; 
     		 	color: black; 
     		}} 
-    		.dataframe td:nth-child(4) {{ width: 35%; text-align: left; }} /* Right context (NEW index 4) */
+    		.dataframe td:nth-child(4) {{ width: 35%; text-align: left; }} /* Right context (index 4) */
     		
     		/* Ensure content can wrap */
     		.dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
@@ -2782,7 +2784,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		 	line-height: 1.5; 
     		}}
     		
-    		/* Adjust for Translation column if present (remaining 0% width, fixed to 100% total) */
+    		/* Adjust for Translation column if present (index 5) */
     		.dataframe th:nth-last-child(1) {{ width: 10%; }} 
     		.dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
@@ -3045,9 +3047,8 @@ if st.session_state['view'] == 'dictionary':
         kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
         kwic_preview = kwic_df.copy().reset_index(drop=True)
         
-        # --- REMOVED: Sent ID was here ---
-        
-        # --- CRITICAL FIX 1: Add Source Corpus Name (New Index 0) ---
+        # --- FIX 1: Remove Sent ID, Insert Source Corpus ---
+        # Sent ID logic is removed from display here.
         kwic_preview.insert(0, "Source Corpus", corpus_name)
 
 
@@ -3059,6 +3060,7 @@ if st.session_state['view'] == 'dictionary':
 
         # Total Columns (Monolingual: 4, Parallel: 5)
         # Target Col widths: Source Corpus (15%), Left (35%), Node (15%), Right (35%), Translation (Remaining 0%)
+        # --- FIX 3: Update CSS widths for Dictionary KWIC ---
         kwic_table_style = f"""
         	<style>
         	.dictionary-kwic-container {{
@@ -3077,16 +3079,16 @@ if st.session_state['view'] == 'dictionary':
         	.dict-kwic-table th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
         	
         	/* KWIC Width Fix: Set proportional column widths */
-            .dict-kwic-table td:nth-child(1) {{ width: 15%; text-align: center; font-size: 0.8em; white-space: normal; }} /* Source Corpus (NEW index 1) */
-        	.dict-kwic-table td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context (NEW index 2) */
+            .dict-kwic-table td:nth-child(1) {{ width: 15%; text-align: center; font-size: 0.8em; white-space: normal; }} /* Source Corpus (index 1) */
+        	.dict-kwic-table td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context (index 2) */
         	.dict-kwic-table td:nth-child(3) {{ 
-        		width: 15%; /* Node (NEW index 3) */
+        		width: 15%; /* Node (index 3) */
         		text-align: center; 
         		font-weight: bold; 
         		background-color: #f0f0f0; 
         		color: black; 
         	}} 
-        	.dict-kwic-table td:nth-child(4) {{ width: 35%; text-align: left; }} /* Right context (NEW index 4) */
+        	.dict-kwic-table td:nth-child(4) {{ width: 35%; text-align: left; }} /* Right context (index 4) */
         	
         	/* Ensure content can wrap */
         	.dict-kwic-table td:nth-child(2), .dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4) {{ 
@@ -3096,8 +3098,8 @@ if st.session_state['view'] == 'dictionary':
         		line-height: 1.5;
         	}}
         	
-        	/* Adjust for Translation column if present (total is 100%) */
-            .dict-kwic-table th:nth-last-child(1) {{ width: 8%; }} 
+        	/* Adjust for Translation column if present (index 5) */
+            .dict-kwic-table th:nth-last-child(1) {{ width: 10%; }} 
             .dict-kwic-table td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
         	</style>
@@ -3147,6 +3149,7 @@ if st.session_state['view'] == 'dictionary':
         st.subheader(f"Collocate Examples (Top {len(top_collocates)} LL Collocates)")
         
         # Use the dedicated KWIC display function (which now handles parallel mode)
+        # FIX 4: This function now correctly displays the Source Corpus column (via the update to display_collocation_kwic_examples)
         display_collocation_kwic_examples(
             df_corpus=df, 
             node_word=current_dict_word, 
@@ -3328,6 +3331,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     
     # LL-Ranked KWIC Examples
     st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} LL Collocates (1 example per collocate)")
+    # FIX 5: display_collocation_kwic_examples is updated to handle Source Corpus
     display_collocation_kwic_examples(
         df_corpus=df, 
         node_word=primary_target_mwu, 
@@ -3345,6 +3349,7 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
     
     # MI-Ranked KWIC Examples
     st.subheader(f"📚 Concordance Examples for Top {KWIC_COLLOC_DISPLAY_LIMIT} MI Collocates (1 example per collocate)")
+    # FIX 6: display_collocation_kwic_examples is updated to handle Source Corpus
     display_collocation_kwic_examples(
         df_corpus=df, 
         node_word=primary_target_mwu, 
