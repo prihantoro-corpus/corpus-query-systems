@@ -390,7 +390,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, corpus_nam
     Generalized function to generate KWIC lines based on target and optional collocate filter.
     Returns: (list_of_kwic_rows, total_matches, primary_target_mwu, literal_freq, list_of_sent_ids, breakdown_df)
     
-    MODIFIED: Now accepts corpus_name as argument.
+    MODIFIED: kwic_rows will contain sent_ids, but not explicitly the corpus_name (which is passed).
     """
     total_tokens = len(df_corpus)
     tokens_lower = df_corpus["_token_low"].tolist()
@@ -595,7 +595,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, corpus_nam
         kwic_start = max(0, i - current_kwic_left)
         kwic_end = min(total_tokens, i + primary_target_len + current_kwic_right)
         
-        # Determine the sentence ID of the node word (first token in MWU)
+        # Determine the sentence ID of the node word (first token in MWU) - KEPT FOR TRANSLATION LOOKUP
         if 'sent_id' in df_corpus.columns:
             node_sent_id = df_corpus["sent_id"].iloc[i]
             sent_ids.append(node_sent_id)
@@ -990,7 +990,7 @@ def format_structure_data_hierarchical(structure_data, indent_level=0, max_value
         tag_line = f'{get_indent(indent_level)}<span style="color: #6A5ACD; font-weight: bold;">&lt;{tag}&gt;</span></span><br>'
         html_list.append(tag_line)
         
-        # Process attributes for this tag
+        # Process attributes
         for attr in sorted(tag_data.keys()):
             values = sorted(list(tag_data.get(attr, set())))
             
@@ -1624,7 +1624,7 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             # KWIC returns (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids, breakdown_df)
             kwic_rows, total_matches, _, _, sent_ids, _ = generate_kwic(
                 df_corpus, node_word, window, window, 
-                corpus_name, # Pass corpus name for caching/consistency
+                corpus_name, # Pass corpus name for display
                 pattern_collocate_input=collocate_word, 
                 pattern_collocate_pos_input="", 
                 pattern_window=window, # Use collocation window for context
@@ -2729,21 +2729,21 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
     kwic_preview = kwic_df.copy().reset_index(drop=True)
     
-    # --- CRITICAL FIX 1: Use Sentence ID for Index/File ID ---
-    kwic_preview.insert(0, "Sent ID", [id if id is not None else idx + 1 for idx, id in enumerate(sent_ids)])
+    # --- REMOVED: Sent ID was here ---
     
-    # --- CRITICAL FIX 2: Add Source Corpus Name ---
-    kwic_preview.insert(1, "Source Corpus", corpus_name)
-
+    # --- CRITICAL FIX 1: Add Source Corpus Name (New Index 0) ---
+    # This replaces the Sent ID column
+    kwic_preview.insert(0, "Source Corpus", corpus_name)
+    
     # --- NEW: Add Translation Column ---
     if is_parallel_mode:
         translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
-        # Insert translation column after Right context (position 5 in 0-based index)
-        kwic_preview.insert(5, f'Translation ({TARGET_LANG_CODE})', translations)
+        # Insert translation column after Right context (position 4 in 0-based index: 0=Source, 1=Left, 2=Node, 3=Right, 4=Translation)
+        kwic_preview.insert(4, f'Translation ({TARGET_LANG_CODE})', translations)
     
     # --- KWIC Table Style (REVISED FOR EXPLICIT FLEXIBLE COLUMN WIDTHS) ---
     # Total Columns (Monolingual: 4, Parallel: 5)
-    # Target Col widths: Sent ID (7%), Source Corpus (10%), Left (35%), Node (15%), Right (25%), Translation (8%)
+    # Target Col widths: Source Corpus (15%), Left (35%), Node (15%), Right (35%), Translation (Remaining 0%)
     
     kwic_table_style = f"""
     		<style>
@@ -2763,28 +2763,27 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		.dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
     		
     		/* KWIC Width Fix: Set proportional column widths */
-    		.dataframe td:nth-child(1) {{ width: 7%; font-weight: bold; text-align: center; white-space: nowrap; }} /* Sent ID */
-            .dataframe td:nth-child(2) {{ width: 10%; text-align: center; font-size: 0.7em; white-space: normal; }} /* Source Corpus (NEW) */
-    		.dataframe td:nth-child(3) {{ width: 35%; text-align: right; }} /* Left context */
-    		.dataframe td:nth-child(4) {{ 
-    		 	width: 15%; /* Node */
+            .dataframe td:nth-child(1) {{ width: 15%; text-align: center; font-size: 0.8em; white-space: normal; }} /* Source Corpus (NEW index 1) */
+    		.dataframe td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context (NEW index 2) */
+    		.dataframe td:nth-child(3) {{ 
+    		 	width: 15%; /* Node (NEW index 3) */
     		 	text-align: center; 
     		 	font-weight: bold; 
     		 	background-color: #f0f0f0; 
     		 	color: black; 
     		}} 
-    		.dataframe td:nth-child(5) {{ width: 25%; text-align: left; }} /* Right context */
+    		.dataframe td:nth-child(4) {{ width: 35%; text-align: left; }} /* Right context (NEW index 4) */
     		
     		/* Ensure content can wrap */
-    		.dataframe td:nth-child(3), .dataframe td:nth-child(4), .dataframe td:nth-child(5) {{ 
+    		.dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
     		 	white-space: normal;
     		 	vertical-align: top;
     		 	padding: 5px 10px;
     		 	line-height: 1.5; 
     		}}
     		
-    		/* Adjust for Translation column if present (remaining 8% width - 7+10+35+15+25=92) */
-    		.dataframe th:nth-last-child(1) {{ width: 8%; }} 
+    		/* Adjust for Translation column if present (remaining 0% width, fixed to 100% total) */
+    		.dataframe th:nth-last-child(1) {{ width: 10%; }} 
     		.dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
     		</style>
@@ -2797,7 +2796,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
 
     st.markdown(scrollable_html, unsafe_allow_html=True)
 
-    st.caption(f"Note: Pattern search collocates are **bolded and highlighted bright yellow**. The **Sent ID** is the sequence/file identifier for the matched sentence.")
+    st.caption(f"Note: Pattern search collocates are **bolded and highlighted bright yellow**.")
     st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -3046,21 +3045,20 @@ if st.session_state['view'] == 'dictionary':
         kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
         kwic_preview = kwic_df.copy().reset_index(drop=True)
         
-        # --- CRITICAL FIX 1: Use Sentence ID for Index/File ID ---
-        kwic_preview.insert(0, "Sent ID", [id if id is not None else idx + 1 for idx, id in enumerate(sent_ids)])
+        # --- REMOVED: Sent ID was here ---
         
-        # --- CRITICAL FIX 2: Add Source Corpus Name ---
-        kwic_preview.insert(1, "Source Corpus", corpus_name)
+        # --- CRITICAL FIX 1: Add Source Corpus Name (New Index 0) ---
+        kwic_preview.insert(0, "Source Corpus", corpus_name)
 
 
         # --- NEW: Add Translation Column ---
         if is_parallel_mode:
             translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
-            # Insert translation column after Right context (position 5 in 0-based index)
-            kwic_preview.insert(5, f'Translation ({TARGET_LANG_CODE})', translations)
+            # Insert translation column after Right context (position 4 in 0-based index: 0=Source, 1=Left, 2=Node, 3=Right, 4=Translation)
+            kwic_preview.insert(4, f'Translation ({TARGET_LANG_CODE})', translations)
 
         # Total Columns (Monolingual: 4, Parallel: 5)
-        # Target Col widths: Sent ID (7%), Source Corpus (10%), Left (35%), Node (15%), Right (25%), Translation (8%)
+        # Target Col widths: Source Corpus (15%), Left (35%), Node (15%), Right (35%), Translation (Remaining 0%)
         kwic_table_style = f"""
         	<style>
         	.dictionary-kwic-container {{
@@ -3079,20 +3077,19 @@ if st.session_state['view'] == 'dictionary':
         	.dict-kwic-table th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
         	
         	/* KWIC Width Fix: Set proportional column widths */
-            .dict-kwic-table td:nth-child(1) {{ width: 7%; font-weight: bold; text-align: center; white-space: nowrap;}} /* Sent ID */
-            .dict-kwic-table td:nth-child(2) {{ width: 10%; text-align: center; font-size: 0.7em; white-space: normal; }} /* Source Corpus (NEW) */
-        	.dict-kwic-table td:nth-child(3) {{ width: 35%; text-align: right; }} /* Left context */
-        	.dict-kwic-table td:nth-child(4) {{ 
-        		width: 15%; /* Node */
+            .dict-kwic-table td:nth-child(1) {{ width: 15%; text-align: center; font-size: 0.8em; white-space: normal; }} /* Source Corpus (NEW index 1) */
+        	.dict-kwic-table td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context (NEW index 2) */
+        	.dict-kwic-table td:nth-child(3) {{ 
+        		width: 15%; /* Node (NEW index 3) */
         		text-align: center; 
         		font-weight: bold; 
         		background-color: #f0f0f0; 
         		color: black; 
         	}} 
-        	.dict-kwic-table td:nth-child(5) {{ width: 25%; text-align: left; }} /* Right context */
+        	.dict-kwic-table td:nth-child(4) {{ width: 35%; text-align: left; }} /* Right context (NEW index 4) */
         	
         	/* Ensure content can wrap */
-        	.dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4), .dict-kwic-table td:nth-child(5) {{ 
+        	.dict-kwic-table td:nth-child(2), .dict-kwic-table td:nth-child(3), .dict-kwic-table td:nth-child(4) {{ 
         		white-space: normal;
         		vertical-align: top;
         		padding: 5px 10px;
