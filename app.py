@@ -468,7 +468,7 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
     total_tokens_float = float(total_tokens)
     
     for token, freq in breakdown_data.most_common():
-        rel_freq = (freq / total_tokens_float) * 1_000_000
+        rel_freq = (freq / total_tokens_float) * 1_000_100
         breakdown_list.append({
             "Token Form": token, 
             "Absolute Frequency": freq, 
@@ -593,11 +593,11 @@ def generate_kwic(df_corpus, raw_target_input, kwic_left, kwic_right, pattern_co
         kwic_end = min(total_tokens, i + primary_target_len + current_kwic_right)
         
         # Determine the sentence ID of the node word (first token in MWU)
-        if is_parallel_mode and 'sent_id' in df_corpus.columns:
+        if 'sent_id' in df_corpus.columns:
             node_sent_id = df_corpus["sent_id"].iloc[i]
             sent_ids.append(node_sent_id)
         else:
-            sent_ids.append(None) # Not parallel mode or no ID available
+            sent_ids.append(i + 1) # Fallback to index if no sentence ID available
             
         formatted_line = []
         node_orig_tokens = []
@@ -738,7 +738,7 @@ def generate_n_grams(df_corpus, n_size, n_gram_filters, is_raw_mode, corpus_id):
     for n_gram, freq in n_gram_counts.items():
         n_gram_str = " ".join(n_gram)
         # Calculate relative frequency per million tokens
-        rel_freq = (freq / total_tokens_float) * 1_000_000
+        rel_freq = (freq / total_tokens_float) * 1_000_100
         
         data.append({
             "N-Gram": n_gram_str,
@@ -1631,7 +1631,8 @@ def display_collocation_kwic_examples(df_corpus, node_word, top_collocates_df, w
             if kwic_rows:
                 # Assuming limit=1, we only take the first row
                 kwic_row = kwic_rows[0]
-                sent_id = sent_ids[0]
+                # Use the sent_id if available, otherwise just use the row index for translation lookup
+                sent_id = sent_ids[0] if sent_ids and sent_ids[0] is not None else (rank + 1)
                 
                 translation = ""
                 if is_parallel_mode and sent_id is not None and target_sent_map:
@@ -2382,7 +2383,7 @@ if st.session_state['view'] == 'overview':
             
             # Calculate Relative Frequency (per M) for the Overview table
             total_tokens_float = float(total_tokens)
-            freq_head['Relative Frequency (per M)'] = freq_head['frequency'].apply(lambda f: round((f / total_tokens_float) * 1_000_000, 4))
+            freq_head['Relative Frequency (per M)'] = freq_head['frequency'].apply(lambda f: round((f / total_tokens_float) * 1_000_100, 4))
             
             # Reorder columns for display
             display_cols = ["token", "frequency", "Relative Frequency (per M)"]
@@ -2716,13 +2717,16 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     # -----------------------------------------
 
     # --- KWIC Display (Now Full Width) ---
-    # NOTE: The KWIC display logic uses total_matches, which accounts for the collocate pattern filter.
     st.subheader(f"Concordance (KWIC) — top {len(kwic_rows)} lines (Scrollable max {KWIC_MAX_DISPLAY_LINES})")
         
     kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
     kwic_preview = kwic_df.copy().reset_index(drop=True)
-    kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
     
+    # --- CRITICAL FIX 1: Use Sentence ID for Index/File ID ---
+    # The 'sent_ids' array now holds the extracted sent_id or the token index + 1 (from generate_kwic)
+    # This column acts as the source file identifier (File ID or Sentence ID).
+    kwic_preview.insert(0, "Sent ID", [id if id is not None else idx + 1 for idx, id in enumerate(sent_ids)])
+
     # --- NEW: Add Translation Column ---
     if is_parallel_mode:
         translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
@@ -2746,9 +2750,9 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		}}
     		.dataframe th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
     		
-    		/* KWIC Width Fix: Set proportional column widths (ensures full width is used even without POS/Lemma) */
-    		.dataframe td:nth-child(1) {{ width: 5%; }} /* No column - Acts as File ID/Index */
-    		.dataframe td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
+    		/* KWIC Width Fix: Set proportional column widths (Target: 5 columns total) */
+    		.dataframe td:nth-child(1) {{ width: 10%; font-weight: bold; text-align: center; white-space: nowrap; }} /* Sent ID/File ID: Increased width for better visibility */
+    		.dataframe td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context */
     		.dataframe td:nth-child(3) {{ 
     		 	width: 15%; /* Node */
     		 	text-align: center; 
@@ -2756,7 +2760,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		 	background-color: #f0f0f0; 
     		 	color: black; 
     		}} 
-    		.dataframe td:nth-child(4) {{ width: 30%; text-align: left; }} /* Right context (Reduced width for space) */
+    		.dataframe td:nth-child(4) {{ width: 30%; text-align: left; }} /* Right context */
     		
     		/* Ensure content can wrap */
     		.dataframe td:nth-child(2), .dataframe td:nth-child(3), .dataframe td:nth-child(4) {{ 
@@ -2766,7 +2770,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
     		 	line-height: 1.5; 
     		}}
     		
-    		/* Adjust for Translation column if present (remaining 10% width) */
+    		/* Adjust for Translation column if present (10% remaining width) */
     		.dataframe th:nth-last-child(1) {{ width: 10%; }} /* Translation Column / File ID */
     		.dataframe td:nth-last-child(1) {{ text-align: left; color: #CCFFCC; font-family: sans-serif; font-size: 0.8em; white-space: normal; }}
 
@@ -2780,7 +2784,7 @@ if st.session_state['view'] == 'concordance' and st.session_state.get('analyze_b
 
     st.markdown(scrollable_html, unsafe_allow_html=True)
 
-    st.caption(f"Note: Pattern search collocates are **bolded and highlighted bright yellow**. The 'No' column acts as the File ID/Index in this corpus structure.")
+    st.caption(f"Note: Pattern search collocates are **bolded and highlighted bright yellow**. The **Sent ID** column acts as the File/Sentence identifier.")
     st.download_button("⬇ Download full concordance (xlsx)", data=df_to_excel_bytes(kwic_preview), file_name=f"{raw_target_input.replace(' ', '_')}_full_concordance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -2863,7 +2867,7 @@ if st.session_state['view'] == 'dictionary':
         
     # --- ADD FREQUENCY COLUMNS (Absolute and Relative) ---
     forms_list.insert(forms_list.shape[1], 'Absolute Frequency', forms_list['Token'].apply(lambda t: token_counts.get(t.lower(), 0)))
-    forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_000, 4)))
+    forms_list.insert(forms_list.shape[1], 'Relative Frequency (per M)', forms_list['Absolute Frequency'].apply(lambda f: round((f / total_tokens) * 1_000_100, 4)))
     
     
     # ------------------ ZIPF BAND CALCULATION (NEW) ------------------
@@ -3027,8 +3031,10 @@ if st.session_state['view'] == 'dictionary':
         
         kwic_df = pd.DataFrame(kwic_rows).drop(columns=['Collocate'])
         kwic_preview = kwic_df.copy().reset_index(drop=True)
-        kwic_preview.insert(0, "No", range(1, len(kwic_preview)+1))
         
+        # --- CRITICAL FIX 1: Use Sentence ID for Index/File ID ---
+        kwic_preview.insert(0, "Sent ID", [id if id is not None else idx + 1 for idx, id in enumerate(sent_ids)])
+
         # --- NEW: Add Translation Column ---
         if is_parallel_mode:
             translations = [st.session_state['target_sent_map'].get(sent_id, "TRANSLATION N/A") for sent_id in sent_ids]
@@ -3052,8 +3058,8 @@ if st.session_state['view'] == 'dictionary':
         	.dict-kwic-table th {{ font-weight: bold; text-align: center; white-space: nowrap; }}
         	
         	/* KWIC Width Fix: Set proportional column widths */
-        	.dict-kwic-table td:nth-child(1) {{ width: 5%; }} /* No column */
-        	.dict-kwic-table td:nth-child(2) {{ width: 40%; text-align: right; }} /* Left context */
+        	.dict-kwic-table td:nth-child(1) {{ width: 10%; font-weight: bold; text-align: center; white-space: nowrap;}} /* Sent ID/File ID */
+        	.dict-kwic-table td:nth-child(2) {{ width: 35%; text-align: right; }} /* Left context */
         	.dict-kwic-table td:nth-child(3) {{ 
         		width: 15%; /* Node */
         		text-align: center; 
@@ -3329,6 +3335,3 @@ if st.session_state['view'] == 'collocation' and st.session_state.get('analyze_b
         show_pos=show_pos_tag,
         show_lemma=show_lemma
     )
-
-
-st.caption("Tip: This app handles pre-tagged, raw, and now **Excel-based parallel corpora**.")
