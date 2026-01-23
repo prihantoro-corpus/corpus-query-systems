@@ -11,6 +11,7 @@ from .cleaning import sanitize_xml_content
 from .xml_parser import extract_xml_structure, parse_xml_content_to_df
 from core.config import CORPORA_DIR, TAGSET_DIR
 from core.modules.overview import save_pos_definitions
+from .tagging import tag_text_with_stanza, tag_text_simple_fallback
 
 def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None):
     """
@@ -27,6 +28,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     is_tagged_format = 'verticalised' in selected_format or 'TreeTagger' in selected_format
     xml_detected_lang_code = None
     combined_structure = {}
+    
+    print(f"DEBUG: load_monolingual_corpus_files called. Lang: {explicit_lang_code}, Format: {selected_format}")
 
     num_files = len(file_sources)
 
@@ -109,12 +112,50 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     print(f"File {filename} could not be parsed as vertical format. Falling back to raw text.")
                     current_is_tagged = False 
             
-            if not current_is_tagged or selected_format == '.txt': 
+            if not current_is_tagged or selected_format == '.txt' or selected_format == '.txt / auto': 
                 raw_text = clean_content
-                cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text)
-                tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
-                df_raw_file = pd.DataFrame({"token": tokens, "pos": ["##"]*len(tokens), "lemma": ["##"]*len(tokens), "sent_id": [0]*len(tokens), "filename": [filename]*len(tokens)})
-                all_df_data.extend(df_raw_file.to_dict('records'))
+                
+                # Tagging Logic Integration
+                # If explicit_lang_code is set, we try to use it.
+                # If "OTHER" is selected, we perform fallback tagging.
+                
+                print(f"DEBUG: Processing raw text. explicit_lang_code='{explicit_lang_code}'")
+                tagged_data = []
+                
+                if explicit_lang_code and explicit_lang_code != "OTHER":
+                    try:
+                        # Attempt Stanza Tagging
+                        tagged_data = tag_text_with_stanza(raw_text, explicit_lang_code)
+                    except Exception as e:
+                        msg = f"Stanza tagging failed for '{explicit_lang_code}': {e}. Using simple fallback."
+                        print(msg)
+                        stanza_warning = msg
+                        tagged_data = tag_text_simple_fallback(raw_text)
+                elif explicit_lang_code == "OTHER":
+                    tagged_data = tag_text_simple_fallback(raw_text)
+                else:
+                    # Legacy Fallback or Default Behavior for "auto" without specific language?
+                    # The request says: "if they choose language, you will tokenise... Stanza"
+                    # "When other is chosen... use 'TAG' instead"
+                    # If user didn't specify language (e.g. from built-in?), corpus loader might default to 'en' or None.
+                    # Current load_monolingual default is 'en' if not provided? -> No, argument is required.
+                    # sidebar passes 'en' by default.
+                    
+                    # If we are here, likely 'en' or some coded lang.
+                    # Maintain old behavior? Or upgrade everything? 
+                    # "For no, only ENglish, Indonesia and Japan is available." -> "change to all languages supported by Stanza."
+                    
+                    if explicit_lang_code:
+                         tagged_data = tag_text_with_stanza(raw_text, explicit_lang_code)
+                    else:
+                         # Very generic fallback if no lang code known
+                         tagged_data = tag_text_simple_fallback(raw_text)
+
+                # Add metadata
+                for item in tagged_data:
+                    item['filename'] = filename
+                
+                all_df_data.extend(tagged_data)
 
     if not all_df_data:
         return {'error': "No valid data extracted from files"}
@@ -168,7 +209,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         'stats': corpus_stats,
         'structure': combined_structure,
         'lang_code': final_lang_code,
-        'error': None
+        'error': None,
+        'warning': stanza_warning if 'stanza_warning' in locals() else None
     }
 
 def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code, progress_callback=None):

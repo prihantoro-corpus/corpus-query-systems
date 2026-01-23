@@ -4,7 +4,7 @@ import shutil
 from ui_streamlit.state_manager import set_state, get_state, reset_tool_states
 from core.preprocessing.corpus_loader import load_monolingual_corpus_files, load_built_in_corpus
 from core.modules.overview import calculate_corpus_statistics
-from core.config import get_available_corpora, BUILT_IN_CORPUS_DETAILS
+from core.config import get_available_corpora, BUILT_IN_CORPUS_DETAILS, STANZA_LANG_MAP
 
 def render_sidebar():
     """
@@ -12,7 +12,7 @@ def render_sidebar():
     Returns: The selected view name.
     """
     # 1. Navigation (Tools) - MOVED TO TOP
-    st.sidebar.title("Tools")
+    st.sidebar.title("Tools (v1.1 Stanza)")
     view = st.sidebar.radio(
         "Go to", 
         ["Overview", "Concordance", "N-Gram", "Collocation", "Dictionary", "Keyword", "Distribution"]
@@ -56,7 +56,16 @@ def render_sidebar():
         # New: Language and Format Selection
         lang_col, fmt_col = st.sidebar.columns(2)
         with lang_col:
-            lang_code = st.selectbox("Language", ["en", "id", "jp", "OTHER"], index=0)
+            # Prepare language list. Add 'OTHER' at the end.
+            lang_options = list(STANZA_LANG_MAP.keys()) + ["OTHER"]
+            selected_lang_label = st.selectbox("Language", lang_options, index=0)
+            
+            # Map label to code for processing
+            if selected_lang_label == "OTHER":
+                lang_code = "OTHER"
+            else:
+                lang_code = STANZA_LANG_MAP[selected_lang_label]
+                
         with fmt_col:
             fmt = st.selectbox("Format", [".txt / auto", "verticalised (T/P/L)", "XML (Tagged)", "Excel Parallel"], index=0)
         
@@ -80,6 +89,9 @@ def render_sidebar():
                     if result.get('error'):
                         st.error(result['error'])
                     else:
+                        if result.get('warning'):
+                            st.warning(result['warning'])
+                            
                         if not get_state('comparison_mode'):
                             set_state('current_corpus_path', result['db_path'])
                             set_state('corpus_stats', result['stats'])

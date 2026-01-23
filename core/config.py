@@ -85,3 +85,13 @@ BUILT_IN_CORPUS_DETAILS = {
         **Source/Citation:** Prihantoro, P., Ishikawa, S., Liu, T., Fadli, Z. A., Rini, E. I. H. A. N., & Kepirianto, C. (2025). DICO-JALF v.1.0: Diponegoro Corpus of Japanese Learners as a Foreign Language in Indonesia with AI Error Annotation and Human Supervision. Jurnal Arbitrer, 12(3), 274–288. https://doi.org/10.25077/ar.12.3.274-288.2025 
         """
 }
+
+# Language codes for Stanza integration
+STANZA_LANG_MAP = {
+    "English": "en",
+    "Indonesian": "id",
+    "Japanese": "ja",
+    "Chinese": "zh",
+    "Arabic": "ar",
+    "Korean": "ko"
+}
