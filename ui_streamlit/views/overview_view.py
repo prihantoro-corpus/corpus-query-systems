@@ -152,9 +152,9 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     _render_language_confirmation(path, key_suffix)
 
 
-    # Show classification only if English selected/detected
-    show_classification = (current_lang == 'English')
-
+    # Show classification for ALL languages now (via Translation)
+    show_classification = True
+    
     tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud"]
     if show_classification: tabs_list.append("🏷️ Automatic Labeling")
     
@@ -221,7 +221,7 @@ def render_full_overview(name, path, stats, structure, error):
     
 
     current_lang = get_corpus_language(path)
-    show_classification = (current_lang == 'English')
+    show_classification = True
     
     tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud"]
     if show_classification: tabs_list.append("🏷️ Automatic Labeling")
@@ -474,6 +474,7 @@ def _render_classification_tab(db_path, key_suffix):
             st.info("""
             **No data is sent to external AI servers.** All processing happens locally:
             - **Sentiment Analysis**: Uses [NLTK VADER](https://github.com/cjhutto/vaderSentiment) (Rule-based).
+            - **Multi-language**: Non-English text is automatically translated to English for sentiment analysis.
             - **Topic Classification**: Uses [Scikit-learn](https://scikit-learn.org/) TF-IDF with pre-defined keyword categories.
             """)
     
@@ -538,7 +539,9 @@ def _render_classification_tab(db_path, key_suffix):
                 # Sentiment Analysis
                 if do_sent:
                     st.write("Computing Sentiment...")
-                    df_sents['Predicted Sentiment'] = classify_sentiment_vader(texts)
+                    # Get current language from DB or State
+                    lang_for_sent = get_corpus_language(db_path)
+                    df_sents['Predicted Sentiment'] = classify_sentiment_vader(texts, lang=lang_for_sent)
                 
                 # Topic Classification
                 topic_info = None

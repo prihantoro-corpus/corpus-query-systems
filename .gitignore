@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+env/
+venv/
+lib/
+
+# Database
+*.duckdb
+*.duckdb.wal
+
+# Stanza Resources
+stanza_resources/
+home/stanza_resources/
+
+# User Data / Corpora (unless specifically added)
+corpora/*.txt
+corpora/*.xml
+!corpora/ID-BPPT-tagged.xml
+!corpora/EN-BPPT-tagged.xml
+
+# Temporary / Testing
+test_stanza_standalone.py
+dummy_corpus.duckdb/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
