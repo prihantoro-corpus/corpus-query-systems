@@ -26,22 +26,35 @@ def get_available_corpora():
     if not os.path.exists(CORPORA_DIR):
         return {}
         
-    try:
-        files = [f for f in os.listdir(CORPORA_DIR) if os.path.isfile(os.path.join(CORPORA_DIR, f)) and not f.startswith('.')]
-    except Exception:
-        return {}
-        
     # Reverse map for easy lookup: filename -> nice name
     filename_to_name = {v: k for k, v in KNOWN_CORPORA_MAP.items()}
     
-    for f in files:
-        if f.lower().endswith(('.xml', '.txt', '.csv', '.xlsx')):
-            if f in filename_to_name:
-                display_name = filename_to_name[f]
-                available[display_name] = f
-            else:
-                available[f] = f
+    # Recursive walk
+    for root, dirs, files in os.walk(CORPORA_DIR):
+        for f in files:
+            if f.lower().endswith(('.xml', '.txt', '.csv', '.xlsx')):
+                full_path = os.path.join(root, f)
                 
+                # Get relative path from CORPORA_DIR
+                rel_path = os.path.relpath(full_path, CORPORA_DIR)
+                
+                # If key known by filename, map it
+                # We check simply if the filename (basename) matches the known map
+                basename = os.path.basename(f)
+                
+                if basename in filename_to_name:
+                    display_name = filename_to_name[basename]
+                    available[display_name] = rel_path
+                else:
+                    # Use relative path as display name for nested files, or just filename if root
+                    if root == CORPORA_DIR:
+                         available[f] = f
+                    else:
+                         # e.g. "indonesian/sample.txt"
+                         # Normalize separators for display
+                         display_rel = rel_path.replace(os.path.sep, '/')
+                         available[display_rel] = rel_path
+
     return available
 
 
