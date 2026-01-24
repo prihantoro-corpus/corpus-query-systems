@@ -9,10 +9,18 @@ if architecture_root not in sys.path:
     sys.path.insert(0, architecture_root)
 
 # Force reload of backend modules to ensure fresh code is used (fixes caching issues)
-# import importlib
-# try:
-#     if 'core.config' in sys.modules:
-#         importlib.reload(sys.modules['core.config'])
+import importlib
+try:
+    if 'core.io_utils' in sys.modules:
+        importlib.reload(sys.modules['core.io_utils'])
+    if 'core.config' in sys.modules:
+        importlib.reload(sys.modules['core.config'])
+    if 'core.preprocessing.xml_parser' in sys.modules:
+        importlib.reload(sys.modules['core.preprocessing.xml_parser'])
+    if 'core.preprocessing.stanza_processor' in sys.modules:
+        importlib.reload(sys.modules['core.preprocessing.stanza_processor'])
+    if 'core.preprocessing.corpus_loader' in sys.modules:
+        importlib.reload(sys.modules['core.preprocessing.corpus_loader'])
 #     if 'core.preprocessing.corpus_loader' in sys.modules:
 #         importlib.reload(sys.modules['core.preprocessing.corpus_loader'])
 #     if 'core.modules.overview' in sys.modules:
