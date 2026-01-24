@@ -40,10 +40,22 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         file_source.seek(0)
         filename = file_source.name
         
+        # Read a sample to detect pseudo-XML
+        sample_bytes = file_source.read(1024)
+        file_source.seek(0)
+        sample_str = sample_bytes.decode('utf-8', errors='ignore').strip()
+        
+        is_xml_ext = filename.lower().endswith('.xml')
+        is_pseudo_xml = False
+        if not is_xml_ext:
+            if sample_str.startswith('<'):
+                is_pseudo_xml = True
+            elif any(tag in sample_str.lower() for tag in ['<text', '<corpus', '<p>', '<p ']):
+                is_pseudo_xml = True
+
         # --- XML PROCESSING ---
-        if filename.lower().endswith('.xml'):
+        if is_xml_ext or is_pseudo_xml:
             try:
-                # One read, one clean
                 xml_content = file_source.read().decode('utf-8', errors='ignore')
                 cleaned_xml = sanitize_xml_content(xml_content)
                 
@@ -62,7 +74,16 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                                         combined_structure[tag][attr].update(vals)
                 
                 # 2. Content Parsing
-                result = parse_xml_content_to_df(cleaned_xml)
+                stanza_proc = None
+                if 'Auto-tag with Stanza' in selected_format or 'stanza' in selected_format.lower():
+                    from .stanza_processor import process_text_with_stanza
+                    stanza_proc = process_text_with_stanza
+                
+                result = parse_xml_content_to_df(
+                    cleaned_xml, 
+                    stanza_processor=stanza_proc, 
+                    lang_code=source_lang_code
+                )
                 if 'df_data' in result:
                     if explicit_lang_code == 'OTHER' and result.get('lang_code') not in ('XML', 'OTHER'):
                         xml_detected_lang_code = result['lang_code'] 
@@ -72,10 +93,10 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     
                     all_df_data.extend(result['df_data'])
                 elif 'error' in result:
-                    print(f"Error processing XML {filename}: {result['error']}")
+                    return {'error': f"XML Error ({filename}): {result['error']}"}
 
             except Exception as e:
-                print(f"Error processing XML {filename}: {e}")
+                return {'error': f"Processing Error ({filename}): {str(e)}"}
         
         # --- TXT/CSV PROCESSING ---
         else: 
@@ -85,8 +106,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
                 clean_content = "\n".join(clean_lines)
             except Exception as e:
-                print(f"Error reading raw file content: {e}")
-                continue
+                return {'error': f"Error reading raw file {filename}: {str(e)}"}
 
             current_is_tagged = is_tagged_format
             if current_is_tagged:

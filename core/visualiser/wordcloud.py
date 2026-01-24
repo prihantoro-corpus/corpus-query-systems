@@ -47,21 +47,13 @@ def create_word_cloud(freq_data, is_tagged_mode):
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.imshow(wordcloud, interpolation='bilinear')
     ax.axis("off")
-    plt.tight_layout(pad=0)
+    fig.tight_layout(pad=0)
     
     return fig
 
-def generate_wordcloud(freq_dict, title="", color_scheme='viridis'):
+def generate_wordcloud(freq_dict, title="", color_scheme='viridis', width=400, height=200):
     """
     Generates a word cloud from a dictionary of word:score.
-    
-    Args:
-        freq_dict (dict): Dictionary mapping words to scores/frequencies.
-        title (str): Title for the plot.
-        color_scheme (str): Matplotlib colormap name.
-        
-    Returns:
-        matplotlib.figure.Figure: The plot figure.
     """
     if not freq_dict:
         return None
@@ -73,8 +65,8 @@ def generate_wordcloud(freq_dict, title="", color_scheme='viridis'):
         return None
         
     wc = WordCloud(
-        width=800,
-        height=400,
+        width=width * 2,
+        height=height * 2,
         background_color='black',
         colormap=color_scheme,
         min_font_size=10
@@ -85,11 +77,11 @@ def generate_wordcloud(freq_dict, title="", color_scheme='viridis'):
     except Exception as e:
         return None
         
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, ax = plt.subplots(figsize=(width/100, height/100))
     ax.imshow(wordcloud, interpolation='bilinear')
     ax.axis("off")
     if title:
         ax.set_title(title, color='white')
-    plt.tight_layout(pad=0)
+    fig.tight_layout(pad=0)
     
     return fig
