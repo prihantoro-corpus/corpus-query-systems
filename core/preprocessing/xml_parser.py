@@ -60,7 +60,132 @@ def extract_xml_structure(xml_input, max_values=20):
     process_element(root)
     return structure, None
 
-def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
+def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, combined_attrs, tag_counters, stanza_processor=None, lang_code='EN'):
+    """
+    Recursively parse XML element, preserving inline tag context.
+    
+    Args:
+        element: XML element to parse
+        context_tags: Dict of current tag context (e.g., {'in_PN': True, 'PN_type': 'human'})
+        tokens_data: List to append token records to
+        sent_id: Current sentence ID
+        combined_attrs: Segment-level attributes (from parent <text>, <s>, etc.)
+        tag_counters: Global dict tracking instance IDs {tag: count}
+        stanza_processor: Optional Stanza tagging function
+        lang_code: Language code for tagging
+    """
+    # Create context for this element
+    current_context = context_tags.copy()
+    tag_name = element.tag.lower()
+    
+    # Skip structural tags that shouldn't be tracked as inline context
+    structural_tags = {'corpus', 'text', 's', 'sent', 'u', 'utterance', 'p', 'para', 'ab', 'div', 'w'}
+    
+    if tag_name not in structural_tags:
+        # Add boolean flag for tag presence (normalize tag name)
+        current_context[f"in_{tag_name}"] = True
+        
+        # Track unique instance ID for this tag
+        tag_counters[tag_name] = tag_counters.get(tag_name, 0) + 1
+        current_context[f"{tag_name}_id"] = tag_counters[tag_name]
+        
+        # Add attributes prefixed by tag name
+        for k, v in element.attrib.items():
+            current_context[f"{tag_name}_{k.lower()}"] = v
+    
+    # Helper to tokenize and add text with current context
+    def tokenize_and_add(text, context):
+        if not text or not text.strip():
+            return
+            
+        # 1. Detect if this block of text is in Vertical Format (TreeTagger: token\ttag\tlemma)
+        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        
+        is_vertical = False
+        if len(lines) > 0:
+            # Strictly require tabs for auto-detection of vertical format inside inline tags
+            # to avoid false positives on horizontal segments with few words.
+            vertical_score = sum(1 for l in lines if '\t' in l) / len(lines)
+            if vertical_score > 0.6:
+                is_vertical = True
+
+        if is_vertical:
+            for line in lines:
+                parts = re.split(r'\t+', line.strip())
+                if not parts or not parts[0]: continue
+                
+                token = parts[0]
+                pos = parts[1] if len(parts) > 1 else "TAG"
+                lemma = parts[2] if len(parts) > 2 else token
+                
+                row = {
+                    'token': token,
+                    'pos': pos,
+                    'lemma': lemma,
+                    'sent_id': sent_id
+                }
+                row.update(combined_attrs)
+                row.update(context)
+                tokens_data.append(row)
+            return
+
+        # 2. Use Stanza if available (for horizontal/inline text)
+        if stanza_processor:
+            try:
+                tagged_data, err = stanza_processor(text, lang_code)
+                if not err and tagged_data:
+                    for rec in tagged_data:
+                        row = {
+                            'token': rec['token'],
+                            'pos': rec['pos'],
+                            'lemma': rec['lemma'],
+                            'sent_id': sent_id
+                        }
+                        row.update(combined_attrs)
+                        row.update(context)
+                        tokens_data.append(row)
+                    return
+            except:
+                pass
+        
+        # 3. Fallback: simple whitespace tokenization
+        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', text)
+        tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+        for token in tokens:
+            row = {
+                'token': token,
+                'pos': '##TAG',
+                'lemma': token,
+                'sent_id': sent_id
+            }
+            row.update(combined_attrs)
+            row.update(context)
+            tokens_data.append(row)
+    
+    # Process text BEFORE first child
+    tokens_before = len(tokens_data)
+    if element.text:
+        tokenize_and_add(element.text, current_context)
+    
+    # Process children recursively
+    for child in element:
+        parse_xml_with_inline_tags(child, current_context, tokens_data, sent_id, combined_attrs, tag_counters, stanza_processor, lang_code)
+        
+        # Process tail text (text AFTER child tag but inside parent)
+        if child.tail:
+            tokenize_and_add(child.tail, current_context)
+    
+    # Calculate length (number of tokens) for this tag instance
+    tokens_after = len(tokens_data)
+    tag_inner_len = tokens_after - tokens_before
+    
+    if tag_name not in structural_tags and tag_inner_len > 0:
+        # Mark the FIRST token of this tag with the start flag and length
+        first_token_row = tokens_data[tokens_before]
+        first_token_row[f"in_{tag_name}_start"] = True
+        first_token_row[f"{tag_name}_len"] = tag_inner_len
+
+def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processor=None, lang_code='EN', preserve_inline_tags=True):
     """
     Parses XML content, extracts sentences and IDs, and tokenizes/verticalizes.
     Returns dict with keys: lang_code, df_data, sent_map, attributes, error
@@ -102,8 +227,12 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
     sent_map = {}
     detected_attrs = {} 
     
-    excluded_attrs = ('n', 'id', 'num', 'lang')
-    base_root_attrs = {k: v for k, v in root.attrib.items() if k.lower() not in excluded_attrs}
+    excluded_attrs = ('n', 'num', 'lang') # Removed 'id' from exclusion, manually handled below
+    base_root_attrs = {}
+    for k, v in root.attrib.items():
+        if k.lower() in excluded_attrs: continue
+        key_name = 'doc_id' if k.lower() == 'id' else k
+        base_root_attrs[key_name] = v
     
     for k, v in base_root_attrs.items():
         if k not in detected_attrs: detected_attrs[k] = set()
@@ -116,7 +245,16 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
 
     def traverse_and_collect(element, current_attrs, target_tags):
         new_attrs = current_attrs.copy()
-        new_attrs.update({k: v for k, v in element.attrib.items() if k.lower() not in excluded_attrs})
+        
+        # Prepare attributes for this element, checking exclusions and renaming id
+        elem_attrs = {}
+        for k, v in element.attrib.items():
+            if k.lower() in excluded_attrs: continue
+            key_name = 'doc_id' if k.lower() == 'id' else k
+            elem_attrs[key_name] = v
+            
+        new_attrs.update(elem_attrs)
+        
         if element.tag in target_tags:
             elements_to_process.append((element, new_attrs))
             return 
@@ -133,20 +271,39 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
         raw_sentence_text = "".join(root.itertext()).strip() 
         if raw_sentence_text:
             if stanza_processor:
-                stanza_records, err = stanza_processor(raw_sentence_text, final_lang)
-                if not err:
+                res = stanza_processor(raw_sentence_text, final_lang)
+                if isinstance(res, tuple) and len(res) == 2:
+                    stanza_records, err = res
+                else:
+                    stanza_records, err = res, None
+                    
+                if not err and stanza_records:
+                    current_stanza_sent = -1
+                    current_sent_text_parts = []
                     for rec in stanza_records:
-                        row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": 1}
+                        if rec['sent_id'] != current_stanza_sent:
+                            if current_stanza_sent != -1:
+                                sent_map[sequential_id_counter] = " ".join(current_sent_text_parts)
+                            
+                            sequential_id_counter += 1
+                            current_stanza_sent = rec['sent_id']
+                            current_sent_text_parts = []
+                        
+                        row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": sequential_id_counter}
                         row.update(base_root_attrs)
                         df_data.append(row)
-                    sent_map[1] = raw_sentence_text
+                        current_sent_text_parts.append(rec['token'])
+                    
+                    if current_sent_text_parts:
+                        sent_map[sequential_id_counter] = " ".join(current_sent_text_parts)
+                        
                     return {'lang_code': final_lang, 'df_data': df_data, 'sent_map': sent_map, 'attributes': detected_attrs}
 
             cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_sentence_text) 
             tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
             if tokens:
                for token in tokens:
-                    row = {"token": token, "pos": "##", "lemma": "##", "sent_id": 1}
+                    row = {"token": token, "pos": "TAG", "lemma": token, "sent_id": 1}
                     row.update(base_root_attrs)
                     df_data.append(row)
                sent_map[1] = raw_sentence_text
@@ -154,6 +311,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
         return {'error': "No parseable content found"}
 
     sequential_id_counter = 0
+    tag_counters = {} # NEW: Track unique instance IDs across all elements
 
     for sent_elem, combined_row_attrs in elements_to_process:
         for k, v in combined_row_attrs.items():
@@ -174,13 +332,32 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
         word_tags = sent_elem.findall('.//w')
         raw_sentence_text = ""
         
+        # NEW: Use inline tag parser if enabled
+        if preserve_inline_tags and not word_tags:
+            parse_xml_with_inline_tags(
+                sent_elem, 
+                {}, # Start with empty tag context
+                df_data, 
+                sent_id, 
+                combined_row_attrs,
+                tag_counters,
+                stanza_processor,
+                final_lang
+            )
+            # Build sentence text for sent_map
+            raw_sentence_text = "".join(sent_elem.itertext()).strip()
+            if raw_sentence_text:
+                sent_map[sent_id] = raw_sentence_text
+            continue  # Skip legacy processing
+        
+        # LEGACY: Original processing for <w> tags and vertical format
         if word_tags:
             raw_tokens = []
             for w_elem in word_tags:
                 token = w_elem.text.strip() if w_elem.text else ""
                 if not token: continue
-                pos = w_elem.get('pos') or w_elem.get('type') or "##"
-                lemma = w_elem.get('lemma') or "##"
+                pos = w_elem.get('pos') or w_elem.get('type') or "TAG"
+                lemma = w_elem.get('lemma') or token
                 row = {"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id}
                 if combined_row_attrs: row.update(combined_row_attrs)
                 df_data.append(row)
@@ -208,8 +385,8 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
                     parts = re.split(r'\t+', line.strip())
                     if not parts or not parts[0]: continue
                     token = parts[0]
-                    pos = parts[1] if len(parts) > 1 else "##"
-                    lemma = parts[2] if len(parts) > 2 else "##"
+                    pos = parts[1] if len(parts) > 1 else "TAG"
+                    lemma = parts[2] if len(parts) > 2 else token
                     row = {"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id}
                     if combined_row_attrs: row.update(combined_row_attrs)
                     df_data.append(row)
@@ -217,18 +394,37 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False):
             else:
                 raw_text_to_tokenize = raw_sentence_text.replace('\n', ' ').replace('\t', ' ')
                 if stanza_processor:
-                    stanza_records, err = stanza_processor(raw_text_to_tokenize, final_lang)
-                    if not err:
+                    res = stanza_processor(raw_text_to_tokenize, final_lang)
+                    if isinstance(res, tuple) and len(res) == 2:
+                        stanza_records, err = res
+                    else:
+                        stanza_records, err = res, None
+                    
+                    if not err and stanza_records:
+                        current_stanza_sent = -1
+                        current_sent_text_parts = []
                         for rec in stanza_records:
-                            row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": sent_id}
+                            if rec['sent_id'] != current_stanza_sent:
+                                if current_stanza_sent != -1:
+                                    sent_map[sequential_id_counter] = " ".join(current_sent_text_parts)
+                                
+                                sequential_id_counter += 1
+                                current_stanza_sent = rec['sent_id']
+                                current_sent_text_parts = []
+                            
+                            row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": sequential_id_counter}
                             if combined_row_attrs: row.update(combined_row_attrs)
                             df_data.append(row)
+                            current_sent_text_parts.append(rec['token'])
+                        
+                        if current_sent_text_parts:
+                            sent_map[sequential_id_counter] = " ".join(current_sent_text_parts)
                         continue
                 
                 cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text_to_tokenize) 
                 tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
                 for token in tokens:
-                    row = {"token": token, "pos": "##", "lemma": "##", "sent_id": sent_id}
+                    row = {"token": token, "pos": "TAG", "lemma": token, "sent_id": sent_id}
                     if combined_row_attrs: row.update(combined_row_attrs)
                     df_data.append(row)
         

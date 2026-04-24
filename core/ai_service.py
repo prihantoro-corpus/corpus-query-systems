@@ -143,6 +143,28 @@ def interpret_results_gemini(target_word, analysis_type, data_description, data,
     except Exception as e:
         return None, f"Gemini Connection Error: {e}"
 
+def get_ai_response(prompt, ai_provider="Ollama", ollama_model="phi3:latest", api_key=None, ollama_url="http://127.0.0.1:11434/api/generate"):
+    """
+    Generic function to get a response from an AI provider for a given prompt.
+    """
+    if ai_provider == "Gemini" and api_key:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        try:
+            response = requests.post(url, json=payload, timeout=60)
+            res_json = response.json()
+            if 'error' in res_json: return None, f"Gemini Error: {res_json['error'].get('message')}"
+            return res_json['candidates'][0]['content']['parts'][0]['text'], None
+        except Exception as e: return None, f"Gemini Error: {e}"
+    else:
+        # Ollama
+        try:
+            payload = {"model": ollama_model, "prompt": prompt, "stream": False}
+            response = requests.post(ollama_url, json=payload, timeout=180)
+            res_json = response.json()
+            return res_json.get('response') or res_json.get('content'), None
+        except Exception as e: return None, f"Ollama Error: {e}"
+
 def test_ollama_connection(ollama_url):
     """
     Tests if the Ollama server is reachable at the given URL.

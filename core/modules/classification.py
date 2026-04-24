@@ -10,11 +10,12 @@ from deep_translator import GoogleTranslator
 _TRANSLATORS = {}
 
 
-# Optional BERTopic imports (will be checked at runtime)
+# Optional BERTopic imports will be checked at runtime
+BERTOPIC_AVAILABLE = True
 try:
-    from bertopic import BERTopic
-    from sentence_transformers import SentenceTransformer
-    BERTOPIC_AVAILABLE = True
+    importlib_util = __import__('importlib.util').util
+    if importlib_util.find_spec('bertopic') is None or importlib_util.find_spec('sentence_transformers') is None:
+        BERTOPIC_AVAILABLE = False
 except ImportError:
     BERTOPIC_AVAILABLE = False
 
@@ -84,7 +85,8 @@ def classify_sentiment_vader(texts, lang='en'):
             # GoogleTranslator.translate_batch(texts) works
             
             # Processing in chunks to avoid huge requests if list is long
-            chunk_size = 50 
+            # Processing in chunks to avoid huge requests if list is long
+            chunk_size = 25 # Reduced chunk size for stability
             for i in range(0, len(texts), chunk_size):
                 chunk = texts[i:i+chunk_size]
                 # Filter out non-strings or empty
@@ -93,10 +95,37 @@ def classify_sentiment_vader(texts, lang='en'):
                 
                 if valid_chunk:
                     try:
-                        translated_chunk = translator.translate_batch(valid_chunk)
+                        # Ensure we don't send too much text at once even within a chunk
+                        # Google Translator has limits per request (around 5000 characters)
+                        current_batch = []
+                        current_length = 0
+                        final_chunk_results = []
+                        
+                        for vc in valid_chunk:
+                            if current_length + len(vc) > 4500:
+                                # Translate current batch
+                                if current_batch:
+                                    final_chunk_results.extend(translator.translate_batch(current_batch))
+                                current_batch = [vc]
+                                current_length = len(vc)
+                            else:
+                                current_batch.append(vc)
+                                current_length += len(vc)
+                        
+                        if current_batch:
+                            final_chunk_results.extend(translator.translate_batch(current_batch))
+                            
+                        translated_chunk = final_chunk_results
+                        
                     except Exception as trans_err:
                         print(f"Translation chunk error: {trans_err}")
-                        translated_chunk = valid_chunk # Fallback to original
+                        # If a chunk fails, we use a slower 1-by-1 fallback for this chunk
+                        translated_chunk = []
+                        for txt in valid_chunk:
+                            try:
+                                translated_chunk.append(translator.translate(txt))
+                            except:
+                                translated_chunk.append(txt) # Final fallback
                     
                     # Reconstruct chunk with empty slots
                     result_chunk = []
@@ -227,6 +256,10 @@ def classify_topics_bertopic(texts, n_topics='auto', min_topic_size=10):
     
     # Filter out empty texts
     clean_texts = [t if isinstance(t, str) and t.strip() else "" for t in texts]
+    
+    # Lazy load heavy modules
+    from bertopic import BERTopic
+    from sentence_transformers import SentenceTransformer
     
     # Use lightweight sentence transformer
     embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
