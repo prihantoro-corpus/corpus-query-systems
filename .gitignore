@@ -18,8 +18,8 @@ stanza_resources/
 home/stanza_resources/
 
 # User Data / Corpora (unless specifically added)
-corpora/*.txt
-corpora/*.xml
+corpora/**/*.txt
+corpora/**/*.xml
 !corpora/ID-BPPT-tagged.xml
 !corpora/EN-BPPT-tagged.xml
 
@@ -33,3 +33,22 @@ dummy_corpus.duckdb/
 # OS
 .DS_Store
 Thumbs.db
+
+# Presentations
+*.pptx
+
+# Scripts and scratch files in tests/
+tests/*.txt
+tests/*.xml
+tests/debug_*.py
+tests/diag_*.py
+tests/check_*.py
+tests/prototype_*.py
+tests/trace_*.py
+tests/verify_*.py
+tests/extract_*.py
+tests/generate_*.py
+
+# Misplaced
+corpora/ai_service.py
+corpora/english/XML_TAG_DEMO_GUIDE.md

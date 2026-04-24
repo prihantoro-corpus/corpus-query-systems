@@ -13,6 +13,20 @@ from ui_streamlit.components.result_display import render_kwic_table
 def render_collocation_view():
     st.header("Collocation Analysis")
     
+    with st.expander("💡 **Method & Transparency: Collocation Analysis**", expanded=False):
+        st.markdown("""
+        **Goal:** Identify words that appear near your 'Node Word' more frequently than would be expected by chance.
+        
+        **Data Used:** 
+        - Frequencies of the node word and potential collocates within a specific **Span (Window)**.
+        - Global frequencies of these words across the entire (sub)corpus.
+        
+        **Statistical Measures:**
+        - **Log-Likelihood (LL):** Measures **statistical significance**. High LL means the association is very unlikely to be a coincidence. (Recommended for identifying key associations).
+        - **Mutual Information (MI):** Measures **association strength**. High MI indicates that the words are very "exclusive" to each other, even if they are infrequent.
+        - **Observed (Obs):** The actual number of times the words appeared together.
+        """)
+    
     corpus_path = get_state('current_corpus_path')
     corpus_name = get_state('current_corpus_name', 'Corpus')
     corpus_stats = get_state('corpus_stats')
@@ -116,11 +130,11 @@ def render_collocation_view():
             st.markdown("---")
             f_col1, f_col2, f_col3 = st.columns(3)
             with f_col1:
-                token_filter_input = st.text_input("Token Filter (NL)", placeholder="e.g. not 'the'", key="coll_token_filt_rule")
+                token_filter_input = st.text_input("Token Filter (NL)", placeholder="e.g. not 'the'", key="coll_token_filt_rule", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
             with f_col2:
-                pos_filter_input = st.text_input("POS Filter (NL)", placeholder="e.g. noun, verb", key="coll_pos_filt_rule")
+                pos_filter_input = st.text_input("POS Filter (NL)", placeholder="e.g. noun, verb", key="coll_pos_filt_rule", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
             with f_col3:
-                lemma_filter_input = st.text_input("Lemma Filter (NL)", placeholder="e.g. be, have", key="coll_lemma_filt_rule")
+                lemma_filter_input = st.text_input("Lemma Filter (NL)", placeholder="e.g. be, have", key="coll_lemma_filt_rule", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
                 
             # Pattern Matching Section (Reusable)
             st.markdown("---")
@@ -136,7 +150,7 @@ def render_collocation_view():
             col1, col2 = st.columns(2)
             with col1:
                  if not comp_mode:
-                     node_word = st.text_input("Node Word", value="", placeholder="e.g. beautiful, [lemma]*, _VB*, *kan", key="coll_node")
+                     node_word = st.text_input("Node Word", value="", placeholder="e.g. beautiful, [lemma]*, _VB*, *kan", key="coll_node", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma (e.g. [run]), token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN>)")
                  else:
                      st.markdown("**Node Words**")
                      node_primary = st.text_input(f"Primary ({get_state('current_corpus_name', 'Corpus')})", value="", key="coll_node_primary")
@@ -155,11 +169,11 @@ def render_collocation_view():
             st.markdown("---")
             f_col1, f_col2, f_col3 = st.columns(3)
             with f_col1:
-                token_filter = st.text_input("Token Filter", placeholder="e.g. no, non OR -no, -non", key="coll_token_filt")
+                token_filter = st.text_input("Token Filter", placeholder="e.g. no, non OR -no, -non", key="coll_token_filt", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
             with f_col2:
-                pos_filter = st.text_input("POS Filter", placeholder="e.g. JJ, NN OR -JJ, -NN", key="coll_pos_filt")
+                pos_filter = st.text_input("POS Filter", placeholder="e.g. JJ, NN OR -JJ, -NN", key="coll_pos_filt", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
             with f_col3:
-                lemma_filter = st.text_input("Lemma Filter", placeholder="e.g. see OR -see", key="coll_lemma_filt")
+                lemma_filter = st.text_input("Lemma Filter", placeholder="e.g. see OR -see", key="coll_lemma_filt", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
             
             # Pattern Matching Section
             st.markdown("---")

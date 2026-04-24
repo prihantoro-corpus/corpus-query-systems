@@ -15,8 +15,15 @@ def render_sidebar():
     st.sidebar.title("Tools (v1.1 Stanza)")
     view = st.sidebar.radio(
         "Go to", 
-        ["Overview", "Concordance", "N-Gram", "Collocation", "Dictionary", "Keyword", "Distribution"]
+        ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation"]
     )
+    
+    st.sidebar.markdown("---")
+    
+    # 1.5. Corpus Builder Links
+    st.sidebar.title("CORPUS BUILDER")
+    st.sidebar.markdown("- [YouTube](https://youtube-corpus.streamlit.app/)")
+    st.sidebar.markdown("- more to come in the future")
     
     st.sidebar.markdown("---")
     
@@ -67,7 +74,7 @@ def render_sidebar():
                 lang_code = STANZA_LANG_MAP[selected_lang_label]
                 
         with fmt_col:
-            fmt = st.selectbox("Format", [".txt / auto", "verticalised (T/P/L)", "XML (Tagged)", "Excel Parallel"], index=0)
+            fmt = st.selectbox("Format", ["Raw (Natural text)", "Tagged (Vertical)"], index=0)
         
         if uploaded_files:
             if st.sidebar.button("Process Uploaded Files"):
@@ -140,16 +147,24 @@ def render_sidebar():
                 import sys
                 import importlib
                 try:
-                    if 'core.preprocessing.xml_parser' in sys.modules:
-                        importlib.reload(sys.modules['core.preprocessing.xml_parser'])
+                    # Reload parser and loader
+                    for mod in ['core.preprocessing.xml_parser', 'core.preprocessing.corpus_loader']:
+                        if mod in sys.modules:
+                            importlib.reload(sys.modules[mod])
                     
-                    if 'core.preprocessing.corpus_loader' in sys.modules:
-                        importlib.reload(sys.modules['core.preprocessing.corpus_loader'])
-                        
+                    # Reload analytical modules to pick up hotfixes
+                    for mod in ['core.modules.concordance', 'core.modules.collocation', 'core.modules.distribution', 'core.modules.statistical_testing', 'ui_streamlit.caching']:
+                        if mod in sys.modules:
+                            importlib.reload(sys.modules[mod])
+                    
+                    # Clear Streamlit cache to force re-execution of queries
+                    st.cache_data.clear()
+                    
                     # Re-import the function from the reloaded module
                     from core.preprocessing.corpus_loader import load_built_in_corpus
-                    
+                    st.toast("Internal search modules reloaded! 🚀")
                 except Exception as e:
+                    st.sidebar.error(f"Reload Error: {e}")
                     print(f"Reload Error: {e}")
 
                 progress_bar = st.sidebar.progress(0)
@@ -181,21 +196,14 @@ def render_sidebar():
                             set_state('current_corpus_name', combined_name)
                             set_state('xml_structure_data', result.get('structure'))
                             
-                            # Infer Language from first corpus
-                            if "ID-" in selected_names[0] or "Indonesian" in selected_names[0]:
-                                set_state('target_lang', 'ID')
-                            else:
-                                set_state('target_lang', 'EN')
+                            # Language is already saved in DB by load_built_in_corpus
                         else:
                             if not get_state('current_corpus_path'):
                                 set_state('current_corpus_path', result['db_path'])
                                 set_state('corpus_stats', result['stats'])
                                 set_state('current_corpus_name', combined_name)
                                 set_state('xml_structure_data', result.get('structure'))
-                                if "ID-" in selected_names[0] or "Indonesian" in selected_names[0]: 
-                                    set_state('target_lang', 'ID')
-                                else: 
-                                    set_state('target_lang', 'EN')
+                                # Language is already saved in DB by load_built_in_corpus
                             else:
                                 set_state('comp_corpus_path', result['db_path'])
                                 set_state('comp_corpus_stats', result['stats'])
@@ -247,7 +255,13 @@ def render_sidebar():
         with st.sidebar.expander("Local AI Settings", expanded=False):
             o_url = st.text_input("Ollama URL", value=get_state('ollama_url'), key="sidebar_ollama_url")
             from core.ai_service import get_available_models
-            available_models = get_available_models(o_url)
+            
+            # Cache model fetching to avoid network lag on every rerun
+            @st.cache_data(ttl=60, show_spinner=False)
+            def get_cached_models(url):
+                return get_available_models(url)
+            
+            available_models = get_cached_models(o_url)
             current_model = get_state('ai_model')
             if available_models:
                 if current_model not in available_models: available_models.append(current_model)

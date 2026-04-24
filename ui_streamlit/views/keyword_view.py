@@ -8,7 +8,7 @@ from core.modules.keyword import generate_keyword_list, generate_grouped_keyword
 from core.visualiser.wordcloud import generate_wordcloud
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.io_utils import df_to_excel_bytes, dfs_to_zip_excel_bytes
-from core.config import BUILT_IN_CORPORA
+from core.config import get_available_corpora
 from core.preprocessing.corpus_loader import load_monolingual_corpus_files, load_built_in_corpus
 from core.preprocessing.xml_parser import apply_xml_restrictions, get_xml_attribute_columns
 from core.ai_service import parse_nl_query
@@ -39,6 +39,23 @@ def parse_frequency_list_file(uploaded_file):
 
 def render_keyword_view():
     st.header("Keyword Analysis")
+
+    with st.expander("💡 **Method & Transparency: Keyword Analysis**", expanded=False):
+        st.markdown("""
+        **Goal:** Identify words that are unusually frequent (or infrequent) in your **Target Corpus** compared to a **Reference Corpus**.
+        
+        **Data Used:** 
+        - Word frequencies in the **Target Corpus** (or search results).
+        - Word frequencies in a **Reference Corpus** (e.g., Brown Corpus, BNC, or another uploaded file).
+        
+        **Statistical Measures:**
+        - **Log-Likelihood (LL):** Measures **statistical significance** (evidence strength). High LL means the difference in usage is very unlikely to be due to chance.
+        - **Log Ratio:** Measures **effect size** (magnitude of difference). A Log Ratio of +3 means the word is $2^3 = 8$ times more frequent in the target than in the reference.
+        
+        **Keyword Types:**
+        - **Positive Keywords (High Keyness):** Words that are used significantly **more** in the target than in the reference.
+        - **Negative Keywords (Low Keyness):** Words that are used significantly **less** (or are missing) in the target compared to the reference.
+        """)
     
     # 1. Corpus Selection
     current_path = get_state('current_corpus_path')
@@ -65,10 +82,11 @@ def render_keyword_view():
             tabs = st.tabs(["🏛️ Pre-built", "📤 Upload"])
             
             with tabs[0]:
-                sel_name = st.selectbox("Built-in Corpora", list(BUILT_IN_CORPORA.keys()))
+                available_corpora = get_available_corpora()
+                sel_name = st.selectbox("Built-in Corpora", list(available_corpora.keys()))
                 if st.button("Load as Reference", key="load_builtin_ref"):
                     with st.spinner("Downloading and processing..."):
-                        result = load_built_in_corpus(sel_name, BUILT_IN_CORPORA[sel_name])
+                        result = load_built_in_corpus(sel_name, available_corpora[sel_name])
                         if result.get('error'):
                             st.error(result['error'])
                         else:
@@ -128,7 +146,9 @@ def render_keyword_view():
         ref_options = []
         if default_ref_path:
              ref_options.append(f"Corpus: {default_ref_name}")
-        ref_options.extend([f"Built-in: {k}" for k in BUILT_IN_CORPORA.keys()])
+        
+        available = get_available_corpora()
+        ref_options.extend([f"Built-in: {k}" for k in available.keys()])
         sel_ref_label = st.selectbox("Reference Corpus", ref_options, index=0, key=f"kw_ref_sel{suffix}")
         
         ref_path_selected = None
@@ -137,6 +157,8 @@ def render_keyword_view():
              ref_name_selected = default_ref_name
         else:
              b_name = sel_ref_label.replace("Built-in: ", "")
+             ref_path_selected = f"BUILTIN:{b_name}"
+             ref_name_selected = b_name
              ref_name_selected = b_name
              ref_path_selected = f"BUILTIN:{b_name}"
 
@@ -214,10 +236,35 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
             elif p_cutoff == "0.05": return df[df['Significance'] != 'ns']
             return df
 
-        df_overall = generate_keyword_list(target_path, final_ref_path, params['xml_where'], params['xml_params'], "", [], params['min_freq'])
+        # Custom handling for frequency list reference
+        ref_freq_df = None
+        ref_total_tokens = 0
+        if ref_path == 'frequency_list':
+            ref_freq_df = st.session_state.get('comp_freq_df')
+            ref_total_tokens = st.session_state.get('comp_total_tokens', 0)
+            final_ref_path = None # Ensure it doesn't try to connect to a DB
+            
+        df_overall = generate_keyword_list(
+            target_path, 
+            ref_db_path=final_ref_path, 
+            target_xml_where=params['xml_where'], 
+            target_xml_params=params['xml_params'], 
+            ref_freq_df=ref_freq_df,
+            ref_total_tokens=ref_total_tokens,
+            min_freq=params['min_freq']
+        )
         df_overall = apply_p_val_filter(df_overall, params['p_val'])
 
-        by_filename = generate_grouped_keyword_list(target_path, "filename", final_ref_path, params['xml_where'], params['xml_params'], "", [], params['min_freq'])
+        by_filename = generate_grouped_keyword_list(
+            target_path, 
+            group_by_col="filename", 
+            ref_db_path=final_ref_path, 
+            target_xml_where=params['xml_where'], 
+            target_xml_params=params['xml_params'], 
+            ref_freq_df=ref_freq_df,
+            ref_total_tokens=ref_total_tokens,
+            min_freq=params['min_freq']
+        )
         for k in by_filename: by_filename[k] = apply_p_val_filter(by_filename[k], params['p_val'])
 
         by_attributes = {}
@@ -225,7 +272,16 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
         if attr_cols:
             for attr in attr_cols:
                 if attr == "filename": continue
-                grouped = generate_grouped_keyword_list(target_path, attr, final_ref_path, params['xml_where'], params['xml_params'], "", [], params['min_freq'])
+                grouped = generate_grouped_keyword_list(
+                    target_path, 
+                    attr, 
+                    ref_db_path=final_ref_path, 
+                    target_xml_where=params['xml_where'], 
+                    target_xml_params=params['xml_params'], 
+                    ref_freq_df=ref_freq_df,
+                    ref_total_tokens=ref_total_tokens,
+                    min_freq=params['min_freq']
+                )
                 if grouped:
                     for k in grouped: grouped[k] = apply_p_val_filter(grouped[k], params['p_val'])
                     by_attributes[attr] = grouped
