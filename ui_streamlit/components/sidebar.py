@@ -13,17 +13,11 @@ def render_sidebar():
     """
     # 1. Navigation (Tools) - MOVED TO TOP
     st.sidebar.title("Tools (v1.1 Stanza)")
+    st.sidebar.caption("App Version: v180526")
     view = st.sidebar.radio(
         "Go to", 
         ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation"]
     )
-    
-    st.sidebar.markdown("---")
-    
-    # 1.5. Corpus Builder Links
-    st.sidebar.title("CORPUS BUILDER")
-    st.sidebar.markdown("- [YouTube](https://youtube-corpus.streamlit.app/)")
-    st.sidebar.markdown("- more to come in the future")
     
     st.sidebar.markdown("---")
     
