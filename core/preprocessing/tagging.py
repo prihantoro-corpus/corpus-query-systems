@@ -9,20 +9,13 @@ _STANZA_PIPELINES = {}
 
 def split_sentences_custom(text):
     r"""
-    Splits text into sentences using the regex: /.*?[\.\?\!]\s+/s
-    Adapted for Python.
+    Splits text into sentences using regex, preserving closing quotes/parentheses.
     """
     import re
-    # Python equivalent of /.*?[\.\?\!]\s+/s
-    # re.DOTALL (S) makes . match newlines.
-    # We use findall to get all matches. 
-    # The regex ensures it ends with punctuation followed by space or end of string.
-    pattern = r'.*?[\.\?\!](?:\s+|$)'
+    # Matches everything up to punctuation, followed by optional closing quotes/parens, 
+    # and then space or end of string. If no punctuation is found, matches the rest (.+)
+    pattern = r'.*?[\.\?\!](?:[\s]*[\'\"’”\)\]]+)*(?:\s+|$)|.+'
     sentences = re.findall(pattern, text, flags=re.DOTALL)
-    
-    # If no matches (e.g. no punctuation), return the whole text as one sentence
-    if not sentences:
-        return [text.strip()] if text.strip() else []
     
     return [s.strip() for s in sentences if s.strip()]
 
@@ -39,7 +32,15 @@ def get_stanza_pipeline(lang_code):
     try:
         print(f"Initializing Stanza pipeline for '{lang_code}'...")
         stanza.download(lang_code, verbose=True)
-        nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,mwt,pos,lemma')
+        
+        # MWT is not supported by all languages (e.g., English, Indonesian, Chinese)
+        # We try with MWT, and if it fails, we try without it.
+        try:
+            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,mwt,pos,lemma')
+        except Exception:
+            print(f"MWT processor not supported for {lang_code}. Retrying without MWT...")
+            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,pos,lemma')
+            
         _STANZA_PIPELINES[lang_code] = nlp
         return nlp
     except Exception as e:
@@ -57,27 +58,26 @@ def tag_text_with_stanza(text, lang_code):
         if not nlp:
             return tag_text_simple_fallback(text)
             
-        # Optional: Pre-split sentences if needed, but Stanza does its own.
-        # However, user requested "sentence is split before tokenisation when auto tag is selected"
-        # If we pre-split, we can pass sentences one by one or join with double newlines.
-        custom_sentences = split_sentences_custom(text)
+        # Use Stanza's native sentence splitting for better results
+        doc = nlp(text)
         
         results = []
-        sent_id = 0
-        
-        for sent_text in custom_sentences:
-            doc = nlp(sent_text)
-            for stanza_sent in doc.sentences:
-                sent_id += 1
-                for word in stanza_sent.words:
-                    results.append({
-                        'token': word.text,
-                        'pos': word.upos, 
-                        'lemma': word.lemma if word.lemma else word.text,
-                        'sent_id': sent_id
-                    })
+        for sent_id, stanza_sent in enumerate(doc.sentences, 1):
+            for word in stanza_sent.words:
+                results.append({
+                    'token': word.text,
+                    'pos': word.upos, 
+                    'lemma': word.lemma if word.lemma else word.text,
+                    'sent_id': sent_id
+                })
         return results, None
     except Exception as e:
+        # Log error for debugging
+        try:
+            with open("stanza_error.log", "a") as f:
+                f.write(f"Stanza error for {lang_code}: {str(e)}\n")
+        except:
+            pass
         results, _ = tag_text_simple_fallback(text)
         return results, str(e)
 

@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
-from core.modules.overview import calculate_corpus_statistics, get_top_frequencies_v2, get_unique_pos_tags, get_pos_definitions, save_pos_definitions, get_corpus_language, set_corpus_language
+import core.modules.overview as ov
+import importlib
+importlib.reload(ov)
 from core.ai_service import interpret_results_llm, guess_pos_definitions
 from core.preprocessing.xml_parser import format_structure_data_hierarchical, apply_xml_restrictions
 from ui_streamlit.components.filters import render_xml_restriction_filters
@@ -31,7 +33,7 @@ def _render_language_confirmation(path, key_suffix=""):
     """
     Renders the language selection and confirmation UI.
     """
-    current_lang = get_corpus_language(path)
+    current_lang = ov.get_corpus_language(path)
     
     # Try to find the code from the full name if stored that way
     current_code = "EN"
@@ -67,7 +69,7 @@ def _render_language_confirmation(path, key_suffix=""):
 
         with c_lang2:
             if st.button("Confirm", key=f"lang_confirm_{key_suffix}", use_container_width=True):
-                if set_corpus_language(path, selected_name):
+                if ov.set_corpus_language(path, selected_name):
                     set_state('target_lang', selected_code)
                     st.toast(f"✅ {selected_code} Confirmed!", icon="✅")
                     st.rerun()
@@ -85,7 +87,11 @@ def render_overview():
         # Standard Single View
         corpus_path = get_state('current_corpus_path')
         if not corpus_path:
-            st.info("Please load a corpus from the sidebar to view statistics.")
+            source_type = get_state('source_type')
+            if source_type == "Online Corpus":
+                render_online_builder_ui()
+            else:
+                st.info("Please load a corpus from the sidebar to view statistics.")
             return
         stats = get_state('corpus_stats')
         name = get_state('current_corpus_name')
@@ -138,10 +144,9 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     
     # Use restricted stats if filters are active
     if xml_filters:
-        from core.modules.overview import get_restricted_stats
-        display_stats = get_restricted_stats(path, xml_where_clause=xml_where, xml_params=xml_params)
+        display_stats = ov.get_restricted_stats(path, xml_where_clause=xml_where, xml_params=xml_params)
     else:
-        display_stats = calculate_corpus_statistics(stats, db_path=path)
+        display_stats = ov.calculate_corpus_statistics(stats, db_path=path)
     
     m1, m2, m3 = st.columns(3)
     m1.metric("Tokens", f"{display_stats.get('total_tokens', 0):,}")
@@ -155,14 +160,12 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     # Show classification for ALL languages now (via Translation)
     show_classification = True
     
-    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud"]
-    if show_classification: tabs_list.append("🏷️ Automatic Labeling")
+    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic"]
     
     tabs = st.tabs(tabs_list)
     
     # Unpack tabs
-    tab1, tab_sub, tab2, tab3, tab4 = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4]
-    tab_cls = tabs[5] if show_classification else None
+    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls = tabs
         
     with tab1:
         if error: st.error(error)
@@ -175,7 +178,7 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
         _render_subcorpus_stats(path, key_suffix)
         
     with tab2:
-        df = get_top_frequencies_v2(path, limit=50, xml_where_clause=xml_where, xml_params=xml_params)
+        df = ov.get_top_frequencies_v2(path, limit=50, xml_where_clause=xml_where, xml_params=xml_params)
         if not df.empty:
             # Use restricted total for PMW calculation
             total = display_stats.get('total_tokens', 1)
@@ -187,11 +190,14 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
         _render_pos_management_tab(path, xml_where, xml_params, key_suffix)
         
     with tab4:
-        f_df = get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
+        f_df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
         if not f_df.empty:
             fig = create_word_cloud(f_df, 'pos' in f_df.columns)
             if fig: st.pyplot(fig)
         else: st.caption("No wordcloud.")
+
+    with tab_meta:
+        _render_metadata_annotation_tab(path, key_suffix)
         
     if tab_cls:
         with tab_cls:
@@ -204,10 +210,9 @@ def render_full_overview(name, path, stats, structure, error):
 
     # Use restricted stats if filters are active
     if xml_filters:
-        from core.modules.overview import get_restricted_stats
-        display_stats = get_restricted_stats(path, xml_where_clause=xml_where, xml_params=xml_params)
+        display_stats = ov.get_restricted_stats(path, xml_where_clause=xml_where, xml_params=xml_params)
     else:
-        display_stats = calculate_corpus_statistics(stats, db_path=path)
+        display_stats = ov.calculate_corpus_statistics(stats, db_path=path)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Tokens", f"{display_stats.get('total_tokens', 0):,}")
@@ -220,15 +225,13 @@ def render_full_overview(name, path, stats, structure, error):
     st.markdown("---")
     
 
-    current_lang = get_corpus_language(path)
+    current_lang = ov.get_corpus_language(path)
     show_classification = True
     
-    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud"]
-    if show_classification: tabs_list.append("🏷️ Automatic Labeling")
+    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis"]
 
     tabs = st.tabs(tabs_list)
-    tab1, tab_sub, tab2, tab3, tab4 = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4]
-    tab_cls = tabs[5] if show_classification else None
+    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls = tabs
     
     with tab1:
         if error: st.error(error)
@@ -268,7 +271,7 @@ def render_full_overview(name, path, stats, structure, error):
             
     with tab2:
         st.subheader("Top Frequency Tokens")
-        df = get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
+        df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
         if not df.empty:
             # Use restricted total for PMW calculation
             total = display_stats.get('total_tokens', 1)
@@ -283,7 +286,7 @@ def render_full_overview(name, path, stats, structure, error):
 
     with tab4:
         st.subheader("Word Cloud")
-        f_df = get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
+        f_df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
         if not f_df.empty:
             fig = create_word_cloud(f_df, 'pos' in f_df.columns)
             if fig:
@@ -291,6 +294,10 @@ def render_full_overview(name, path, stats, structure, error):
                      st.markdown('<div style="font-size: 0.8em; margin-bottom: 5px;"><span style="color:#33CC33;">●</span> Noun | <span style="color:#3366FF;">●</span> Verb | <span style="color:#FF33B5;">●</span> Adj | <span style="color:#FFCC00;">●</span> Adv</div>', unsafe_allow_html=True)
                 st.pyplot(fig)
         else: st.info("No frequency data.")
+
+    with tab_meta:
+        _render_metadata_annotation_tab(path, "full")
+
     if tab_cls:
         with tab_cls:
             _render_classification_tab(path, "full")
@@ -323,11 +330,11 @@ def _render_pos_management_tab(path, xml_where, xml_params, key_suffix):
     """
     Helper to render the POS management tab content.
     """
-    tags = get_unique_pos_tags(path, xml_where_clause=xml_where, xml_params=xml_params)
+    tags = ov.get_unique_pos_tags(path, xml_where_clause=xml_where, xml_params=xml_params)
     
     if tags:
         # Load definitions
-        current_defs = get_pos_definitions(path)
+        current_defs = ov.get_pos_definitions(path)
         
         # Prepare DataFrame
         data_rows = []
@@ -413,7 +420,7 @@ def _render_pos_management_tab(path, xml_where, xml_params, key_suffix):
         
         if st.button("💾 Save Definitions", key=f"save_pos_{key_suffix}", type="primary", use_container_width=True):
             new_defs = dict(zip(edited_df['Tag'], edited_df['Definition']))
-            if save_pos_definitions(path, new_defs):
+            if ov.save_pos_definitions(path, new_defs):
                 st.toast("Definitions Saved!", icon="✅")
                 set_state(f'temp_pos_defs_{path}', None)
                 st.rerun()
@@ -450,12 +457,20 @@ def _render_classification_tab(db_path, key_suffix):
         has_sent = 'sentiment' in cols
         con.close()
         
-        if has_sent: found.append("Sentiment")
-        st.success(f"✅ Existing labels found: {', '.join(found)}")
-    except: pass
+        found_labels = []
+        if has_topic: found_labels.append("Topic")
+        if has_sent: found_labels.append("Sentiment")
+        
+        if found_labels:
+            st.success(f"✅ Existing labels found: {', '.join(found_labels)}")
+        else:
+            st.info("No sentiment or topic labels found yet. Configure and run labeling below.")
+    except Exception as e: 
+        # st.error(f"Debug: {e}")
+        pass
 
     # Non-English Sentiment Warning
-    curr_lang = get_corpus_language(db_path)
+    curr_lang = ov.get_corpus_language(db_path)
     if curr_lang and curr_lang.lower() not in ['en', 'english']:
         st.warning("⚠️ **Non-English Sentiment Analysis:** Sentences will be translated to English first. This may take significant time for large corpora and may hit translation limits.")
 
@@ -554,7 +569,7 @@ def _render_classification_tab(db_path, key_suffix):
                 if do_sent:
                     st.write("Computing Sentiment...")
                     # Get current language from DB or State
-                    lang_for_sent = get_corpus_language(db_path)
+                    lang_for_sent = ov.get_corpus_language(db_path)
                     df_sents['Predicted Sentiment'] = classify_sentiment_vader(texts, lang=lang_for_sent)
                 
                 # Topic Classification
@@ -808,3 +823,421 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
         st.error(f"Error calculating stats: {e}")
     finally:
         conn.close()
+
+def render_online_builder_ui():
+    import re
+    mode = get_state('online_builder_mode', 'YouTube')
+    st.subheader(f"🌐 Online Corpus Builder: {mode}")
+    
+    if mode == "YouTube":
+        st.info("💡 **Experimental:** Max 100,000 words limit for this session.")
+        url = st.text_input("YouTube Video URL", placeholder="https://www.youtube.com/watch?v=...")
+        opt = st.radio("Content to Download", ["Transcript only", "Comments only", "Both Transcript and Comments"], index=2)
+        
+        mode_map = {"Transcript only": "transcript", "Comments only": "comments", "Both Transcript and Comments": "both"}
+        
+        if st.button("Download YouTube Data", type="primary"):
+            if not url:
+                st.error("Please enter a URL")
+            else:
+                from core.preprocessing.online_corpus import build_online_corpus
+                progress_bar = st.progress(0)
+                status = st.empty()
+                def up(p, m):
+                    progress_bar.progress(p)
+                    status.caption(m)
+                
+                with st.spinner("Downloading..."):
+                    files, warn = build_online_corpus("youtube", {"url": url, "mode": mode_map[opt]}, progress_callback=up)
+                    if files:
+                        set_state('downloaded_online_files', files)
+                        st.success(f"✅ Downloaded {len(files)} components!")
+                        if warn: st.warning(warn)
+                        st.info("👉 Now click **'Process Downloaded Files'** in the sidebar to index your corpus.")
+                    else:
+                        st.error(warn or "Failed to download. Ensure the video has a transcript and comments.")
+
+    elif mode == "Link Collection":
+        st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
+        st.caption("Paste one URL per line.")
+        links_text = st.text_area("URLs", height=200, placeholder="https://example.com\nhttps://test.org")
+        
+        if st.button("Scrape Links", type="primary"):
+            links = [l.strip() for l in links_text.split('\n') if l.strip()]
+            if not links:
+                st.error("No links provided")
+            else:
+                from core.preprocessing.online_corpus import build_online_corpus
+                progress_bar = st.progress(0)
+                status = st.empty()
+                def up(p, m):
+                    progress_bar.progress(p)
+                    status.caption(m)
+                
+                with st.spinner("Scraping..."):
+                    files, warn = build_online_corpus("links", {"links": links}, progress_callback=up)
+                    if files:
+                        set_state('downloaded_online_files', files)
+                        st.success(f"✅ Scraped {len(files)} pages!")
+                        if warn: st.warning(warn)
+                        st.info("👉 Now click **'Process Downloaded Files'** in the sidebar to index your corpus.")
+                    else:
+                        st.error(warn or "Failed to scrape.")
+
+    elif mode == "Keyword Search":
+        st.info("💡 **Experimental:** Max 5 keywords and 100,000 words limit.")
+        st.caption("Find pages containing at least **n-2** of your keywords (minimum 2).")
+        kw_input = st.text_input("Keywords (comma separated)", placeholder="detik, celeb, jokes, kisruh, gosip")
+        
+        if st.button("Search and Scrape", type="primary"):
+            keywords = [k.strip() for k in kw_input.split(',') if k.strip()]
+            if not keywords:
+                st.error("No keywords provided")
+            elif len(keywords) > 5:
+                st.error("Max 5 keywords allowed for this experimental feature.")
+            else:
+                from core.preprocessing.online_corpus import build_online_corpus
+                progress_bar = st.progress(0)
+                status = st.empty()
+                def up(p, m):
+                    progress_bar.progress(min(p, 1.0))
+                    status.caption(m)
+                
+                with st.spinner("Searching and scraping..."):
+                    files, warn = build_online_corpus("keyword", {"keywords": keywords}, progress_callback=up)
+                    if files:
+                        set_state('downloaded_online_files', files)
+                        st.success(f"✅ Built corpus with {len(files)} matching pages!")
+                        if warn: st.warning(warn)
+                        st.info("👉 Now click **'Process Downloaded Files'** in the sidebar to index your corpus.")
+                    else:
+                        st.error(warn or "No matching pages found or search limit exceeded.")
+
+def _render_metadata_annotation_tab(db_path, key_suffix):
+    import duckdb
+    st.subheader("Metadata Annotation")
+    
+    meta_tabs = st.tabs(["📄 File Level", "✂️ Segmental Level"])
+    
+    with meta_tabs[0]:
+        st.info("Assign attributes (e.g. Year, Genre, Author) to individual files. These attributes can then be used in **KWIC Restricted Search** and **Sub-corpus Stats**.")
+        
+        files = ov.get_corpus_files(db_path)
+        if not files:
+            st.warning("No files found in corpus.")
+        else:
+            # Get current metadata columns
+            conn = duckdb.connect(db_path, read_only=True)
+            cols_info = conn.execute("PRAGMA table_info(corpus)").fetch_df()
+            conn.close()
+            
+            standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
+            meta_cols = [c for c in cols_info['name'].tolist() if c.lower() not in standard]
+            
+            # State key for the working dataframe
+            state_key = f"meta_editor_df_{db_path}_{key_suffix}"
+            
+            if get_state(state_key) is None:
+                conn = duckdb.connect(db_path, read_only=True)
+                # Fetch one sample value per filename for each metadata column
+                if meta_cols:
+                    select_cols = ", ".join([f"MAX({c}) as {c}" for c in meta_cols])
+                    query = f"SELECT filename, {select_cols} FROM corpus GROUP BY filename ORDER BY filename"
+                else:
+                    query = "SELECT DISTINCT filename FROM corpus ORDER BY filename"
+                    
+                try:
+                    df = conn.execute(query).fetch_df()
+                except:
+                    df = pd.DataFrame({'filename': files})
+                conn.close()
+                
+                # Ensure all files are represented
+                missing = [f for f in files if f not in df['filename'].values]
+                if missing:
+                    missing_df = pd.DataFrame({'filename': missing})
+                    df = pd.concat([df, missing_df], ignore_index=True)
+                
+                set_state(state_key, df)
+            
+            df = get_state(state_key)
+            
+            # 1. Add New Column UI
+            c_add1, c_add2 = st.columns([3, 1])
+            with c_add1:
+                new_col_name = st.text_input("New Attribute Name (e.g. 'Genre')", key=f"new_col_input_{key_suffix}")
+            with c_add2:
+                st.write(" ") # alignment
+                if st.button("➕ Add Attribute", key=f"add_col_btn_{key_suffix}", use_container_width=True):
+                    if new_col_name and new_col_name not in df.columns:
+                        df[new_col_name] = ""
+                        set_state(state_key, df)
+                        st.rerun()
+                    elif not new_col_name:
+                        st.error("Enter a name")
+                    else:
+                        st.warning("Already exists")
+
+            # 2. Data Editor
+            st.write("**Edit File Metadata:**")
+            edited_df = st.data_editor(
+                df, 
+                key=f"meta_editor_widget_{key_suffix}", 
+                use_container_width=True, 
+                hide_index=True,
+                disabled=["filename"]
+            )
+            
+            # 3. Save Button
+            if st.button("💾 Apply Metadata Annotation", type="primary", use_container_width=True, key=f"save_meta_btn_{key_suffix}"):
+                with st.spinner("Applying to database..."):
+                    if ov.apply_metadata_to_files(db_path, edited_df):
+                        st.success("✅ Metadata successfully applied to the database!")
+                        set_state(state_key, None) # Clear state to force refresh
+                        st.info("The new attributes are now available for KWIC filtering and stats.")
+                        st.rerun()
+                    else:
+                        st.error("Failed to apply metadata.")
+
+    with meta_tabs[1]:
+        st.info("Annotate specific segments within a file. You can select individual words or whole sentences.")
+        
+        all_files = ov.get_corpus_files(db_path)
+        if not all_files:
+            st.warning("No files found.")
+            return
+
+        selected_file = st.selectbox("Select File for Segmental Annotation", all_files, key=f"seg_file_select_{key_suffix}")
+        
+        if selected_file:
+            # 1. Word Count Check
+            word_count = ov.get_file_word_count(db_path, selected_file)
+            st.write(f"**File Size:** {word_count:,} words")
+            
+            if word_count > 5000:
+                st.warning(f"⚠️ This file is too large for segmental annotation ({word_count} > 5000 words).")
+                if st.button(f"✂️ Slice '{selected_file}' into 5000-word segments", key=f"slice_btn_{key_suffix}"):
+                    with st.spinner("Slicing file..."):
+                        if ov.slice_corpus_file(db_path, selected_file, max_words=5000):
+                            st.success("File sliced successfully! Please select one of the parts.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to slice file.")
+                return
+
+            # 2. Load Tokens and Metadata
+            tokens_df = ov.get_file_tokens(db_path, selected_file)
+            if tokens_df.empty:
+                st.info("No tokens found in this file.")
+                return
+
+            # Identify metadata columns
+            standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
+            meta_cols = [c for c in tokens_df.columns if c.lower() not in standard]
+            
+            # Helper to check if a row has metadata
+            def has_meta(row):
+                if not meta_cols: return False
+                return any(pd.notna(row[c]) and str(row[c]).strip() != "" for c in meta_cols)
+
+            # --- SELECTION MODE ---
+            sel_mode = st.radio("Selection Mode:", ["Word Selection (Natural Grid)", "Sentence Selection (List)"], horizontal=True, key=f"sel_mode_{key_suffix}")
+            
+            selected_token_ids = []
+
+            if "Word Selection" in sel_mode:
+                st.markdown("#### 🖱️ Word Selection Grid")
+                st.caption("💡 **How to select:** Click and drag to block a range. Hold **Ctrl** to select multiple separate segments. Words with 🏷️ already have annotations.")
+                
+                # Prepare grid data with icons for annotated words
+                words_per_row = 10
+                display_tokens = []
+                for _, row in tokens_df.iterrows():
+                    token_text = str(row['token'])
+                    if has_meta(row):
+                        token_text = "🏷️ " + token_text
+                    display_tokens.append(token_text)
+                
+                # Create 2D array
+                grid_data = []
+                for i in range(0, len(display_tokens), words_per_row):
+                    chunk = display_tokens[i:i + words_per_row]
+                    if len(chunk) < words_per_row:
+                        chunk += [""] * (words_per_row - len(chunk))
+                    grid_data.append(chunk)
+                
+                grid_df = pd.DataFrame(grid_data)
+                
+                selection_event = st.dataframe(
+                    grid_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={i: st.column_config.TextColumn(label="", width="small") for i in range(words_per_row)},
+                    on_select="rerun",
+                    selection_mode="multi-cell",
+                    key=f"token_grid_{selected_file}_{key_suffix}"
+                )
+                
+                selected_cells = selection_event.get("selection", {}).get("cells", [])
+                if selected_cells:
+                    for cell in selected_cells:
+                        r, c = (int(cell["row"]), int(cell["column"])) if isinstance(cell, dict) else (int(cell[0]), int(cell[1]))
+                        token_idx = r * words_per_row + c
+                        if token_idx < len(tokens_df):
+                            selected_token_ids.append(int(tokens_df['id'].iloc[token_idx]))
+            
+            else:
+                st.markdown("#### 📑 Sentence Selection List")
+                st.caption("Select one or more sentences to annotate them entirely.")
+                
+                # Group tokens by sentence
+                sentences = []
+                for sid, group in tokens_df.groupby('sent_id'):
+                    sent_text = " ".join(group['token'].astype(str).tolist())
+                    sent_has_meta = group.apply(has_meta, axis=1).any()
+                    sentences.append({
+                        "sent_id": sid,
+                        "Status": "🏷️ Annotated" if sent_has_meta else "Empty",
+                        "Text": sent_text,
+                        "_ids": group['id'].tolist()
+                    })
+                
+                sent_df = pd.DataFrame(sentences)
+                
+                # Display sentence list with row selection
+                sent_selection = st.dataframe(
+                    sent_df[["Status", "Text"]],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="multi-row",
+                    key=f"sent_list_{selected_file}_{key_suffix}"
+                )
+                
+                selected_rows = sent_selection.get("selection", {}).get("rows", [])
+                if selected_rows:
+                    for r_idx in selected_rows:
+                        selected_token_ids.extend(sentences[r_idx]["_ids"])
+
+            # --- ANNOTATION FORM ---
+            if selected_token_ids:
+                selected_token_ids = sorted(list(set(selected_token_ids)))
+                # Preview selection
+                sel_mask = tokens_df['id'].isin(selected_token_ids)
+                selected_text = " ".join(tokens_df[sel_mask]['token'].astype(str).tolist())
+                
+                if len(selected_text) > 300:
+                    selected_text = selected_text[:300] + "..."
+                
+                st.success(f"📌 **Selected Segment ({len(selected_token_ids)} tokens):** {selected_text}")
+
+                with st.container(border=True):
+                    st.write("**Annotate Selection**")
+                    
+                    history_key = f"seg_meta_history_{db_path}"
+                    if history_key not in st.session_state:
+                        st.session_state[history_key] = {"attributes": [], "values": {}}
+                    hist = st.session_state[history_key]
+                    
+                    attr_val_state_key = f"cur_seg_attr_{key_suffix}"
+                    val_val_state_key = f"cur_seg_val_{key_suffix}"
+                    if attr_val_state_key not in st.session_state: st.session_state[attr_val_state_key] = ""
+                    if val_val_state_key not in st.session_state: st.session_state[val_val_state_key] = ""
+                    
+                    col_attr, col_val = st.columns(2)
+                    
+                    with col_attr:
+                        if hist["attributes"]:
+                            st.caption("Reuse attribute:")
+                            attr_cols = st.columns(min(len(hist["attributes"]), 4))
+                            for i, a in enumerate(hist["attributes"][:4]):
+                                if attr_cols[i].button(a, key=f"reuse_attr_{a}_{key_suffix}", use_container_width=True):
+                                    st.session_state[attr_val_state_key] = a
+                                    st.rerun()
+                        
+                        attr_input = st.text_input("Attribute (e.g. 'Speaker')", value=st.session_state[attr_val_state_key], key=f"seg_attr_input_{key_suffix}")
+                        st.session_state[attr_val_state_key] = attr_input
+                    
+                    with col_val:
+                        if attr_input in hist["values"] and hist["values"][attr_input]:
+                            st.caption(f"Reuse for '{attr_input}':")
+                            v_list = hist["values"][attr_input]
+                            val_cols = st.columns(min(len(v_list), 4))
+                            for i, v in enumerate(v_list[:4]):
+                                if val_cols[i].button(v, key=f"reuse_val_{v}_{key_suffix}", use_container_width=True):
+                                    st.session_state[val_val_state_key] = v
+                                    st.rerun()
+                        
+                        val_input = st.text_input("Value (e.g. 'John')", value=st.session_state[val_val_state_key], key=f"seg_val_input_{key_suffix}")
+                        st.session_state[val_val_state_key] = val_input
+
+                    if st.button("💾 Apply Metadata to Selection", type="primary", use_container_width=True, key=f"apply_seg_btn_{key_suffix}"):
+                        if not attr_input or not val_input:
+                            st.error("Please provide both attribute and value.")
+                        else:
+                            with st.spinner("Applying..."):
+                                meta_dict = {attr_input: val_input}
+                                if ov.apply_token_metadata(db_path, selected_token_ids, meta_dict):
+                                    st.toast("Metadata applied!", icon="✅")
+                                    # Update history
+                                    if attr_input not in hist["attributes"]: hist["attributes"].insert(0, attr_input)
+                                    if attr_input not in hist["values"]: hist["values"][attr_input] = []
+                                    if val_input not in hist["values"][attr_input]: hist["values"][attr_input].insert(0, val_input)
+                                    st.session_state[history_key] = hist
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to apply metadata.")
+            else:
+                st.info("👆 Use the selection tool above to highlight words or sentences for annotation.")
+
+            # --- CURRENT ANNOTATIONS SUMMARY ---
+            st.divider()
+            st.markdown("#### 📜 Current Segmental Annotations")
+            
+            if not meta_cols:
+                st.info("No segmental metadata has been encoded for this file yet.")
+            else:
+                # Group tokens into segments with same metadata
+                segments = []
+                current_seg = None
+                for _, row in tokens_df.iterrows():
+                    row_meta = {c: row[c] for c in meta_cols if pd.notna(row[c]) and str(row[c]).strip() != ""}
+                    if not row_meta:
+                        current_seg = None
+                        continue
+                    if current_seg and current_seg['meta'] == row_meta:
+                        current_seg['tokens'].append(row['token'])
+                        current_seg['end_id'] = row['id']
+                    else:
+                        current_seg = {'start_id': row['id'], 'end_id': row['id'], 'tokens': [row['token']], 'meta': row_meta}
+                        segments.append(current_seg)
+                
+                if segments:
+                    summary_data = []
+                    for seg in segments:
+                        for attr, val in seg['meta'].items():
+                            summary_data.append({"Range": f"{seg['start_id']}-{seg['end_id']}", "Text": " ".join(seg['tokens']), "Attribute": attr, "Value": val})
+                    
+                    st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
+                    
+                    with st.expander("🛠️ Advanced: Edit Individual Tokens"):
+                        mask = tokens_df[meta_cols].notna().any(axis=1) | (tokens_df[meta_cols] != "").any(axis=1)
+                        editable_tokens = tokens_df[mask].copy()
+                        if not editable_tokens.empty:
+                            edited_tokens = st.data_editor(editable_tokens[['id', 'token'] + meta_cols], key=f"token_editor_{selected_file}_{key_suffix}", hide_index=True, disabled=['id', 'token'], use_container_width=True)
+                            if st.button("💾 Save Token Edits", key=f"save_token_edits_{selected_file}"):
+                                with st.spinner("Saving..."):
+                                    success = True
+                                    for col in meta_cols:
+                                        val_groups = edited_tokens.groupby(col)
+                                        for val, group in val_groups:
+                                            ids = group['id'].tolist()
+                                            if not ov.apply_token_metadata(db_path, ids, {col: val}): success = False
+                                    if success:
+                                        st.toast("Edits saved!", icon="✅")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to save.")
+                else:
+                    st.info("No segmental metadata found for this file.")
+

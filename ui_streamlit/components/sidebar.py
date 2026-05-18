@@ -49,18 +49,26 @@ def render_sidebar():
         st.rerun()
         
     # Corpus Source
-    source_type = st.sidebar.selectbox("Source", ["Upload Files", "Built-in Corpora"])
+    source_type = st.sidebar.selectbox("Source", ["Upload Files", "Built-in Corpora", "Online Corpus"])
+    set_state('source_type', source_type)
+    
+    if source_type == "Online Corpus":
+        online_mode = st.sidebar.radio("Builder Mode", ["YouTube", "Link Collection", "Keyword Search"])
+        set_state('online_builder_mode', online_mode)
     
     current_path = get_state('current_corpus_path')
     
-    if source_type == "Upload Files":
-        uploaded_files = st.sidebar.file_uploader(
-            "Upload Corpus Files (XML, TXT, CSV, XLSX)", 
-            accept_multiple_files=True,
-            type=['xml', 'txt', 'csv', 'xlsx']
-        )
+    if source_type in ("Upload Files", "Online Corpus"):
+        if source_type == "Upload Files":
+            uploaded_files = st.sidebar.file_uploader(
+                "Upload Corpus Files (XML, TXT, CSV, XLSX)", 
+                accept_multiple_files=True,
+                type=['xml', 'txt', 'csv', 'xlsx']
+            )
+        else:
+            uploaded_files = [] # No manual uploads in online mode
         
-        # New: Language and Format Selection
+        # Language and Format Selection
         lang_col, fmt_col = st.sidebar.columns(2)
         with lang_col:
             # Prepare language list. Add 'OTHER' at the end.
@@ -76,8 +84,37 @@ def render_sidebar():
         with fmt_col:
             fmt = st.selectbox("Format", ["Raw (Natural text)", "Tagged (Vertical)"], index=0)
         
-        if uploaded_files:
-            if st.sidebar.button("Process Uploaded Files"):
+        btn_label = "Process Downloaded Files" if source_type == "Online Corpus" else "Process Uploaded Files"
+        files_to_process = uploaded_files
+        
+        if source_type == "Online Corpus":
+            downloaded = get_state('downloaded_online_files', [])
+            if not downloaded:
+                st.sidebar.warning("No files downloaded yet. Use the Online Corpus Builder in the main area.")
+            else:
+                st.sidebar.info(f"Ready to process {len(downloaded)} downloaded files.")
+                # Convert dicts to file-like objects
+                import io
+                files_to_process = []
+                for f_dict in downloaded:
+                    buf = io.BytesIO(f_dict['content'].encode('utf-8'))
+                    buf.name = f_dict['filename']
+                    files_to_process.append(buf)
+
+        if files_to_process:
+            if st.sidebar.button(btn_label):
+                # Force reload logic to pick up hotfixes
+                import sys
+                import importlib
+                import core.preprocessing.corpus_loader as cl
+                try:
+                    for mod in ['core.preprocessing.tagging', 'core.preprocessing.xml_parser', 'core.preprocessing.corpus_loader']:
+                        if mod in sys.modules:
+                            importlib.reload(sys.modules[mod])
+                    st.toast("Processing modules updated! 🔄")
+                except Exception as e:
+                    print(f"Reload Error: {e}")
+
                 progress_bar = st.sidebar.progress(0)
                 status_text = st.sidebar.empty()
                 
@@ -86,8 +123,8 @@ def render_sidebar():
                     status_text.caption(text)
 
                 with st.spinner("Processing Corpus..."):
-                    result = load_monolingual_corpus_files(
-                        uploaded_files, 
+                    result = cl.load_monolingual_corpus_files(
+                        files_to_process, 
                         explicit_lang_code=lang_code,
                         selected_format=fmt,
                         progress_callback=update_progress
@@ -106,9 +143,6 @@ def render_sidebar():
                             set_state('xml_structure_data', result.get('structure'))
                             set_state('target_lang', lang_code)
                         else:
-                            # In Comparison mode, we might need to decide which one to load.
-                            # Standard App logic: Load into 'comparison' slots if primary exists?
-                            # For simplicity, let's offer "Load as Primary" / "Load as Comparison" buttons or detect if primary exists.
                             if not get_state('current_corpus_path'):
                                 set_state('current_corpus_path', result['db_path'])
                                 set_state('corpus_stats', result['stats'])

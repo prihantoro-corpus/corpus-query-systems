@@ -6,7 +6,7 @@ from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
 from core.ai_service import interpret_results_llm, parse_nl_query, parse_nl_query_rules_only
 from core.io_utils import df_to_excel_bytes
-from core.modules.overview import get_pos_definitions
+import core.modules.overview as ov
 
 def render_ngram_view():
     st.header("N-Gram Analysis")
@@ -44,7 +44,6 @@ def render_ngram_view():
                      )
                  
                  if params:
-                     # Update State
                      try:
                          n_val = int(params.get('n_size', 2))
                      except (ValueError, TypeError): n_val = 2
@@ -58,12 +57,8 @@ def render_ngram_view():
                          filters_primary['1'] = params.get('search_term')
                          st.info(f"Adding filter '{params.get('search_term')}' to Position 1.")
                      
-                     # Basis default
                      basis = "Token"
                      positional_bases_primary = {str(i): basis for i in range(1, n_val + 1)}
-                     
-                     xml_filters = render_xml_restriction_filters(corpus_path, "ngram", corpus_name=corpus_name)
-                     xml_where, xml_params = apply_xml_restrictions(xml_filters)
                      
                      run_ngram_query('primary', corpus_path, corpus_name, 
                                      n_val, 
@@ -100,43 +95,21 @@ def render_ngram_view():
             else:
                  set_state('ngram_nl_query_rule', nl_query)
                  
-                 # Parse
-                 pos_defs = get_pos_definitions(corpus_path) or {}
+                 pos_defs = ov.get_pos_definitions(corpus_path) or {}
                  reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
                  
                  params, err = parse_nl_query_rules_only(nl_query, "ngram", reverse_pos_map=reverse_pos_map)
                  
                  if params:
-                     # Extraction
-                     # Rule parser might return 'n_size' and 'search_term'
-                     parsed_n = params.get('n_size', 2)
-                     
-                     # Check if we should override UI N-Val? 
-                     # Strategy: If UI hasn't been touched, use parsed. But syncing is hard.
-                     # Let's rely on UI Slider as source of truth for N, unless it was just defaulted?
-                     # Actually, for consistency with other modes: UI overrides.
-                     # But if user types "trigrams", they expect 3.
-                     # Implementation: We update the state of the slider IF it's different? 
-                     # Streamlit widgets hard to update mid-run without rerun.
-                     # We will use the SLIDER value mostly, but maybe warn if mismatch?
-                     # Or simpler: Just use UI slider value.
-                     
                      search_term = params.get('search_term', '')
-                     
                      st.success(f"✓ Configured for {n_val}-grams.")
                      
                      filters_primary = {}
                      if search_term:
-                         # Default to Position 1 filter
                          filters_primary['1'] = search_term
                          st.info(f"   + Filter (Pos 1): '{search_term}'")
                      
-                     # Basis setup
                      positional_bases_primary = {str(i): global_basis for i in range(1, n_val + 1)}
-                     
-                     # Execute
-                     xml_filters = render_xml_restriction_filters(corpus_path, "ngram", corpus_name=corpus_name)
-                     xml_where, xml_params = apply_xml_restrictions(xml_filters)
                      
                      run_ngram_query('primary', corpus_path, corpus_name, 
                                      n_val, 
@@ -144,7 +117,7 @@ def render_ngram_view():
                                      skip_punc, 
                                      global_basis, 
                                      positional_bases_primary, 
-                                     [], # Neg filter (not supported in rule parser yet)
+                                     [], 
                                      xml_where, xml_params)
                  else:
                      st.error(f"Error parsing query: {err}")
@@ -217,12 +190,10 @@ def render_ngram_view():
                          filters_secondary[str(i)] = val
 
 
+    # --- XML Restriction Filters ---
     if not comp_mode:
         xml_filters = render_xml_restriction_filters(corpus_path, "ngram", corpus_name=corpus_name)
         xml_where, xml_params = apply_xml_restrictions(xml_filters)
-        
-        if st.button("Generate N-Grams", type="primary"):
-            run_ngram_query('primary', corpus_path, corpus_name, n_val, filters_primary, skip_punc, global_basis, positional_bases_primary, neg_filter, xml_where, xml_params)
     else:
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -233,9 +204,12 @@ def render_ngram_view():
                 xml_filters_2 = render_xml_restriction_filters(comp_path, "ngram_c2", corpus_name=comp_name)
                 xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
             else:
-                st.info("Load a comparison corpus in sidebar.")
                 xml_where_2, xml_params_2 = "", []
-            
+
+    if not comp_mode:
+        if st.button("Generate N-Grams", type="primary"):
+            run_ngram_query('primary', corpus_path, corpus_name, n_val, filters_primary, skip_punc, global_basis, positional_bases_primary, neg_filter, xml_where, xml_params)
+    else:
         if st.button("Generate Comparison N-Grams", type="primary"):
             run_ngram_query('primary', corpus_path, corpus_name, n_val, filters_primary, skip_punc, global_basis, positional_bases_primary, neg_filter, xml_where_1, xml_params_1)
             if comp_path:

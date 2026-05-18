@@ -60,7 +60,7 @@ def extract_xml_structure(xml_input, max_values=20):
     process_element(root)
     return structure, None
 
-def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, combined_attrs, tag_counters, stanza_processor=None, lang_code='EN'):
+def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, combined_attrs, tag_counters, stanza_processor=None, lang_code='en'):
     """
     Recursively parse XML element, preserving inline tag context.
     
@@ -132,6 +132,11 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
         # 2. Use Stanza if available (for horizontal/inline text)
         if stanza_processor:
             try:
+                import time
+                log_file = f"xml_tagging_{int(time.time())}.log"
+                with open(log_file, "a") as f:
+                    f.write(f"Calling stanza for inline text: {text[:50]}...\n")
+                
                 tagged_data, err = stanza_processor(text, lang_code)
                 if not err and tagged_data:
                     for rec in tagged_data:
@@ -145,8 +150,16 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
                         row.update(context)
                         tokens_data.append(row)
                     return
-            except:
-                pass
+                else:
+                    with open(log_file, "a") as f:
+                        f.write(f"Stanza Error in inline: {err}\n")
+            except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()
+                import time
+                log_file = f"xml_tagging_{int(time.time())}.log"
+                with open(log_file, "a") as f:
+                    f.write(f"Stanza Exception in inline: {e}\n{error_trace}\n")
         
         # 3. Fallback: simple whitespace tokenization
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', text)
@@ -185,7 +198,7 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
         first_token_row[f"in_{tag_name}_start"] = True
         first_token_row[f"{tag_name}_len"] = tag_inner_len
 
-def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processor=None, lang_code='EN', preserve_inline_tags=True):
+def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processor=None, lang_code='en', preserve_inline_tags=True):
     """
     Parses XML content, extracts sentences and IDs, and tokenizes/verticalizes.
     Returns dict with keys: lang_code, df_data, sent_map, attributes, error
@@ -217,8 +230,8 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
             if lang_match:
                 xml_lang = lang_match.group(3) or lang_match.group(2)
         
-        final_lang = xml_lang.upper() if xml_lang else lang_code.upper()
-        if not final_lang: final_lang = 'XML'
+        final_lang = xml_lang.lower() if xml_lang else lang_code.lower()
+        if not final_lang: final_lang = 'en'
             
     except Exception as e:
         return {'error': f"Tokenization Parse Error: {e}"}
@@ -394,11 +407,23 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
             else:
                 raw_text_to_tokenize = raw_sentence_text.replace('\n', ' ').replace('\t', ' ')
                 if stanza_processor:
+                    import time
+                    log_file = f"xml_tagging_{int(time.time())}.log"
+                    with open(log_file, "a") as f:
+                        f.write(f"Calling stanza for segment. Lang: {final_lang}\n")
+                        
                     res = stanza_processor(raw_text_to_tokenize, final_lang)
                     if isinstance(res, tuple) and len(res) == 2:
                         stanza_records, err = res
                     else:
                         stanza_records, err = res, None
+                    
+                    if not err and stanza_records:
+                        with open(log_file, "a") as f:
+                            f.write(f"Stanza success. Got {len(stanza_records)} records.\n")
+                    else:
+                        with open(log_file, "a") as f:
+                            f.write(f"Stanza error in segment: {err}\n")
                     
                     if not err and stanza_records:
                         current_stanza_sent = -1

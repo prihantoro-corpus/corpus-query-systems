@@ -206,12 +206,24 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
         try: con.execute("DROP TABLE IF EXISTS search_matches")
         except: pass
         
+        # Safely inject alias into xml_where_clause to avoid ambiguous column errors
+        c0_xml_where = ""
+        if xml_where_clause:
+            try:
+                cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+                meta_cols = [c[1] for c in cols_info if c[1] not in ('id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename')]
+                c0_xml_where = xml_where_clause
+                for col in meta_cols:
+                    c0_xml_where = re.sub(rf'\b({col})\b', rf"c0.\1", c0_xml_where, flags=re.IGNORECASE)
+            except:
+                c0_xml_where = xml_where_clause
+
         match_query = f"CREATE TEMP TABLE search_matches AS {query_select} {query_joins}"
         if query_where:
             match_query += " WHERE " + " AND ".join(query_where)
-            if xml_where_clause: match_query += xml_where_clause
-        elif xml_where_clause:
-            match_query += " WHERE " + xml_where_clause.strip()[4:]
+            if c0_xml_where: match_query += c0_xml_where
+        elif c0_xml_where:
+            match_query += " WHERE " + c0_xml_where.strip()[4:]
         
         full_params = query_params + xml_params
         con.execute(match_query, full_params)

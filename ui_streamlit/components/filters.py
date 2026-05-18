@@ -13,11 +13,16 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
     con = duckdb.connect(db_path, read_only=True)
     try:
         attr_cols = get_xml_attribute_columns(con)
-        if not attr_cols:
-            return None
         
         # Show count in label
         display_name = corpus_name if corpus_name else db_path.split('_')[-1]
+        
+        if not attr_cols:
+            label = f"🎯 Restricted Search (No metadata detected in '{display_name}')"
+            with st.expander(label, expanded=False):
+                st.info("No XML attributes or custom metadata columns were found in this corpus. Restricted search is only available for corpora with segment-level metadata.")
+            return None
+
         label = f"🎯 Restricted Search ({len(attr_cols)} filters related to '{display_name}')"
         with st.expander(label, expanded=False):
             st.markdown("**Narrow your search by selecting specific XML attribute values.**")
@@ -52,8 +57,10 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
                             st.error(f"Error loading {attr}: {e}")
                     else: 
                         try:
-                            unique_vals = [r[0] for r in con.execute(f"SELECT DISTINCT {attr} FROM corpus WHERE {attr} IS NOT NULL ORDER BY {attr}").fetchall()]
-                            unique_vals = [str(v) for v in unique_vals if str(v).strip() and str(v).lower() != 'nan']
+                            raw_vals = [r[0] for r in con.execute(f"SELECT DISTINCT {attr} FROM corpus WHERE {attr} IS NOT NULL ORDER BY {attr}").fetchall()]
+                            # Clean, strip, and deduplicate values to prevent Streamlit silent selection failures
+                            cleaned_vals = [str(v).strip() for v in raw_vals if str(v).strip() and str(v).lower() != 'nan']
+                            unique_vals = list(dict.fromkeys(cleaned_vals))
                         except:
                             continue
                         
