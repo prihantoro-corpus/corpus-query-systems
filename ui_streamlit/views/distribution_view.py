@@ -6,7 +6,7 @@ from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
 from core.modules.distribution import calculate_distribution
 from core.ai_service import parse_nl_query, parse_nl_query_rules_only
-from core.modules.overview import get_pos_definitions
+import core.modules.overview as ov
 
 def render_distribution_view():
     st.header("Distribution")
@@ -111,7 +111,7 @@ def render_distribution_view():
                 if not nl_q: return None
                 set_state('dist_nl_query_rule', nl_q)
                 
-                pos_defs = get_pos_definitions(corpus_path) or {}
+                pos_defs = ov.get_pos_definitions(corpus_path) or {}
                 reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
 
                 p, _ = parse_nl_query_rules_only(nl_q, "concordance", reverse_pos_map=reverse_pos_map)

@@ -158,13 +158,25 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
                     query_where.append(f"{alias}.pos = ?")
                     query_params.append(val)
 
+        # Safely inject alias into xml_where_clause to avoid ambiguous column errors
+        c0_xml_where = ""
+        if xml_where_clause:
+            try:
+                cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+                meta_cols = [c[1] for c in cols_info if c[1] not in ('id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename')]
+                c0_xml_where = xml_where_clause
+                for col in meta_cols:
+                    c0_xml_where = re.sub(rf'\b({col})\b', rf"c0.\1", c0_xml_where, flags=re.IGNORECASE)
+            except:
+                c0_xml_where = xml_where_clause
+
         # Assemble final WHERE
         final_query = query_select + query_joins
         if query_where:
             final_query += " WHERE " + " AND ".join(query_where)
-            if xml_where_clause: final_query += xml_where_clause
-        elif xml_where_clause:
-            final_query += " WHERE " + xml_where_clause.strip()[4:]
+            if c0_xml_where: final_query += c0_xml_where
+        elif c0_xml_where:
+            final_query += " WHERE " + c0_xml_where.strip()[4:]
         
         full_params = query_params + xml_params
         
@@ -217,9 +229,9 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
             if query_joins: final_query_with_meta += query_joins
             if query_where:
                 final_query_with_meta += " WHERE " + " AND ".join(query_where)
-                if xml_where_clause: final_query_with_meta += xml_where_clause
-            elif xml_where_clause:
-                final_query_with_meta += " WHERE " + xml_where_clause.strip()[4:]
+                if c0_xml_where: final_query_with_meta += c0_xml_where
+            elif c0_xml_where:
+                final_query_with_meta += " WHERE " + c0_xml_where.strip()[4:]
             
             df_matches_meta = con.execute(final_query_with_meta, full_params).fetch_df()
             

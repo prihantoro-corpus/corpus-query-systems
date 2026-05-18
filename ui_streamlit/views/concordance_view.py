@@ -8,7 +8,7 @@ from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
 from core.ai_service import interpret_results_llm, parse_nl_query, parse_nl_query_rules_only
 from core.io_utils import df_to_excel_bytes
-from core.modules.overview import get_pos_definitions, get_corpus_language
+import core.modules.overview as ov
 
 def render_concordance_view():
     st.header("Concordance (KWIC)")
@@ -43,14 +43,17 @@ def render_concordance_view():
                 coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
             with c_adv2:
                 sort_order = st.selectbox("Sort By", ["Node (Default)", "Left Context", "Right Context"], key="kwic_sort_rule")
-                c_sh1, c_sh2 = st.columns(2)
+                c_sh1, c_sh2, c_sh3 = st.columns(3)
                 with c_sh1:
                     show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
                 with c_sh2:
                     show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_rule")
+                with c_sh3:
+                    show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_rule")
                 
                 set_state('kwic_show_pos', show_pos)
                 set_state('kwic_show_lemma', show_lemma)
+                set_state('kwic_show_meta', show_meta)
                 
                 wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
                 set_state('kwic_wrap_mode', wrap_mode)
@@ -66,7 +69,7 @@ def render_concordance_view():
                 set_state('kwic_nl_query_rule', nl_query)
                 
                 # 1. Parse Main Query
-                pos_defs = get_pos_definitions(corpus_path) or {}
+                pos_defs = ov.get_pos_definitions(corpus_path) or {}
                 reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
                 
                 params, err = parse_nl_query_rules_only(nl_query, "concordance", reverse_pos_map=reverse_pos_map)
@@ -89,10 +92,7 @@ def render_concordance_view():
                     if coll_filter_parsed:
                         st.info(f"   + Collocate Filter: '{coll_filter_parsed}'")
                     
-                    # Execute the search
-                    xml_filters = render_xml_restriction_filters(corpus_path, "concordance", corpus_name=corpus_name)
-                    xml_where, xml_params = apply_xml_restrictions(xml_filters)
-                    
+                    # Execute the search (XML filters are now defined in common area below)
                     run_concordance_query('primary', corpus_path, corpus_name, 
                                           query, 
                                           window_size, 
@@ -123,8 +123,8 @@ def render_concordance_view():
             else:
                 with st.spinner("AI is determining search parameters..."):
                     # Fetch user definitions if available
-                    pos_defs = get_pos_definitions(corpus_path) or {}
-                    lang = get_corpus_language(corpus_path)
+                    pos_defs = ov.get_pos_definitions(corpus_path) or {}
+                    lang = ov.get_corpus_language(corpus_path)
                     
                     # Safe-pass language context via pos_defs to avoid stale-cache TypeErrors
                     if lang:
@@ -160,11 +160,7 @@ def render_concordance_view():
                     
                     st.success(f"✓ Executing search for '{query}'...")
                     
-                    # Execute
-                    # Since params are simple, we pass defaults for others
-                    xml_filters = render_xml_restriction_filters(corpus_path, "concordance", corpus_name=corpus_name)
-                    xml_where, xml_params = apply_xml_restrictions(xml_filters)
-                    
+                    # Execute (XML filters are now defined in common area below)
                     run_concordance_query('primary', corpus_path, corpus_name, 
                                           query, 
                                           win, 
@@ -192,14 +188,17 @@ def render_concordance_view():
                 coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
             with c_adv2:
                 sort_order = st.selectbox("Sort By", ["Node (Default)", "Left Context", "Right Context"])
-                c_sh1, c_sh2 = st.columns(2)
+                c_sh1, c_sh2, c_sh3 = st.columns(3)
                 with c_sh1:
                     show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
                 with c_sh2:
                     show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_cb")
+                with c_sh3:
+                    show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_cb")
                 
                 set_state('kwic_show_pos', show_pos)
                 set_state('kwic_show_lemma', show_lemma)
+                set_state('kwic_show_meta', show_meta)
                 
                 wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
                 set_state('kwic_wrap_mode', wrap_mode)
@@ -209,6 +208,21 @@ def render_concordance_view():
     comp_mode = get_state('comparison_mode', False)
     comp_path = get_state('comp_corpus_path')
     comp_name = get_state('comp_corpus_name')
+
+    if not comp_mode:
+        xml_filters = render_xml_restriction_filters(corpus_path, "concordance", corpus_name=corpus_name)
+        xml_where, xml_params = apply_xml_restrictions(xml_filters)
+    else:
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            xml_filters_1 = render_xml_restriction_filters(corpus_path, "concordance_c1", corpus_name=corpus_name)
+            xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
+        with col_f2:
+            if comp_path:
+                xml_filters_2 = render_xml_restriction_filters(comp_path, "concordance_c2", corpus_name=comp_name)
+                xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
+            else:
+                xml_where_2, xml_params_2 = "", []
 
     if search_mode == "Standard":
         if comp_mode:
@@ -223,21 +237,10 @@ def render_concordance_view():
             search_term_2 = None
 
         if not comp_mode:
-            xml_filters = render_xml_restriction_filters(corpus_path, "concordance", corpus_name=corpus_name)
-            xml_where, xml_params = apply_xml_restrictions(xml_filters)
-            
             if st.button("Generate Concordance Lines", type="primary"):
                 set_state('kwic_search_term', search_term)
                 run_concordance_query('primary', corpus_path, corpus_name, search_term, window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
         else:
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                xml_filters_1 = render_xml_restriction_filters(corpus_path, "concordance_c1", corpus_name=corpus_name)
-                xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
-            with col_f2:
-                xml_filters_2 = render_xml_restriction_filters(comp_path, "concordance_c2", corpus_name=comp_name)
-                xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
-                
             if st.button("Generate Comparison Concordance", type="primary"):
                 set_state('kwic_search_term', search_term_1)
                 set_state('kwic_search_term_2', search_term_2) # New state for query 2
@@ -401,6 +404,10 @@ def render_concordance_view():
          pass
 
 def run_concordance_query(identifier, path, name, query, left, right, limit, coll_filter, xml_where, xml_params, show_pos=False, show_lemma=False):
+    if not query or not query.strip():
+        st.warning(f"Please enter a Node Word(s) to search for in {name}.")
+        return
+        
     with st.spinner(f"Searching {name}..."):
         kwic_rows, total, raw_q, lit_freq, sent_ids, breakdown_df = cached_generate_kwic(
             db_path=path,
@@ -513,7 +520,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
          <style>
          .kwic-table {{ width: 100%; min-width: 800px; font-family: 'Courier New', monospace; font-size: 0.9em; border-collapse: collapse; table-layout: auto; }}
          .kwic-table td {{ padding: 8px 10px; border-bottom: 1px solid #333; vertical-align: middle; line-height: 1.6; }}
-         .meta-col {{ text-align: left; width: 15%; font-size: 0.8em; border-right: 1px solid #444; color: #e2e8f0; vertical-align: top; }}
+         .meta-col {{ text-align: left; width: 15%; font-size: 0.8em; border-right: 1px solid #444; color: #e2e8f0; vertical-align: top; display: {'table-cell' if get_state('kwic_show_meta', True) else 'none'}; }}
          .ctx-l {{ text-align: right; width: 35%; color: #bbb; {wrap_style} }}
          .node {{ text-align: center; width: auto; white-space: nowrap; font-weight: bold; background-color: #222; color: #FFEA00; border-left: 1px solid #444; border-right: 1px solid #444; padding: 8px 15px; }}
          .ctx-r {{ text-align: left; width: 35%; color: #bbb; {wrap_style} }}
@@ -584,9 +591,12 @@ def render_concordance_column(results, search_term, key_suffix=""):
                 col_m, col_l, col_n, col_r, col_a = st.columns([1, 3.5, 2, 3.5, 2])
                 
                 with col_m:
-                    m = row.get('Metadata', {})
-                    for k, v in m.items():
-                        st.caption(f"{v}")
+                    if get_state('kwic_show_meta', True):
+                        m = row.get('Metadata', {})
+                        for k, v in m.items():
+                            st.caption(f"{v}")
+                    else:
+                        st.empty()
                 
                 with col_l:
                     st.markdown(f"<div style='text-align:right; color:#bbb;'>{row['Left']}</div>", unsafe_allow_html=True)

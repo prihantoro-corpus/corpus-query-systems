@@ -1,6 +1,45 @@
 import duckdb
 import pandas as pd
 
+def get_corpus_files(db_path):
+    """Fetches unique filenames from the corpus."""
+    if not db_path: return []
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        res = con.execute("SELECT DISTINCT filename FROM corpus ORDER BY filename").fetchall()
+        return [r[0] for r in res]
+    except:
+        return []
+    finally:
+        con.close()
+
+def get_restricted_stats(db_path, xml_where_clause="", xml_params=[]):
+    """
+    Calculates tokens, types and TTR for a specific XML restricted region.
+    """
+    if not db_path:
+        return {}
+    
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        # total_tokens
+        sql_total = f"SELECT count(*) FROM corpus WHERE 1=1 {xml_where_clause}"
+        total_tokens = con.execute(sql_total, xml_params).fetchone()[0]
+        
+        # unique_types
+        sql_types = f"SELECT count(DISTINCT _token_low) FROM corpus WHERE 1=1 {xml_where_clause}"
+        unique_types = con.execute(sql_types, xml_params).fetchone()[0]
+        
+        ttr = (unique_types / total_tokens) if total_tokens > 0 else 0
+        
+        return {
+            'total_tokens': total_tokens,
+            'unique_types': unique_types,
+            'ttr': round(ttr, 4)
+        }
+    finally:
+        con.close()
+
 def calculate_corpus_statistics(corpus_stats, db_path=None):
     """
     Calculates display metrics like Type/Token Ratio.
@@ -35,33 +74,6 @@ def calculate_corpus_statistics(corpus_stats, db_path=None):
         'unique_types': type_count,
         'ttr': round(ttr, 4)
     }
-
-def get_restricted_stats(db_path, xml_where_clause="", xml_params=[]):
-    """
-    Calculates tokens, types and TTR for a specific XML restricted region.
-    """
-    if not db_path:
-        return {}
-    
-    con = duckdb.connect(db_path, read_only=True)
-    try:
-        # total_tokens
-        sql_total = f"SELECT count(*) FROM corpus WHERE 1=1 {xml_where_clause}"
-        total_tokens = con.execute(sql_total, xml_params).fetchone()[0]
-        
-        # unique_types
-        sql_types = f"SELECT count(DISTINCT _token_low) FROM corpus WHERE 1=1 {xml_where_clause}"
-        unique_types = con.execute(sql_types, xml_params).fetchone()[0]
-        
-        ttr = (unique_types / total_tokens) if total_tokens > 0 else 0
-        
-        return {
-            'total_tokens': total_tokens,
-            'unique_types': unique_types,
-            'ttr': round(ttr, 4)
-        }
-    finally:
-        con.close()
 
 def get_top_frequencies_v2(db_path, limit=100, xml_where_clause="", xml_params=[]):
     """
@@ -148,7 +160,7 @@ def save_pos_definitions(db_path, definitions):
 def get_corpus_language(db_path):
     """Retrieves the corpus language from metadata table."""
     if not db_path: return "English"
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         tables = con.execute("SHOW TABLES").fetchall()
         if ('corpus_metadata',) not in tables:
@@ -170,6 +182,225 @@ def set_corpus_language(db_path, language):
         return True
     except Exception as e:
         print(f"Error setting language: {e}")
+        return False
+    finally:
+        con.close()
+
+def apply_metadata_to_files(db_path, metadata_df):
+    """
+    Applies metadata from a DataFrame to the corpus.
+    metadata_df should have 'filename' and other columns as attributes.
+    """
+    if not db_path or metadata_df.empty: return False
+    import re
+    con = duckdb.connect(db_path)
+    try:
+        # 1. Identify attribute columns (excluding filename)
+        attr_cols = [c for c in metadata_df.columns if c != 'filename']
+        
+        # 2. Ensure columns exist
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
+        existing_cols = set(cols_info['name'].tolist())
+        
+        for col in attr_cols:
+            safe_col = re.sub(r'\W+', '_', col)
+            if safe_col not in existing_cols:
+                con.execute(f"ALTER TABLE corpus ADD COLUMN {safe_col} VARCHAR")
+        
+        # 3. Update database
+        for _, row in metadata_df.iterrows():
+            fname = row['filename']
+            for col in attr_cols:
+                safe_col = re.sub(r'\W+', '_', col)
+                val = str(row[col]) if pd.notna(row[col]) else None
+                con.execute(f"UPDATE corpus SET {safe_col} = ? WHERE filename = ?", [val, fname])
+        
+        return True
+    except Exception as e:
+        print(f"Error applying metadata: {e}")
+        return False
+    finally:
+        con.close()
+
+def get_file_sentences(db_path, filename):
+    """Retrieves all sentences for a given file, grouped by sent_id."""
+    if not db_path or not filename: return []
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        # Get all tokens for the file, ordered by id
+        res = con.execute("""
+            SELECT sent_id, string_agg(token, ' ' ORDER BY id) as text
+            FROM corpus
+            WHERE filename = ?
+            GROUP BY sent_id
+            ORDER BY MIN(id)
+        """, [filename]).fetchall()
+        return [{"sent_id": r[0], "text": r[1]} for r in res]
+    except Exception as e:
+        print(f"Error getting file sentences: {e}")
+        return []
+    finally:
+        con.close()
+
+def get_file_word_count(db_path, filename):
+    """Returns the total token count for a file."""
+    if not db_path or not filename: return 0
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        res = con.execute("SELECT count(*) FROM corpus WHERE filename = ?", [filename]).fetchone()
+        return res[0] if res else 0
+    except:
+        return 0
+    finally:
+        con.close()
+
+def apply_segmental_metadata(db_path, filename, sent_ids, meta_dict):
+    """
+    Applies attribute-value pairs to specific sentences in a file.
+    meta_dict: {attribute: value, ...}
+    """
+    if not db_path or not filename or not sent_ids or not meta_dict: return False
+    import re
+    con = duckdb.connect(db_path)
+    try:
+        # Ensure columns exist
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
+        existing_cols = set(cols_info['name'].tolist())
+        
+        for attr in meta_dict.keys():
+            safe_col = re.sub(r'\W+', '_', attr)
+            if safe_col not in existing_cols:
+                con.execute(f"ALTER TABLE corpus ADD COLUMN {safe_col} VARCHAR")
+                existing_cols.add(safe_col)
+
+        # Update sentences
+        for attr, val in meta_dict.items():
+            safe_col = re.sub(r'\W+', '_', attr)
+            # Use IN clause for multiple sent_ids
+            placeholders = ", ".join(["?"] * len(sent_ids))
+            con.execute(f"""
+                UPDATE corpus 
+                SET {safe_col} = ? 
+                WHERE filename = ? AND sent_id IN ({placeholders})
+            """, [val, filename] + list(sent_ids))
+            
+        return True
+    except Exception as e:
+        print(f"Error applying segmental metadata: {e}")
+        return False
+    finally:
+        con.close()
+
+def slice_corpus_file(db_path, filename, max_words=5000):
+    """
+    Slices a file into multiple parts if it exceeds max_words.
+    Renames the filename in the corpus table to filename_part1, filename_part2, etc.
+    """
+    if not db_path or not filename: return False
+    con = duckdb.connect(db_path)
+    try:
+        # Get all token IDs for this file in order
+        ids = [r[0] for r in con.execute("SELECT id FROM corpus WHERE filename = ? ORDER BY id", [filename]).fetchall()]
+        
+        if len(ids) <= max_words:
+            return True # No slicing needed
+            
+        # Divide IDs into chunks
+        chunks = [ids[i:i + max_words] for i in range(0, len(ids), max_words)]
+        
+        for i, chunk_ids in enumerate(chunks):
+            new_filename = f"{filename}_part{i+1}"
+            placeholders = ", ".join(["?"] * len(chunk_ids))
+            con.execute(f"UPDATE corpus SET filename = ? WHERE id IN ({placeholders})", [new_filename] + chunk_ids)
+            
+        return True
+    except Exception as e:
+        print(f"Error slicing file: {e}")
+        return False
+    finally:
+        con.close()
+
+def get_sentence_metadata(db_path, filename):
+    """Retrieves all metadata for sentences in a file."""
+    if not db_path or not filename: return pd.DataFrame()
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
+        standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
+        meta_cols = [c for c in cols_info['name'].tolist() if c.lower() not in standard]
+        
+        if not meta_cols:
+            return pd.DataFrame()
+            
+        select_cols = ", ".join([f"MAX({c}) as {c}" for c in meta_cols])
+        query = f"""
+            SELECT sent_id, {select_cols} 
+            FROM corpus 
+            WHERE filename = ? 
+            GROUP BY sent_id
+        """
+        df = con.execute(query, [filename]).fetch_df()
+        return df
+    except Exception as e:
+        print(f"Error getting sentence metadata: {e}")
+        return pd.DataFrame()
+    finally:
+        con.close()
+
+def get_file_tokens(db_path, filename):
+    """Retrieves all tokens for a given file in order."""
+    if not db_path or not filename: return []
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        # Get all tokens with their ID and any existing metadata
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
+        standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
+        meta_cols = [c for c in cols_info['name'].tolist() if c.lower() not in standard]
+        
+        select_clause = "id, token, sent_id"
+        if meta_cols:
+            select_clause += ", " + ", ".join(meta_cols)
+            
+        res = con.execute(f"SELECT {select_clause} FROM corpus WHERE filename = ? ORDER BY id", [filename]).fetch_df()
+        return res
+    except Exception as e:
+        print(f"Error getting file tokens: {e}")
+        return pd.DataFrame()
+    finally:
+        con.close()
+
+def apply_token_metadata(db_path, token_ids, meta_dict):
+    """
+    Applies attribute-value pairs to specific tokens.
+    token_ids: List of integer IDs.
+    """
+    if not db_path or not token_ids or not meta_dict: return False
+    import re
+    con = duckdb.connect(db_path)
+    try:
+        # Ensure columns exist
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
+        existing_cols = set(cols_info['name'].tolist())
+        
+        for attr in meta_dict.keys():
+            safe_col = re.sub(r'\W+', '_', attr)
+            if safe_col not in existing_cols:
+                con.execute(f"ALTER TABLE corpus ADD COLUMN {safe_col} VARCHAR")
+                existing_cols.add(safe_col)
+
+        # Update tokens
+        for attr, val in meta_dict.items():
+            safe_col = re.sub(r'\W+', '_', attr)
+            placeholders = ", ".join(["?"] * len(token_ids))
+            con.execute(f"""
+                UPDATE corpus 
+                SET {safe_col} = ? 
+                WHERE id IN ({placeholders})
+            """, [val] + list(token_ids))
+            
+        return True
+    except Exception as e:
+        print(f"Error applying token metadata: {e}")
         return False
     finally:
         con.close()

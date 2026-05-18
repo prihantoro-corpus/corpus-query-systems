@@ -71,6 +71,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
 
         search_components = [parse_term(term) for term in search_terms]
 
+        if not search_components:
+            con.close()
+            return ([], 0, raw_target_input, 0, [], pd.DataFrame())
+
         # 2. Build Query with Dynamic Lengths
         token_concat_parts = []
         current_offset_exprs = []
@@ -239,12 +243,24 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 query_where.append(exists_clause)
                 coll_filter_params = [pattern_window, pattern_window] + coll_filter_params
 
+        # Safely inject alias into xml_where_clause to avoid ambiguous column errors
+        c0_xml_where = ""
+        if xml_where_clause:
+            try:
+                cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+                meta_cols = [c[1] for c in cols_info if c[1] not in ('id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename')]
+                c0_xml_where = xml_where_clause
+                for col in meta_cols:
+                    c0_xml_where = re.sub(rf'\b({col})\b', rf"c0.\1", c0_xml_where, flags=re.IGNORECASE)
+            except:
+                c0_xml_where = xml_where_clause
+
         # Assemble final WHERE
         if query_where:
             final_query += " WHERE " + " AND ".join(query_where)
-            if xml_where_clause: final_query += xml_where_clause
-        elif xml_where_clause:
-            final_query += " WHERE " + xml_where_clause.strip()[4:]
+            if c0_xml_where: final_query += c0_xml_where
+        elif c0_xml_where:
+            final_query += " WHERE " + c0_xml_where.strip()[4:]
         
         full_params = query_params + coll_filter_params + xml_params
         

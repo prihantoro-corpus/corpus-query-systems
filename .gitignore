@@ -52,3 +52,7 @@ tests/generate_*.py
 # Misplaced
 corpora/ai_service.py
 corpora/english/XML_TAG_DEMO_GUIDE.md
+
+# Logs and Scratch
+*.log
+scratch/

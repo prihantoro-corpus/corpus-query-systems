@@ -11,7 +11,8 @@ from .cleaning import sanitize_xml_content
 from .xml_parser import extract_xml_structure, parse_xml_content_to_df
 from core.config import CORPORA_DIR, TAGSET_DIR
 from core.modules.overview import save_pos_definitions
-from .tagging import tag_text_with_stanza, tag_text_simple_fallback
+import core.preprocessing.tagging as tagging
+import time
 
 def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None):
     """
@@ -29,8 +30,18 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     use_stanza = 'Raw' in selected_format
     xml_detected_lang_code = None
     combined_structure = {}
+    stanza_warning = None
+
+    # Map language label to code for Stanza (e.g. "English" -> "en")
+    from core.config import STANZA_LANG_MAP
+    stanza_lang_code = explicit_lang_code
+    # Search for label in keys
+    if explicit_lang_code in STANZA_LANG_MAP:
+        stanza_lang_code = STANZA_LANG_MAP[explicit_lang_code]
+    elif explicit_lang_code.capitalize() in STANZA_LANG_MAP:
+        stanza_lang_code = STANZA_LANG_MAP[explicit_lang_code.capitalize()]
     
-    print(f"DEBUG: load_monolingual_corpus_files called. Lang: {explicit_lang_code}, Format: {selected_format}")
+    print(f"DEBUG: load_monolingual_corpus_files called. Lang: {explicit_lang_code} (Stanza: {stanza_lang_code}), Format: {selected_format}")
 
     num_files = len(file_sources)
 
@@ -76,14 +87,13 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 
                 # 2. Content Parsing
                 stanza_proc = None
-                if use_stanza or 'stanza' in selected_format.lower():
-                    from .tagging import tag_text_with_stanza
-                    stanza_proc = tag_text_with_stanza
+                if stanza_lang_code and stanza_lang_code != "OTHER":
+                    stanza_proc = tagging.tag_text_with_stanza
                 
                 result = parse_xml_content_to_df(
                     cleaned_xml, 
                     stanza_processor=stanza_proc, 
-                    lang_code=source_lang_code,
+                    lang_code=stanza_lang_code,
                     preserve_inline_tags=True
                 )
                 if 'df_data' in result:
@@ -131,6 +141,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     df_file['filename'] = filename
                     all_df_data.extend(df_file.to_dict('records'))
                 else:
+                    log_file = f"ingestion_{int(time.time())}.log"
+                    with open(log_file, "a") as f:
+                        f.write(f"File {filename} could not be parsed as vertical format. Falling back to raw text.\n")
                     print(f"File {filename} could not be parsed as vertical format. Falling back to raw text.")
                     current_is_tagged = False 
             
@@ -141,37 +154,35 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 # If explicit_lang_code is set, we try to use it.
                 # If "OTHER" is selected, we perform fallback tagging.
                 
-                print(f"DEBUG: Processing raw text. explicit_lang_code='{explicit_lang_code}'")
+                # Log execution start
+                log_file = f"ingestion_{int(time.time())}.log"
+                with open(log_file, "a") as f:
+                    f.write(f"Processing raw text. lang='{explicit_lang_code}', stanza_lang='{stanza_lang_code}', format='{selected_format}'\n")
+                
                 tagged_data = []
                 
-                if explicit_lang_code and explicit_lang_code != "OTHER" and (use_stanza or 'Raw' in selected_format):
+                if stanza_lang_code and stanza_lang_code != "OTHER":
                     try:
                         # Attempt Stanza Tagging
-                        tagged_data, err = tag_text_with_stanza(raw_text, explicit_lang_code)
+                        tagged_data, err = tagging.tag_text_with_stanza(raw_text, stanza_lang_code)
+                        if err:
+                            stanza_warning = f"Stanza error: {err}. Using simple fallback."
+                            with open(log_file, "a") as f:
+                                f.write(f"Stanza Error: {err}\n")
                     except Exception as e:
-                        msg = f"Stanza tagging failed for '{explicit_lang_code}': {e}. Using simple fallback."
+                        import traceback
+                        error_trace = traceback.format_exc()
+                        msg = f"Stanza execution failed: {e}. Using simple fallback."
                         print(msg)
+                        with open(log_file, "a") as f:
+                            f.write(f"Stanza Exception: {e}\n{error_trace}\n")
                         stanza_warning = msg
-                        tagged_data, err = tag_text_simple_fallback(raw_text)
-                elif explicit_lang_code == "OTHER" or (not use_stanza and 'Raw' not in selected_format):
-                    tagged_data, err = tag_text_simple_fallback(raw_text)
+                        tagged_data, err = tagging.tag_text_simple_fallback(raw_text)
                 else:
-                    # Legacy Fallback or Default Behavior for "auto" without specific language?
-                    # The request says: "if they choose language, you will tokenise... Stanza"
-                    # "When other is chosen... use 'TAG' instead"
-                    # If user didn't specify language (e.g. from built-in?), corpus loader might default to 'en' or None.
-                    # Current load_monolingual default is 'en' if not provided? -> No, argument is required.
-                    # sidebar passes 'en' by default.
-                    
-                    # If we are here, likely 'en' or some coded lang.
-                    # Maintain old behavior? Or upgrade everything? 
-                    # "For no, only ENglish, Indonesia and Japan is available." -> "change to all languages supported by Stanza."
-                    
-                    if explicit_lang_code:
-                         tagged_data = tag_text_with_stanza(raw_text, explicit_lang_code)
-                    else:
-                         # Very generic fallback if no lang code known
-                         tagged_data = tag_text_simple_fallback(raw_text)
+                    with open(log_file, "a") as f:
+                        f.write("Using simple fallback because lang is OTHER or None.\n")
+                    # Fallback to simple tagging for "OTHER" or if no language code
+                    tagged_data, err = tagging.tag_text_simple_fallback(raw_text)
 
                 # Add metadata
                 for item in tagged_data:
@@ -243,17 +254,39 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code, p
     if src_file is None or tgt_file is None: return {'error': "Files missing"}
 
     try:
+        # 1. Parsing Source
         if progress_callback: progress_callback(0.1, "Parsing source...")
         src_file.seek(0)
         src_content = src_file.read().decode('utf-8', errors='ignore')
         src_cleaned = sanitize_xml_content(src_content)
-        src_result = parse_xml_content_to_df(src_cleaned, preserve_inline_tags=True)
+        
+        from core.config import STANZA_LANG_MAP
+        
+        # Source Stanza
+        src_stanza_code = src_lang_code
+        if src_lang_code in STANZA_LANG_MAP: src_stanza_code = STANZA_LANG_MAP[src_lang_code]
+        elif src_lang_code.capitalize() in STANZA_LANG_MAP: src_stanza_code = STANZA_LANG_MAP[src_lang_code.capitalize()]
+        
+        src_proc = None
+        if src_stanza_code and src_stanza_code != "OTHER": src_proc = tagging.tag_text_with_stanza
+        
+        src_result = parse_xml_content_to_df(src_cleaned, stanza_processor=src_proc, lang_code=src_stanza_code, preserve_inline_tags=True)
 
+        # 2. Parsing Target
         if progress_callback: progress_callback(0.5, "Parsing target...")
         tgt_file.seek(0)
         tgt_content = tgt_file.read().decode('utf-8', errors='ignore')
         tgt_cleaned = sanitize_xml_content(tgt_content)
-        tgt_result = parse_xml_content_to_df(tgt_cleaned, preserve_inline_tags=True)
+        
+        # Target Stanza
+        tgt_stanza_code = tgt_lang_code
+        if tgt_lang_code in STANZA_LANG_MAP: tgt_stanza_code = STANZA_LANG_MAP[tgt_lang_code]
+        elif tgt_lang_code.capitalize() in STANZA_LANG_MAP: tgt_stanza_code = STANZA_LANG_MAP[tgt_lang_code.capitalize()]
+        
+        tgt_proc = None
+        if tgt_stanza_code and tgt_stanza_code != "OTHER": tgt_proc = tagging.tag_text_with_stanza
+        
+        tgt_result = parse_xml_content_to_df(tgt_cleaned, stanza_processor=tgt_proc, lang_code=tgt_stanza_code, preserve_inline_tags=True)
         
     except Exception as e:
         return {'error': f"Parsing failed: {e}"}

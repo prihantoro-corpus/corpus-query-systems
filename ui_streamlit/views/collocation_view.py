@@ -9,6 +9,7 @@ from core.visualiser.network import create_pyvis_graph
 from core.io_utils import df_to_excel_bytes
 from ui_streamlit.caching import cached_generate_kwic, cached_get_subcorpus_size
 from ui_streamlit.components.result_display import render_kwic_table
+import core.modules.overview as ov
 
 def render_collocation_view():
     st.header("Collocation Analysis")
@@ -88,11 +89,7 @@ def render_collocation_view():
                     
                     st.success("✓ Query interpretation successful! Running search...")
                     
-                    # Execute Search
-                    # We reuse the logic for 'primary' search since NL is typically single-corpus focus
-                    xml_filters = render_xml_restriction_filters(corpus_path, "collocation", corpus_name=corpus_name)
-                    xml_where, xml_params = apply_xml_restrictions(xml_filters)
-                    
+                    # Execute Search (XML filters are now defined in common area below)
                     run_collocation_query(
                         'primary', corpus_path, 
                         params.get('node_word', ''), 
@@ -249,10 +246,23 @@ def render_collocation_view():
                     set_state('coll_apply_patterns', apply_patterns)
 
 
+    # --- XML Restriction Filters ---
     if not comp_mode:
         xml_filters = render_xml_restriction_filters(corpus_path, "collocation", corpus_name=corpus_name)
         xml_where, xml_params = apply_xml_restrictions(xml_filters)
-        
+    else:
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            xml_filters_1 = render_xml_restriction_filters(corpus_path, "collocation_c1", corpus_name=corpus_name)
+            xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
+        with col_f2:
+            if comp_path:
+                xml_filters_2 = render_xml_restriction_filters(comp_path, "collocation_c2", corpus_name=comp_name)
+                xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
+            else:
+                xml_where_2, xml_params_2 = "", []
+
+    if not comp_mode:
         if st.button("Calculate Collocations", type="primary"):
             # EXECUTION LOGIC
             
@@ -285,7 +295,7 @@ def render_collocation_view():
                 else:
                     set_state('coll_nl_query_rule', nl_query)
                     # Parse Main Node Query
-                    pos_defs = get_pos_definitions(corpus_path) or {}
+                    pos_defs = ov.get_pos_definitions(corpus_path) or {}
                     reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
                     
                     params, err = parse_nl_query_rules_only(nl_query, "collocation", reverse_pos_map=reverse_pos_map)
@@ -323,18 +333,6 @@ def render_collocation_view():
                     pattern_text if apply_patterns else '', pattern_limit
                 )
     else:
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            xml_filters_1 = render_xml_restriction_filters(corpus_path, "collocation_c1", corpus_name=corpus_name)
-            xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
-        with col_f2:
-            if comp_path:
-                xml_filters_2 = render_xml_restriction_filters(comp_path, "collocation_c2", corpus_name=comp_name)
-                xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
-            else:
-                st.info("Load a comparison corpus in sidebar.")
-                xml_where_2, xml_params_2 = "", []
-            
         if st.button("Calculate Comparison Collocations", type="primary"):
             # Determine effective parameters
             to_run_node_1 = ""
@@ -369,7 +367,7 @@ def render_collocation_view():
                  else:
                      set_state('coll_nl_query_rule', nl_query)
                      
-                     pos_defs = get_pos_definitions(corpus_path) or {}
+                     pos_defs = ov.get_pos_definitions(corpus_path) or {}
                      reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
 
                      params, err = parse_nl_query_rules_only(nl_query, "collocation", reverse_pos_map=reverse_pos_map)
