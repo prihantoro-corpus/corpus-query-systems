@@ -249,7 +249,7 @@ def main():
         unsafe_allow_html=True
     )
 
-    st.markdown("## CORTEX: Advanced Corpus Query System")
+    st.markdown("## CORTEX: Advanced Corpus Query System <span style='font-size: 0.5em; color: rgba(255,255,255,0.5); font-weight: normal; vertical-align: middle; margin-left: 10px;'>v180526</span>", unsafe_allow_html=True)
     
     # Render Sidebar and get current view
     current_view = render_sidebar()
