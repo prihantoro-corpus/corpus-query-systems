@@ -16,7 +16,7 @@ def render_sidebar():
     st.sidebar.caption("App Version: v180526")
     view = st.sidebar.radio(
         "Go to", 
-        ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation"]
+        ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
     )
     
     st.sidebar.markdown("---")

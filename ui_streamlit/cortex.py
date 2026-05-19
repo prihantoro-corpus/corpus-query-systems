@@ -26,6 +26,7 @@ try:
     from ui_streamlit.views.statistical_testing_view import render_statistical_testing_view
     from ui_streamlit.views.word_profiler_view import render_word_profiler_view
     from ui_streamlit.views.summarisation_view import render_summarisation_view
+    from ui_streamlit.views.quiz_creation_view import render_quiz_creation_view
 except ImportError as e:
     st.error(f"Import Error: {e}")
     st.stop()
@@ -275,6 +276,8 @@ def main():
         render_statistical_testing_view()
     elif current_view == "Summarisation":
         render_summarisation_view()
+    elif current_view == "Quiz Creation":
+        render_quiz_creation_view()
     else:
         st.write("Select a module from the sidebar.")
 
