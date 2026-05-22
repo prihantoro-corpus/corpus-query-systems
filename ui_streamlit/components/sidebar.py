@@ -157,18 +157,7 @@ def render_sidebar():
         if not built_in_corpora:
             st.warning("No corpora found in local 'corpora' directory.")
         else:
-            selected_names = st.sidebar.multiselect(
-                "Select Corpus (one or more)", 
-                list(built_in_corpora.keys()),
-                default=[]
-            )
-            
-            # Show info for first selected corpus
-            if selected_names:
-                detail = BUILT_IN_CORPUS_DETAILS.get(selected_names[0])
-                if detail:
-                    with st.sidebar.expander("ℹ️ Corpus Info"):
-                        st.markdown(detail, unsafe_allow_html=True)
+            selected_names = st.session_state.get("builtin_selected_names", [])
 
             if st.sidebar.button("Load Built-in", disabled=not selected_names):
                 # Force reload of parser logic to pick up hotfixes
@@ -241,6 +230,19 @@ def render_sidebar():
                         st.success("Built-in Corpus Loaded!")
                         st.rerun()
 
+            selected_names = st.sidebar.multiselect(
+                "Select Corpus (one or more)", 
+                list(built_in_corpora.keys()),
+                key="builtin_selected_names"
+            )
+            
+            # Show info for first selected corpus
+            if selected_names:
+                detail = BUILT_IN_CORPUS_DETAILS.get(selected_names[0])
+                if detail:
+                    with st.sidebar.expander("ℹ️ Corpus Info"):
+                        st.markdown(detail, unsafe_allow_html=True)
+
     # 3. Current Status Info
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Active Corpus")
@@ -300,6 +302,126 @@ def render_sidebar():
             
             if o_url != get_state('ollama_url'): set_state('ollama_url', o_url)
             if o_model != get_state('ai_model'): set_state('ai_model', o_model)
+
+            # Initialize install states
+            if 'ollama_install_step' not in st.session_state:
+                st.session_state['ollama_install_step'] = None
+            if 'ollama_download_thread' not in st.session_state:
+                st.session_state['ollama_download_thread'] = None
+
+            # Force reload the installer utility module to prevent Streamlit module caching issues
+            import sys
+            import importlib
+            if 'core.utils.installer' in sys.modules:
+                try:
+                    importlib.reload(sys.modules['core.utils.installer'])
+                except Exception:
+                    pass
+
+            st.markdown("---")
+            st.markdown("**Local AI Installer**")
+
+            # Show installation status messages if any
+            if 'ollama_install_message' in st.session_state and st.session_state['ollama_install_message']:
+                msg_type, msg_text = st.session_state['ollama_install_message']
+                if msg_type == "info":
+                    st.info(msg_text)
+                elif msg_type == "error":
+                    st.error(msg_text)
+                st.session_state['ollama_install_message'] = None
+
+            # Step 1: Initial state
+            if st.session_state['ollama_install_step'] is None:
+                if st.button("Get Ollama (One-Click)", key="sidebar_install_ollama_btn"):
+                    st.session_state['ollama_install_step'] = "confirm"
+                    st.rerun()
+
+            # Step 2: Confirmation state
+            elif st.session_state['ollama_install_step'] == "confirm":
+                st.warning("This will consume 3 GB of your hard drive (including models). Continue?")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Yes, Continue", key="confirm_yes"):
+                        from core.utils.installer import get_ollama_download_url, OllamaDownloadThread, is_ollama_installed
+                        import tempfile
+                        import platform
+                        
+                        if is_ollama_installed():
+                            st.session_state['ollama_install_message'] = ("info", "Ollama is already installed on your system!")
+                            st.session_state['ollama_install_step'] = None
+                            st.rerun()
+                        
+                        url, ext = get_ollama_download_url()
+                        if url:
+                            temp_dir = tempfile.gettempdir()
+                            dest_path = os.path.join(temp_dir, f"OllamaSetup{ext}")
+                            
+                            # Start background thread
+                            thread = OllamaDownloadThread(url, dest_path)
+                            thread.start()
+                            
+                            st.session_state['ollama_download_thread'] = thread
+                            st.session_state['ollama_install_step'] = "downloading"
+                        else:
+                            st.error(f"Unsupported platform: {platform.system()}. Please install manually from https://ollama.com")
+                            st.session_state['ollama_install_step'] = None
+                        st.rerun()
+                with col2:
+                    if st.button("No, Cancel", key="confirm_no"):
+                        st.session_state['ollama_install_step'] = None
+                        st.rerun()
+
+            # Step 3: Downloading state
+            elif st.session_state['ollama_install_step'] == "downloading":
+                thread = st.session_state['ollama_download_thread']
+                if thread is not None:
+                    # Show progress bar and status
+                    progress_bar = st.progress(thread.progress)
+                    st.caption(thread.status)
+                    
+                    # Show Cancel button
+                    if st.button("Cancel Download", key="cancel_download_btn"):
+                        thread.cancelled = True
+                        st.session_state['ollama_install_step'] = "cancelled"
+                        st.rerun()
+                    
+                    # If thread finished
+                    if not thread.is_alive():
+                        if thread.completed:
+                            from core.utils.installer import run_ollama_installer
+                            success, run_err = run_ollama_installer(thread.dest_path)
+                            if success:
+                                st.success("Installer launched!")
+                                if run_err:
+                                    st.info(run_err)
+                                else:
+                                    st.info("Please follow the setup wizard. Once installed, start the Ollama application and click 'Check Local AI Status' above.")
+                            else:
+                                st.error(run_err)
+                            st.session_state['ollama_install_step'] = None
+                            st.session_state['ollama_download_thread'] = None
+                        elif thread.error:
+                            st.error(f"Download failed: {thread.error}")
+                            st.session_state['ollama_install_step'] = None
+                            st.session_state['ollama_download_thread'] = None
+                        st.rerun()
+                    else:
+                        # Rerun to update progress bar
+                        import time
+                        time.sleep(0.5)
+                        st.rerun()
+                else:
+                    st.session_state['ollama_install_step'] = None
+                    st.rerun()
+
+            # Step 4: Cancelled cleanup state
+            elif st.session_state['ollama_install_step'] == "cancelled":
+                st.info("Download cancelled. Cleaned up temporary files.")
+                st.session_state['ollama_install_step'] = None
+                st.session_state['ollama_download_thread'] = None
+                st.rerun()
+
+
 
     st.sidebar.markdown("---")
     
