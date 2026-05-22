@@ -157,7 +157,18 @@ def render_sidebar():
         if not built_in_corpora:
             st.warning("No corpora found in local 'corpora' directory.")
         else:
-            selected_names = st.session_state.get("builtin_selected_names", [])
+            st.sidebar.markdown("**Select Corpus (one or more):**")
+            selected_names = []
+            for name in list(built_in_corpora.keys()):
+                if st.sidebar.checkbox(name, key=f"builtin_cb_{name}"):
+                    selected_names.append(name)
+            
+            # Show info for first selected corpus
+            if selected_names:
+                detail = BUILT_IN_CORPUS_DETAILS.get(selected_names[0])
+                if detail:
+                    with st.sidebar.expander("ℹ️ Corpus Info"):
+                        st.markdown(detail, unsafe_allow_html=True)
 
             if st.sidebar.button("Load Built-in", disabled=not selected_names):
                 # Force reload of parser logic to pick up hotfixes
@@ -230,18 +241,6 @@ def render_sidebar():
                         st.success("Built-in Corpus Loaded!")
                         st.rerun()
 
-            selected_names = st.sidebar.multiselect(
-                "Select Corpus (one or more)", 
-                list(built_in_corpora.keys()),
-                key="builtin_selected_names"
-            )
-            
-            # Show info for first selected corpus
-            if selected_names:
-                detail = BUILT_IN_CORPUS_DETAILS.get(selected_names[0])
-                if detail:
-                    with st.sidebar.expander("ℹ️ Corpus Info"):
-                        st.markdown(detail, unsafe_allow_html=True)
 
     # 3. Current Status Info
     st.sidebar.markdown("---")
