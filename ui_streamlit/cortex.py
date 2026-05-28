@@ -238,6 +238,8 @@ from core.visualiser.styles import POS_COLOR_MAP
 
 # Main Layout
 def main():
+    import ui_streamlit.components.sidebar
+
     st.markdown(
         """
         <div style="text-align: right; margin-bottom: 0.5rem;">
@@ -280,6 +282,8 @@ def main():
         render_quiz_creation_view()
     else:
         st.write("Select a module from the sidebar.")
+
+    st.markdown("---")
 
 if __name__ == "__main__":
     main()

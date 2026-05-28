@@ -45,7 +45,8 @@ def apply_smart_filter(df, col_name, filter_str):
 
 def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, mi_min_freq, max_collocates, is_raw_mode, 
                                  token_filter="", pos_filter="", lemma_filter="",
-                                 corpus_stats=None, xml_where_clause="", xml_params=[]):
+                                 corpus_stats=None, xml_where_clause="", xml_params=[],
+                                 stat_measure="log-likelihood"):
     """
     Generalized function to run collocation analysis using DuckDB.
     Returns: (stats_df_sorted, freq, primary_target_mwu)
@@ -340,9 +341,13 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
 
             ll_vec = 2 * (safe_ll_term(k11, E11) + safe_ll_term(k12, E12) + safe_ll_term(k21, E21) + safe_ll_term(k22, E22))
             mi_vec = np.log2(k11 / E11)
+            dice_vec = (2 * k11) / (freq + stats_df['Total_Freq'])
+            log_dice_vec = 14 + np.log2(dice_vec)
 
         stats_df['LL'] = np.nan_to_num(ll_vec).round(6)
         stats_df['MI'] = np.where((k11 > 0) & (E11 > 0), mi_vec, 0.0).round(6)
+        stats_df['Dice'] = np.nan_to_num(dice_vec).round(6)
+        stats_df['Log-Dice'] = np.where(dice_vec > 0, np.nan_to_num(log_dice_vec), 0.0).round(6)
 
         stats_df['Direction'] = np.where(stats_df['Obs_R'] > stats_df['Obs_L'], 'R', 
                                 np.where(stats_df['Obs_L'] > stats_df['Obs_R'], 'L', 'B'))
@@ -357,7 +362,20 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
         if stats_df.empty:
             return (pd.DataFrame(), freq, raw_target_input)
             
-        stats_df_sorted = stats_df.sort_values("LL", ascending=False)
+        # Determine sorting column based on selected measure
+        measure_lower = stat_measure.lower()
+        if "log-likelihood" in measure_lower:
+            sort_col = "LL"
+        elif "log-dice" in measure_lower:
+            sort_col = "Log-Dice"
+        elif "dice coefficient" in measure_lower or measure_lower == "dice":
+            sort_col = "Dice"
+        elif "mutual information" in measure_lower or measure_lower == "mi":
+            sort_col = "MI"
+        else:
+            sort_col = "LL"
+
+        stats_df_sorted = stats_df.sort_values(sort_col, ascending=False)
         if max_collocates > 0:
             stats_df_sorted = stats_df_sorted.head(int(max_collocates))
         

@@ -32,9 +32,10 @@ REFERENTIAL_ITEMS = {
     'this', 'that', 'these', 'those'
 }
 
-def get_corpus_sentences(db_path):
+def get_corpus_sentences(db_path, xml_where_clause="", xml_params=[]):
     """
     Retrieves all tokens from the corpus database and groups them into sentences.
+    Supports filtering by XML attributes / difficulty levels.
     Returns a list of dicts: [{'sent_id': int, 'filename': str, 'tokens': [str], 'pos': [str], 'lemmas': [str]}]
     """
     try:
@@ -45,8 +46,31 @@ def get_corpus_sentences(db_path):
             con.close()
             return []
         
-        # Order by token ID to ensure we preserve the sequence
-        rows = con.execute("SELECT id, token, pos, lemma, sent_id, filename FROM corpus ORDER BY id").fetchall()
+        if xml_where_clause:
+            # Select matching (filename, sent_id) pairs
+            query_sents = f"""
+                SELECT DISTINCT filename, sent_id 
+                FROM corpus 
+                WHERE 1=1 {xml_where_clause}
+            """
+            matching_sents = con.execute(query_sents, xml_params).fetchall()
+            if not matching_sents:
+                con.close()
+                return []
+                
+            # Query all tokens for the matching sentences using a join
+            matching_df = pd.DataFrame(matching_sents, columns=['filename', 'sent_id'])
+            con.register('matching_df', matching_df)
+            rows = con.execute("""
+                SELECT c.id, c.token, c.pos, c.lemma, c.sent_id, c.filename 
+                FROM corpus c
+                JOIN matching_df m ON c.filename = m.filename AND c.sent_id = m.sent_id
+                ORDER BY c.id
+            """).fetchall()
+            con.unregister('matching_df')
+        else:
+            # Order by token ID to ensure we preserve the sequence
+            rows = con.execute("SELECT id, token, pos, lemma, sent_id, filename FROM corpus ORDER BY id").fetchall()
         con.close()
     except Exception as e:
         print(f"Error fetching corpus tokens: {e}")
@@ -718,8 +742,8 @@ def generate_section_c(sentences, used_texts, num_questions=5):
 # SECTION D — MULTIWORD EXPRESSION QUESTION GENERATOR
 # =====================================================================
 
-def extract_collocations(db_path):
-    """Runs high-performance POS-based collocation query on DuckDB database."""
+def extract_collocations(db_path, xml_where_clause="", xml_params=[]):
+    """Runs high-performance POS-based collocation query on DuckDB database with optional filters."""
     try:
         con = duckdb.connect(db_path, read_only=True)
         # Verify POS tags in database to check if they are verticalised empty placeholders or filled
@@ -728,7 +752,10 @@ def extract_collocations(db_path):
         
         if pos_is_empty:
             # POS tagging is not available, we'll fall back to simple bigram collocation extraction
-            query = """
+            query = f"""
+            WITH filtered_corpus AS (
+                SELECT * FROM corpus WHERE 1=1 {xml_where_clause}
+            )
             SELECT 
                 c1.token AS t1, 
                 c2.token AS t2, 
@@ -737,8 +764,8 @@ def extract_collocations(db_path):
                 c1.lemma AS l1, 
                 c2.lemma AS l2,
                 COUNT(*) AS freq
-            FROM corpus c1
-            JOIN corpus c2 ON c1.id = c2.id - 1 AND c1.sent_id = c2.sent_id
+            FROM filtered_corpus c1
+            JOIN filtered_corpus c2 ON c1.id = c2.id - 1 AND c1.sent_id = c2.sent_id
             WHERE length(c1.token) > 2 AND length(c2.token) > 2
             AND c1._token_low NOT IN ('the', 'and', 'for', 'but', 'you', 'that', 'with', 'this', 'have', 'was', 'were')
             AND c2._token_low NOT IN ('the', 'and', 'for', 'but', 'you', 'that', 'with', 'this', 'have', 'was', 'were')
@@ -747,7 +774,10 @@ def extract_collocations(db_path):
             LIMIT 100
             """
         else:
-            query = """
+            query = f"""
+            WITH filtered_corpus AS (
+                SELECT * FROM corpus WHERE 1=1 {xml_where_clause}
+            )
             SELECT 
                 c1.token AS t1, 
                 c2.token AS t2, 
@@ -756,8 +786,8 @@ def extract_collocations(db_path):
                 c1.lemma AS l1, 
                 c2.lemma AS l2,
                 COUNT(*) AS freq
-            FROM corpus c1
-            JOIN corpus c2 ON c1.id = c2.id - 1 AND c1.sent_id = c2.sent_id
+            FROM filtered_corpus c1
+            JOIN filtered_corpus c2 ON c1.id = c2.id - 1 AND c1.sent_id = c2.sent_id
             WHERE (
                 -- Verb + Prep
                 ((c1.pos LIKE 'V%' OR c1.pos = 'VERB') AND (c2.pos IN ('IN', 'TO', 'ADP'))) OR
@@ -776,7 +806,7 @@ def extract_collocations(db_path):
             ORDER BY freq DESC
             LIMIT 100
             """
-        df_colls = con.execute(query).fetch_df()
+        df_colls = con.execute(query, xml_params).fetch_df()
         con.close()
         return df_colls
     except Exception as e:
@@ -791,12 +821,12 @@ def is_capitalized(word):
         return False
     return w_str[0].isupper()
 
-def generate_section_d(db_path, sentences, used_texts, num_questions=5):
+def generate_section_d(db_path, sentences, used_texts, num_questions=5, xml_where_clause="", xml_params=[]):
     """
     Generates Section D (Multiword Expression Questions).
     5 open-ended questions based on extracted collocations.
     """
-    df_colls = extract_collocations(db_path)
+    df_colls = extract_collocations(db_path, xml_where_clause=xml_where_clause, xml_params=xml_params)
     
     if not df_colls.empty:
         # Filter out proper names / capitalized words:
@@ -1046,16 +1076,19 @@ def generate_section_e(sentences, used_texts, num_questions=5):
 # FULL AUTOMATIC OFFLINE QUIZ ENGINE
 # =====================================================================
 
-def generate_full_quiz(db_path):
+def generate_full_quiz(db_path, xml_where_clause="", xml_params=[]):
     """
     Generates a full corpus-driven offline language quiz.
+    Supports filtering by XML attributes / difficulty levels.
     Returns: dict of all sections and details.
     """
-    sentences = get_corpus_sentences(db_path)
+    sentences = get_corpus_sentences(db_path, xml_where_clause, xml_params)
     if not sentences or len(sentences) < 30:
+        filter_msg = " matching the selected restrictions" if xml_where_clause else ""
+        num_sents = len(sentences) if sentences else 0
         return {
             'success': False,
-            'error': "The loaded corpus is too small or empty. Please load a larger corpus (at least 30 sentences) to automatically generate quizzes."
+            'error': f"The selected sub-corpus has only {num_sents} sentences{filter_msg}. Please select a larger sub-corpus or adjust your filters (at least 30 sentences are required) to automatically generate quizzes."
         }
         
     # Track used sentences to avoid overlaps between sections
@@ -1078,7 +1111,7 @@ def generate_full_quiz(db_path):
         used_texts.add(q['original_sentence'])
         
     # 4. Section D (Multiword Expressions)
-    section_d = generate_section_d(db_path, sentences, used_texts, num_questions=5)
+    section_d = generate_section_d(db_path, sentences, used_texts, num_questions=5, xml_where_clause=xml_where_clause, xml_params=xml_params)
     for q in section_d:
         used_texts.add(q['original_sentence'])
         
