@@ -42,13 +42,14 @@ def cached_generate_kwic(db_path, query, left, right, corpus_name, **kwargs):
 
 @st.cache_data(show_spinner="Generating Collocations...")
 def cached_generate_collocation(db_path, word, window, min_freq, max_rows, is_raw, corpus_stats, 
-                               token_filter="", pos_filter="", lemma_filter="", **kwargs):
+                               token_filter="", pos_filter="", lemma_filter="", stat_measure="log-likelihood", **kwargs):
     return generate_collocation_results(
         db_path, word, window, min_freq, max_rows, is_raw, 
         token_filter=token_filter, 
         pos_filter=pos_filter, 
         lemma_filter=lemma_filter, 
         corpus_stats=corpus_stats, 
+        stat_measure=stat_measure,
         **kwargs
     )
 

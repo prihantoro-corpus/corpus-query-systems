@@ -1,6 +1,12 @@
 import streamlit as st
 import datetime
+import importlib
 from ui_streamlit.state_manager import get_state, set_state
+from ui_streamlit.components.filters import render_xml_restriction_filters
+from core.preprocessing.xml_parser import apply_xml_restrictions
+
+import core.modules.quiz_creation
+importlib.reload(core.modules.quiz_creation)
 from core.modules.quiz_creation import (
     generate_full_quiz,
     get_corpus_sentences,
@@ -94,6 +100,10 @@ def render_quiz_creation_view():
             </div>
         """, unsafe_allow_html=True)
 
+        # Render XML restriction filters
+        xml_filters = render_xml_restriction_filters(db_path, "quiz", corpus_name=corpus_name)
+        xml_where, xml_params = apply_xml_restrictions(xml_filters)
+
         col_ctrls, col_preview = st.columns([1, 3])
 
         with col_ctrls:
@@ -102,8 +112,9 @@ def render_quiz_creation_view():
             # Action: Generate Quiz
             if st.button("🚀 Generate Quiz", type="primary", use_container_width=True):
                 with st.spinner("Analyzing corpus & generating 20 items..."):
-                    quiz = generate_full_quiz(db_path)
+                    quiz = generate_full_quiz(db_path, xml_where_clause=xml_where, xml_params=xml_params)
                     if quiz.get('success'):
+                        quiz['xml_filters'] = xml_filters
                         set_state(quiz_key, quiz)
                         st.success("Quiz generated successfully!")
                         st.rerun()
@@ -121,7 +132,7 @@ def render_quiz_creation_view():
                 
                 if st.button("Regenerate Section", use_container_width=True):
                     with st.spinner(f"Regenerating {section_to_regen}..."):
-                        sentences = get_corpus_sentences(db_path)
+                        sentences = get_corpus_sentences(db_path, xml_where_clause=xml_where, xml_params=xml_params)
                         
                         if section_to_regen.startswith("Section A"):
                             section_a = generate_section_a(sentences, num_passages=2)
@@ -170,7 +181,10 @@ def render_quiz_creation_view():
                             for q in generated_quiz.get('section_c', []):
                                 used_texts.add(q['original_sentence'])
                                 
-                            section_d = generate_section_d(db_path, sentences, used_texts, num_questions=5)
+                            section_d = generate_section_d(
+                                db_path, sentences, used_texts, num_questions=5,
+                                xml_where_clause=xml_where, xml_params=xml_params
+                            )
                             if section_d:
                                 generated_quiz['section_d'] = section_d
                                 set_state(quiz_key, generated_quiz)
@@ -223,6 +237,19 @@ def render_quiz_creation_view():
                 """, unsafe_allow_html=True)
             else:
                 st.markdown("### 📝 Interactive Quiz Preview")
+                
+                # Active filters descriptor
+                active_filters_desc = []
+                q_filters = generated_quiz.get('xml_filters')
+                if q_filters:
+                    for k, v in q_filters.items():
+                        if v['type'] == 'list':
+                            active_filters_desc.append(f"**{k.capitalize()}**: {', '.join(v['values'])}")
+                        elif v['type'] == 'range':
+                            active_filters_desc.append(f"**{k.capitalize()}**: {v['min']} - {v['max']}")
+                
+                if active_filters_desc:
+                    st.info(f"💡 **Sub-corpus filters applied:** {'; '.join(active_filters_desc)}")
                 
                 # Render Section A
                 with st.expander("📌 SECTION A — Discourse Completion (10 items)", expanded=True):

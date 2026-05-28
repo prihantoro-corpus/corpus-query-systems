@@ -191,5 +191,31 @@ class TestQuizCreation(unittest.TestCase):
         self.assertIsNotNone(ak_io)
         self.assertTrue(len(ak_io.getvalue()) > 0)
 
+    def test_generate_full_quiz_restricted(self):
+        con = duckdb.connect(self.db_path)
+        try:
+            con.execute("ALTER TABLE corpus ADD COLUMN reading_ease_level VARCHAR")
+        except:
+            pass
+            
+        try:
+            # Update 30 sentences to have level = 'Easy'
+            con.execute("UPDATE corpus SET reading_ease_level = 'Easy' WHERE sent_id <= 30")
+            # Update the other 10 sentences to have level = 'Difficult'
+            con.execute("UPDATE corpus SET reading_ease_level = 'Difficult' WHERE sent_id > 30")
+        finally:
+            con.close()
+            
+        # Test 1: Generate quiz restricted to 'Easy' level (should succeed since we have 30 sentences)
+        quiz_easy = generate_full_quiz(self.db_path, xml_where_clause=" AND reading_ease_level = ?", xml_params=["Easy"])
+        self.assertTrue(quiz_easy['success'])
+        self.assertEqual(len(quiz_easy['section_a']), 2)
+        
+        # Test 2: Generate quiz restricted to 'Difficult' level (should fail because there are only 10 sentences)
+        quiz_diff = generate_full_quiz(self.db_path, xml_where_clause=" AND reading_ease_level = ?", xml_params=["Difficult"])
+        self.assertFalse(quiz_diff['success'])
+        self.assertIn("at least 30 sentences are required", quiz_diff['error'])
+        self.assertIn("only 10 sentences", quiz_diff['error'])
+
 if __name__ == '__main__':
     unittest.main()

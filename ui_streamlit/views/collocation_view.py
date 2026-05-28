@@ -102,7 +102,8 @@ def render_collocation_view():
                         params.get('pos_filter', ''), 
                         params.get('lemma_filter', ''),
                         '', 
-                        50
+                        50,
+                        stat_measure=get_state('coll_stat_measure', 'Log-Likelihood')
                     )
                 else:
                     st.error(f"Failed to parse query: {err}")
@@ -123,6 +124,7 @@ def render_collocation_view():
                     min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq_rule")
                  with c_sub2:
                     max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max_rule")
+                 st.selectbox("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, key="coll_stat_measure_rule")
             
             st.markdown("---")
             f_col1, f_col2, f_col3 = st.columns(3)
@@ -162,6 +164,7 @@ def render_collocation_view():
                     min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq")
                  with c_sub2:
                     max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max", help="Increase this limit to download more results (up to 50,000).")
+                 st.selectbox("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, key="coll_stat_measure")
             
             st.markdown("---")
             f_col1, f_col2, f_col3 = st.columns(3)
@@ -330,7 +333,8 @@ def render_collocation_view():
                 run_collocation_query(
                     'primary', corpus_path, to_run_node, to_run_win, to_run_min_freq, to_run_max, 
                     corpus_stats, xml_where, xml_params, to_run_tok, to_run_pos, to_run_lem,
-                    pattern_text if apply_patterns else '', pattern_limit
+                    pattern_text if apply_patterns else '', pattern_limit,
+                    stat_measure=get_state('coll_stat_measure', 'Log-Likelihood') if search_mode == "Standard" else get_state('coll_stat_measure_rule', 'Log-Likelihood')
                 )
     else:
         if st.button("Calculate Comparison Collocations", type="primary"):
@@ -402,12 +406,15 @@ def render_collocation_view():
                 apply_patterns = get_state('coll_apply_patterns', False)
                 pattern_limit = get_state('coll_pattern_limit', 50)
                 
+                stat_measure = get_state('coll_stat_measure', 'Log-Likelihood') if search_mode == "Standard" else get_state('coll_stat_measure_rule', 'Log-Likelihood')
+                
                 # Run Primary
                 if to_run_node_1:
                     run_collocation_query(
                         'primary', corpus_path, to_run_node_1, to_run_win, to_run_min_freq, to_run_max, 
                         corpus_stats, xml_where_1, xml_params_1, to_run_tok, to_run_pos, to_run_lem,
-                        pattern_text if apply_patterns else '', pattern_limit
+                        pattern_text if apply_patterns else '', pattern_limit,
+                        stat_measure=stat_measure
                     )
                 else:
                      st.warning("Primary node word missing.")
@@ -418,7 +425,8 @@ def render_collocation_view():
                     run_collocation_query(
                         'secondary', comp_path, to_run_node_2, to_run_win, to_run_min_freq, to_run_max, 
                         comp_stats, xml_where_2, xml_params_2, to_run_tok, to_run_pos, to_run_lem,
-                        pattern_text if apply_patterns else '', pattern_limit
+                        pattern_text if apply_patterns else '', pattern_limit,
+                        stat_measure=stat_measure
                     )
                 elif comp_path and not to_run_node_2:
                     st.warning("Comparison node word missing.")
@@ -494,7 +502,8 @@ def render_collocation_view():
                                         comp_name)
 
 def run_collocation_query(identifier, path, word, window, min_freq, max_rows, stats, xml_where, xml_params, 
-                          token_filter="", pos_filter="", lemma_filter="", pattern_text="", pattern_limit=50):
+                          token_filter="", pos_filter="", lemma_filter="", pattern_text="", pattern_limit=50,
+                          stat_measure="Log-Likelihood"):
     with st.spinner(f"Computing collocations..."):
         stats_df, freq, node_mwu = cached_generate_collocation(
             db_path=path,
@@ -508,7 +517,8 @@ def run_collocation_query(identifier, path, word, window, min_freq, max_rows, st
             xml_params=xml_params,
             token_filter=token_filter,
             pos_filter=pos_filter,
-            lemma_filter=lemma_filter
+            lemma_filter=lemma_filter,
+            stat_measure=stat_measure
         )
         st.session_state[f'last_coll_results_{identifier}'] = {
             'df': stats_df,
@@ -517,7 +527,8 @@ def run_collocation_query(identifier, path, word, window, min_freq, max_rows, st
             'window': window,
             'corpus_name': identifier,
             'xml_where': xml_where,
-            'xml_params': xml_params
+            'xml_params': xml_params,
+            'stat_measure': stat_measure
         }
         
         # Apply pattern matching if requested
@@ -568,9 +579,10 @@ def render_collocation_results_column(results, key_suffix=""):
      n_freq = results['freq']
      node = results['node']
      win = results['window']
+     stat_measure = results.get('stat_measure', 'Log-Likelihood')
      
      if not df.empty:
-         st.markdown(f"**{len(df)} collocates** for '{node}' (Freq: {n_freq}) within ±{win}).")
+         st.markdown(f"**{len(df)} collocates** for '{node}' (Freq: {n_freq}) within ±{win}, sorted by **{stat_measure}**.")
          
          st.download_button(
              label=f"⬇ Download {results.get('corpus_name', 'Corpus')} Collocations (Excel)",
@@ -580,7 +592,7 @@ def render_collocation_results_column(results, key_suffix=""):
              key=f"dl_coll_{key_suffix}_top"
          )
          
-         tab_table, tab_charts, tab_graph = st.tabs(["Table", "Charts (LL)", "Network Graph"])
+         tab_table, tab_charts, tab_graph = st.tabs(["Table", f"Charts ({stat_measure})", "Network Graph"])
          with tab_table:
              df_display = df.reset_index(drop=True)
              df_display.index += 1
@@ -590,23 +602,31 @@ def render_collocation_results_column(results, key_suffix=""):
              import matplotlib.pyplot as plt
              c1, c2, c3 = st.columns(3)
              
-             def plot_top_ll(data, title, color):
+             measure_col_map = {
+                 "Log-Likelihood": "LL",
+                 "Log-Dice": "Log-Dice",
+                 "Dice Coefficient": "Dice",
+                 "Mutual Information": "MI"
+             }
+             y_col = measure_col_map.get(stat_measure, "LL")
+             
+             def plot_top_measure(data, title, color):
                  if data.empty:
                      st.info(f"No {title} data.")
                      return
                  fig, ax = plt.subplots(figsize=(5, 4))
-                 top = data.head(10).sort_values("LL", ascending=True)
-                 ax.barh(top['Collocate'], top['LL'], color=color)
-                 ax.set_title(title)
+                 top = data.head(10).sort_values(y_col, ascending=True)
+                 ax.barh(top['Collocate'], top[y_col], color=color)
+                 ax.set_title(f"{title} ({stat_measure})")
                  plt.tight_layout()
                  st.pyplot(fig)
 
              with c1:
-                 plot_top_ll(df, "Overall Top Collocates", "skyblue")
+                 plot_top_measure(df, "Overall Top Collocates", "skyblue")
              with c2:
-                 plot_top_ll(df[df['Direction'].isin(['L', 'B'])], "Left-Dominant", "salmon")
+                 plot_top_measure(df[df['Direction'].isin(['L', 'B'])], "Left-Dominant", "salmon")
              with c3:
-                 plot_top_ll(df[df['Direction'].isin(['R', 'B'])], "Right-Dominant", "lightgreen")
+                 plot_top_measure(df[df['Direction'].isin(['R', 'B'])], "Right-Dominant", "lightgreen")
              
          with tab_graph:
              g_all, g_left, g_right = st.columns(3)

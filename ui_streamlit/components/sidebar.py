@@ -43,8 +43,23 @@ def render_sidebar():
         st.rerun()
         
     # Corpus Source
-    source_type = st.sidebar.selectbox("Source", ["Upload Files", "Built-in Corpora", "Online Corpus"])
-    set_state('source_type', source_type)
+    source_options = ["Upload Files", "Built-in Corpora", "Online Corpus"]
+    saved_source = get_state('source_type', "Upload Files")
+    try:
+        source_index = source_options.index(saved_source)
+    except ValueError:
+        source_index = 0
+
+    source_type = st.sidebar.selectbox(
+        "Source", 
+        source_options,
+        index=source_index,
+        key="sidebar_source_selectbox"
+    )
+    
+    if source_type != saved_source:
+        set_state('source_type', source_type)
+        st.rerun()
     
     if source_type == "Online Corpus":
         online_mode = st.sidebar.radio("Builder Mode", ["YouTube", "Link Collection", "Keyword Search"])
@@ -67,7 +82,12 @@ def render_sidebar():
         with lang_col:
             # Prepare language list. Add 'OTHER' at the end.
             lang_options = list(STANZA_LANG_MAP.keys()) + ["OTHER"]
-            selected_lang_label = st.selectbox("Language", lang_options, index=0)
+            selected_lang_label = st.selectbox(
+                "Language", 
+                lang_options, 
+                index=0,
+                key="upload_language_select"
+            )
             
             # Map label to code for processing
             if selected_lang_label == "OTHER":
@@ -76,7 +96,12 @@ def render_sidebar():
                 lang_code = STANZA_LANG_MAP[selected_lang_label]
                 
         with fmt_col:
-            fmt = st.selectbox("Format", ["Raw (Natural text)", "Tagged (Vertical)"], index=0)
+            fmt = st.selectbox(
+                "Format", 
+                ["Raw (Natural text)", "Tagged (Vertical)"], 
+                index=0,
+                key="upload_format_select"
+            )
         
         btn_label = "Process Downloaded Files" if source_type == "Online Corpus" else "Process Uploaded Files"
         files_to_process = uploaded_files
@@ -155,13 +180,18 @@ def render_sidebar():
         built_in_corpora = get_available_corpora()
         
         if not built_in_corpora:
-            st.warning("No corpora found in local 'corpora' directory.")
-        else:
-            st.sidebar.markdown("**Select Corpus (one or more):**")
+            st.sidebar.warning("No corpora found in local 'corpora' directory.")
             selected_names = []
-            for name in list(built_in_corpora.keys()):
-                if st.sidebar.checkbox(name, key=f"builtin_cb_{name}"):
-                    selected_names.append(name)
+        else:
+            selected_corpus = st.sidebar.selectbox(
+                "Select Corpus",
+                options=["Select a corpus..."] + list(built_in_corpora.keys()),
+                index=0,
+                key="builtin_selected_corpus"
+            )
+            selected_names = []
+            if selected_corpus and selected_corpus != "Select a corpus...":
+                selected_names = [selected_corpus]
             
             # Show info for first selected corpus
             if selected_names:

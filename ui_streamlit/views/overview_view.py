@@ -17,6 +17,17 @@ from core.modules.classification import (
     apply_classification_by_sentence,
     BERTOPIC_AVAILABLE
 )
+import core.modules.readability as rd
+import importlib
+importlib.reload(rd)
+
+get_sentence_stats = rd.get_sentence_stats
+compute_readability_metrics = rd.compute_readability_metrics
+apply_reading_ease_annotation = rd.apply_reading_ease_annotation
+annotate_reading_ease_by_chunks = rd.annotate_reading_ease_by_chunks
+get_chunk_readability_stats = rd.get_chunk_readability_stats
+calculate_formulas = rd.calculate_formulas
+map_score_to_level = rd.map_score_to_level
 
 # Standard Language Mapping
 LANG_MAP = {
@@ -160,12 +171,12 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     # Show classification for ALL languages now (via Translation)
     show_classification = True
     
-    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic"]
+    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "📖 Reading Ease"]
     
     tabs = st.tabs(tabs_list)
     
     # Unpack tabs
-    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls = tabs
+    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls, tab_re = tabs
         
     with tab1:
         if error: st.error(error)
@@ -203,6 +214,9 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
         with tab_cls:
             _render_classification_tab(path, key_suffix)
 
+    with tab_re:
+        _render_reading_ease_tab(path, key_suffix)
+
 def render_full_overview(name, path, stats, structure, error):
     # --- XML Restriction Filters ---
     xml_filters = render_xml_restriction_filters(path, "overview_full")
@@ -228,10 +242,10 @@ def render_full_overview(name, path, stats, structure, error):
     current_lang = ov.get_corpus_language(path)
     show_classification = True
     
-    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis"]
+    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "📖 Reading Ease"]
 
     tabs = st.tabs(tabs_list)
-    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls = tabs
+    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls, tab_re = tabs
     
     with tab1:
         if error: st.error(error)
@@ -301,6 +315,9 @@ def render_full_overview(name, path, stats, structure, error):
     if tab_cls:
         with tab_cls:
             _render_classification_tab(path, "full")
+
+    with tab_re:
+        _render_reading_ease_tab(path, "full")
 
     st.markdown("---")
     if st.button("🧠 Interpret Corpus Overview (LLM)", key="llm_overview_btn"):
@@ -1240,4 +1257,220 @@ def _render_metadata_annotation_tab(db_path, key_suffix):
                                         st.error("Failed to save.")
                 else:
                     st.info("No segmental metadata found for this file.")
+
+def _render_reading_ease_tab(db_path, key_suffix=""):
+    import duckdb
+    import pandas as pd
+    
+    st.subheader("📖 Reading Ease Analysis")
+    
+    # 1. Language Warning
+    curr_lang = ov.get_corpus_language(db_path)
+    if curr_lang and curr_lang.lower() not in ['en', 'english']:
+        st.warning("⚠️ **Non-English Language Warning:** Readability formulas are designed and calibrated for English. For other languages, they serve as structural estimations (based on word, sentence, character, and syllable ratios) but do not strictly correspond to standard English school grades.")
+    
+    # 2. Clickable Transparency Link/Popover
+    st.markdown("For full transparency on how readability metrics are calculated and categorized:")
+    with st.expander("🔍 Click here to view mathematical formulas and difficulty classification mapping", expanded=False):
+        st.markdown("""
+        ### Readability Metrics & Classification Transparency
+        
+        #### 1. Flesch-Kincaid Grade Level
+        Calculates U.S. school grade level difficulty.
+        * **Formula**: `0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59`
+        * **Interpretation**: Represents the educational grade level required to understand the text (e.g. 6 = 6th grade, 12 = high school senior, 16+ = university level).
+        
+        #### 2. Gunning Fog Index
+        Measures text complexity based on sentence length and complex words.
+        * **Formula**: `0.4 * ((words / sentences) + 100 * (complex_words / words))`
+        * *Complex words* are defined as words containing 3 or more syllables.
+        * **Interpretation**: Under 8 is easy, 8–12 is standard, 12–16 is difficult, and 17+ is very difficult.
+        
+        #### 3. Coleman-Liau Index
+        Measures readability based on character counts and sentence ratios instead of syllables.
+        * **Formula**: `0.0588 * L - 0.296 * S - 15.8`
+        * *L* = average number of letters per 100 words.
+        * *S* = average number of sentences per 100 words.
+        * **Interpretation**: Standard grade level output (e.g. 6 = 6th grade).
+        
+        #### 4. Automated Readability Index (ARI)
+        Calculates grade level based on characters per word and words per sentence.
+        * **Formula**: `4.71 * (characters / words) + 0.5 * (words / sentences) - 21.43`
+        * **Interpretation**: Standard grade level output.
+        
+        #### 5. SMOG Grade
+        Predicts comprehension based on the count of polysyllabic words.
+        * **Formula**: `1.0430 * sqrt(complex_words * 30 / sentences) + 3.1291`
+        * **Interpretation**: Standard grade level output (e.g. 10 = 10th grade).
+        
+        ---
+        
+        ### Unified Difficulty Classification Matrix
+        We calculate all 5 formulas for each sentence, average them, and assign the sentence to one of these 5 discrete brackets:
+        
+        | Bracket Name | Numerical Range (Average Grade Level) | Education / Comprehension Level |
+        | :--- | :--- | :--- |
+        | **1. Very Easy** | 6.0 or less | Elementary School level (up to Grade 6) |
+        | **2. Easy** | from 6.1 to 8.0 | Junior High / Middle School level (Grades 6–8) |
+        | **3. Standard** | from 8.1 to 12.0 | High School level (Grades 8–12) |
+        | **4. Difficult** | from 12.1 to 16.0 | College / University Prep level (Grades 12–16) |
+        | **5. Very Difficult** | greater than 16.0 | Graduate / Professional level (Grades 16+) |
+        """)
+        
+    st.markdown("---")
+    
+    # 3. Perform Calculations
+    with st.spinner("Analyzing readability metrics..."):
+        sentence_df = get_sentence_stats(db_path)
+        
+    if sentence_df.empty:
+        st.info("No valid text data found in the corpus.")
+        return
+        
+    metrics_data = compute_readability_metrics(sentence_df)
+    
+    # 4. Display Overall metrics
+    st.markdown("#### 📊 Overall Corpus Readability")
+    overall = metrics_data['overall']['metrics']
+    
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Flesch-Kincaid", f"{overall['Flesch-Kincaid Grade Level']}")
+    m2.metric("Gunning Fog", f"{overall['Gunning Fog']}")
+    m3.metric("Coleman-Liau", f"{overall['Coleman-Liau']}")
+    m4.metric("ARI", f"{overall['ARI']}")
+    m5.metric("SMOG", f"{overall['SMOG']}")
+    
+    # Combined average and bracket
+    avg_score = round(sum(overall.values()) / len(overall), 2)
+    overall_bracket = map_score_to_level(avg_score)
+    st.info(f"**Overall Corpus Classification:** {overall_bracket} (Average Grade Level: **{avg_score}**)")
+    
+    # 5. Display File-level table
+    st.markdown("#### 📄 Corpus Files Readability")
+    file_rows = []
+    for fname, fmetrics in metrics_data['files'].items():
+        favg = round(sum(fmetrics.values()) / len(fmetrics), 2)
+        fbracket = map_score_to_level(favg)
+        file_rows.append({
+            'Filename': fname,
+            'Flesch-Kincaid': fmetrics['Flesch-Kincaid Grade Level'],
+            'Gunning Fog': fmetrics['Gunning Fog'],
+            'Coleman-Liau': fmetrics['Coleman-Liau'],
+            'ARI': fmetrics['ARI'],
+            'SMOG': fmetrics['SMOG'],
+            'Average GL': favg,
+            'Difficulty Level': fbracket
+        })
+    st.dataframe(pd.DataFrame(file_rows), use_container_width=True, hide_index=True)
+    
+    # 5.1. Chunk-Level Readability Breakdown
+    st.markdown("#### ✂️ Chunk-Level Readability Breakdown")
+    st.caption("Analyze the text in sequential blocks of words. This is useful for single-file corpora to see readability progression and identify difficult passages.")
+    
+    col_ch1, col_ch2 = st.columns([1, 2])
+    with col_ch1:
+        selected_chunk_size = st.selectbox(
+            "Select Chunk Size (Words):",
+            options=[100, 1000, 10000, 100000],
+            index=1, # Default to 1000
+            key=f"chunk_size_select_{key_suffix}"
+        )
+        
+    with st.spinner(f"Analyzing readability per {selected_chunk_size:,} words..."):
+        chunk_stats = get_chunk_readability_stats(db_path, selected_chunk_size)
+        
+    if chunk_stats:
+        chunk_df = pd.DataFrame(chunk_stats)
+        st.dataframe(chunk_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No chunk statistics generated.")
+        
+    # 6. Display Sub-corpora grouping
+    st.markdown("#### 🧱 Sub-corpora Readability")
+    sub_options = list(metrics_data['subcorpora'].keys())
+    
+    if not sub_options:
+        st.info("No sub-corpora attributes (such as Topic, Sentiment, or XML Attributes) detected.")
+    else:
+        selected_sub = st.selectbox(
+            "Select Sub-corpus Grouping Category:",
+            options=sub_options,
+            key=f"sub_readability_select_{key_suffix}"
+        )
+        if selected_sub:
+            sub_rows = []
+            for gval, smetrics in metrics_data['subcorpora'][selected_sub].items():
+                savg = round(sum(smetrics.values()) / len(smetrics), 2)
+                sbracket = map_score_to_level(savg)
+                sub_rows.append({
+                    selected_sub: gval,
+                    'Flesch-Kincaid': smetrics['Flesch-Kincaid Grade Level'],
+                    'Gunning Fog': smetrics['Gunning Fog'],
+                    'Coleman-Liau': smetrics['Coleman-Liau'],
+                    'ARI': smetrics['ARI'],
+                    'SMOG': smetrics['SMOG'],
+                    'Average GL': savg,
+                    'Difficulty Level': sbracket
+                })
+            st.dataframe(pd.DataFrame(sub_rows), use_container_width=True, hide_index=True)
+            
+    # 7. Database Annotation Section
+    st.divider()
+    st.markdown("#### 🚀 Database Readability Annotation")
+    st.caption("Annotate the corpus database with Reading Ease difficulty levels. Once annotated, the levels will appear as sub-corpora, and you can restrict searches to specific difficulty ranges using the filter panels.")
+    
+    conn = duckdb.connect(db_path, read_only=True)
+    cols = [c[1] for c in conn.execute("PRAGMA table_info(corpus)").fetchall()]
+    conn.close()
+    
+    has_reading_ease_level = 'reading_ease_level' in cols
+    if has_reading_ease_level:
+        st.success("✅ **Reading Ease levels are already annotated in this corpus.** You can re-run annotation at any time if the corpus text changes.")
+    else:
+        st.info("Reading Ease levels have not been annotated yet. Run annotation below to enable difficulty-level filtering.")
+    
+    # Selection of annotation unit / scope
+    col_ann1, col_ann2 = st.columns([1, 1])
+    with col_ann1:
+        ann_scope = st.radio(
+            "**Annotation Granularity:**",
+            options=["Sentence Level", f"Chunks (per {selected_chunk_size:,} words)"],
+            help="Sentence Level: Calculates difficulty for every individual sentence (great for multi-document/varied corpora). Chunk Level: Breaks the text into segments of the selected size (recommended for single large texts/flat corpora to see difficulty segments).",
+            key=f"ann_scope_{key_suffix}"
+        )
+        
+    if st.button("Annotate Reading Ease Levels", key=f"btn_annotate_reading_ease_{key_suffix}", type="primary"):
+        if ann_scope == "Sentence Level":
+            with st.spinner("Analyzing and annotating sentences..."):
+                filenames = []
+                sent_ids = []
+                levels = []
+                
+                for _, row in sentence_df.iterrows():
+                    smetrics = calculate_formulas(
+                        int(row['words']),
+                        int(row['sentences']),
+                        int(row['syllables']),
+                        int(row['characters']),
+                        int(row['complex_words'])
+                    )
+                    savg = sum(smetrics.values()) / len(smetrics)
+                    slevel = map_score_to_level(savg)
+                    
+                    filenames.append(row['filename'])
+                    sent_ids.append(row['sent_id'])
+                    levels.append(slevel)
+                    
+                if apply_reading_ease_annotation(db_path, filenames, sent_ids, levels):
+                    st.toast("Reading Ease Levels Annotated successfully!", icon="✅")
+                    st.rerun()
+                else:
+                    st.error("Failed to write annotations to database.")
+        else:
+            with st.spinner(f"Analyzing and annotating {selected_chunk_size:,}-word chunks..."):
+                if annotate_reading_ease_by_chunks(db_path, chunk_size=selected_chunk_size):
+                    st.toast(f"Reading Ease Levels Annotated by {selected_chunk_size:,}-word chunks successfully!", icon="✅")
+                    st.rerun()
+                else:
+                    st.error("Failed to write annotations to database.")
 
