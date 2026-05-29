@@ -43,27 +43,17 @@ def render_sidebar():
         st.rerun()
         
     # Corpus Source
-    source_options = ["Upload Files", "Built-in Corpora", "Online Corpus"]
-    saved_source = get_state('source_type', "Upload Files")
-    try:
-        source_index = source_options.index(saved_source)
-    except ValueError:
-        source_index = 0
+    if 'sidebar_source_selectbox' not in st.session_state:
+        st.session_state['sidebar_source_selectbox'] = "Upload Files"
 
     source_type = st.sidebar.selectbox(
         "Source", 
-        source_options,
-        index=source_index,
+        ["Upload Files", "Built-in Corpora", "Online Corpus"],
         key="sidebar_source_selectbox"
     )
     
-    # Debug info
-    st.sidebar.write(f"DEBUG: Selected={source_type}, Saved={saved_source}")
-    print(f"DEBUG: Selected={source_type}, Saved={saved_source}")
-    
-    if source_type != saved_source:
-        set_state('source_type', source_type)
-        st.rerun()
+    # Update backward compatible state backend
+    set_state('source_type', source_type)
     
     if source_type == "Online Corpus":
         online_mode = st.sidebar.radio("Builder Mode", ["YouTube", "Link Collection", "Keyword Search"])
