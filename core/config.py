@@ -1,8 +1,9 @@
 import os
 
 # Local corpora directory
-CORPORA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'corpora')
-TAGSET_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tagset')
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CORPORA_DIR = os.path.join(_ROOT_DIR, 'corpora')
+TAGSET_DIR = os.path.join(_ROOT_DIR, 'tagset')
 
 # Metadata mapping for known corpora (Display Name -> Relative Path from CORPORA_DIR)
 KNOWN_CORPORA_MAP = {
@@ -11,6 +12,7 @@ KNOWN_CORPORA_MAP = {
     "EN-BPPT (XML Tagged)": "english/EN-BPPT-tagged.xml",
     "Brown 50% Only (XML EN TAGGED)": "english/BrownCorpus.xml",
     "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.xml",
+    "BAWE sample (English)": "english/BAWE.XML",
 }
 
 # Alias for backward compatibility
@@ -22,34 +24,46 @@ def get_available_corpora():
     Scans CORPORA_DIR and maps to known display names where possible.
     """
     available = {}
-    if not os.path.exists(CORPORA_DIR):
-        return {}
-        
-    # Reverse map for easy lookup: filename -> nice name
-    filename_to_name = {v: k for k, v in KNOWN_CORPORA_MAP.items()}
     
-    # Recursive walk
-    for root, dirs, files in os.walk(CORPORA_DIR):
-        for f in files:
-            if f.lower().endswith(('.xml', '.txt', '.csv', '.xlsx')):
-                full_path = os.path.join(root, f)
-                
-                # Get relative path from CORPORA_DIR
-                rel_path = os.path.relpath(full_path, CORPORA_DIR)
-                # Normalize path separators for comparison
-                rel_path_normalized = rel_path.replace(os.path.sep, '/')
-                
-                # Check if this relative path matches a known corpus
-                if rel_path_normalized in filename_to_name:
-                    display_name = filename_to_name[rel_path_normalized]
-                    available[display_name] = rel_path
-                else:
-                    # Use relative path as display name for unknown files
-                    if root == CORPORA_DIR:
-                         available[f] = f
+    # Log for debugging
+    log_file = os.path.join(_ROOT_DIR, "corpora_scan.log")
+    with open(log_file, "w") as f:
+        f.write(f"Scanning CORPORA_DIR: {CORPORA_DIR}\n")
+        
+        if not os.path.exists(CORPORA_DIR):
+            f.write("ERROR: CORPORA_DIR does not exist.\n")
+            return {}
+            
+        # Reverse map for easy lookup: filename -> nice name
+        filename_to_name = {v: k for k, v in KNOWN_CORPORA_MAP.items()}
+        
+        # Recursive walk
+        count = 0
+        for root, dirs, files in os.walk(CORPORA_DIR):
+            for file_name in files:
+                if file_name.lower().endswith(('.xml', '.txt', '.csv', '.xlsx')):
+                    full_path = os.path.join(root, file_name)
+                    
+                    # Get relative path from CORPORA_DIR
+                    rel_path = os.path.relpath(full_path, CORPORA_DIR)
+                    # Normalize path separators for comparison
+                    rel_path_normalized = rel_path.replace('\\', '/')
+                    
+                    f.write(f"Found: {rel_path_normalized}\n")
+                    
+                    # Check if this relative path matches a known corpus
+                    if rel_path_normalized in filename_to_name:
+                        display_name = filename_to_name[rel_path_normalized]
+                        available[display_name] = rel_path
                     else:
-                         # e.g. "indonesian/sample.txt"
-                         available[rel_path_normalized] = rel_path
+                        # Use relative path as display name for unknown files
+                        if root == CORPORA_DIR:
+                             available[file_name] = file_name
+                        else:
+                             # e.g. "indonesian/sample.txt"
+                             available[rel_path_normalized] = rel_path
+                    count += 1
+        f.write(f"Total corpora found: {count}\n")
 
     return available
 
@@ -88,6 +102,12 @@ BUILT_IN_CORPUS_DETAILS = {
         KOSLAT-ID v.1.0 is the first narrative-annotated corpus of reviews of healthcare facilities in Indonesia. It is provided in a **tagged XML format** (token, POS, lemma).
         <br><br>
         **Source/Citation:** Prihantoro., Yuliawati, S., Ekawati, D., & Rachmat, A. (2026-in press). **KOSLAT-ID v.1.0: The first narrative-annotated corpus of reviews of healthcare facilities in Indonesia.** [Corpora, 21(1), xx–xx.](https://www.prihantoro.com)
+        """,
+    "BAWE sample (English)":
+        """
+        The **British Academic Written English (BAWE)** corpus contains proficient undergraduate and master’s level writing in various disciplines. This sample includes academic essays and reports.
+        <br><br>
+        **Source:** Nesi, H., Gardner, S., Thompson, P. & Wickens, P. (2008). **British Academic Written English corpus.** Coventry University.
         """,
 
 }

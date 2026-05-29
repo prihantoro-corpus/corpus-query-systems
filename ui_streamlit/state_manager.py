@@ -17,6 +17,8 @@ def init_session_state():
         st.session_state['target_lang'] = "en"
     if 'corpus_stats' not in st.session_state:
         st.session_state['corpus_stats'] = None
+    if 'source_type' not in st.session_state:
+        st.session_state['source_type'] = "Upload Files"
         
     # 2. Comparison Mode
     if 'comparison_mode' not in st.session_state:
