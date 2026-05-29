@@ -166,7 +166,7 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
                 meta_cols = [c[1] for c in cols_info if c[1] not in ('id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename')]
                 c0_xml_where = xml_where_clause
                 for col in meta_cols:
-                    c0_xml_where = re.sub(rf'\b({col})\b', rf"c0.\1", c0_xml_where, flags=re.IGNORECASE)
+                    c0_xml_where = re.sub(rf'"{col}"|\b{col}\b', lambda m: f'c0.{m.group(0)}', c0_xml_where, flags=re.IGNORECASE)
             except:
                 c0_xml_where = xml_where_clause
 
@@ -224,7 +224,7 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
         
         if meta_cols:
             # Re-fetch matches with metadata
-            meta_select = ", ".join([f"c0.{c}" for c in meta_cols])
+            meta_select = ", ".join([f'c0."{c}"' for c in meta_cols])
             final_query_with_meta = f"SELECT c0.id, {meta_select} FROM corpus c0"
             if query_joins: final_query_with_meta += query_joins
             if query_where:
@@ -240,12 +240,12 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
                 counts = df_matches_meta[col].value_counts().to_dict()
                 
                 # 2. Get sub-corpus size for each value (to normalize)
-                baseline_query = f"SELECT {col}, count(*) as total FROM corpus WHERE 1=1"
+                baseline_query = f'SELECT "{col}" AS val, count(*) as total FROM corpus WHERE 1=1'
                 if xml_where_clause: baseline_query += xml_where_clause
-                baseline_query += f" GROUP BY {col}"
+                baseline_query += f' GROUP BY "{col}"'
                 
                 df_baseline = con.execute(baseline_query, xml_params).fetch_df()
-                baseline_dict = dict(zip(df_baseline[col], df_baseline['total']))
+                baseline_dict = dict(zip(df_baseline['val'], df_baseline['total']))
                 
                 rows = []
                 for val, count in counts.items():

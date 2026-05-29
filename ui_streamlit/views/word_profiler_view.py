@@ -32,7 +32,7 @@ def render_word_profiler_view():
             attr_cols = get_xml_attribute_columns(con)
             con.close()
             if attr_cols:
-                metadata_col = st.selectbox("Select Metadata Attribute", attr_cols, key="wp_metadata_col")
+                metadata_col = st.radio("Select Metadata Attribute", attr_cols, horizontal=True, key="wp_metadata_col")
             else:
                 st.warning("No metadata attributes found in this corpus.")
                 metadata_col = None

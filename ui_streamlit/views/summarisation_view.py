@@ -28,10 +28,11 @@ def render_summarisation_view():
     with col1:
         st.subheader("Summarisation Settings")
         
-        basis = st.selectbox(
+        basis = st.radio(
             "Basis for Summarisation", 
             ["Overall Corpus", "By Metadata", "By File Name"],
-            index=0
+            index=0,
+            horizontal=True
         )
         
         field = None
@@ -40,7 +41,7 @@ def render_summarisation_view():
         if basis == "By Metadata":
             fields = get_summarization_metadata_fields(db_path)
             if fields:
-                field = st.selectbox("Select Metadata Field", fields)
+                field = st.radio("Select Metadata Field", fields, horizontal=True)
                 values = get_metadata_values(db_path, field)
                 selected_values = st.multiselect("Select Value(s)", values, default=[values[0]] if values else [])
             else:
@@ -50,7 +51,7 @@ def render_summarisation_view():
             fields = get_summarization_metadata_fields(db_path)
             filename_fields = [f for f in fields if 'file' in f.lower() or 'doc' in f.lower()]
             if filename_fields:
-                field = st.selectbox("Select File Field", filename_fields)
+                field = st.radio("Select File Field", filename_fields, horizontal=True)
                 values = get_metadata_values(db_path, field)
                 selected_values = st.multiselect("Select File(s)", values, default=[values[0]] if values else [])
             else:
@@ -64,7 +65,7 @@ def render_summarisation_view():
         
         algorithm = "Luhn"
         if method == "Traditional (Extractive)":
-            algorithm = st.selectbox("Algorithm", ["Luhn", "LexRank", "Lsa", "KL"])
+            algorithm = st.radio("Algorithm", ["Luhn", "LexRank", "Lsa", "KL"], horizontal=True)
             st.caption("Extractive summarization picks the most important sentences from the original text.")
         else:
             provider = get_state('ai_provider', 'Ollama')

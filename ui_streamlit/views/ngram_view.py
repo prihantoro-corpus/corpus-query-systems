@@ -18,6 +18,17 @@ def render_ngram_view():
         st.warning("Please load a corpus first.")
         return
 
+    # Initialize XML restriction variables to prevent NameError in NL search modes
+    xml_where = ""
+    xml_params = []
+    xml_where_1 = ""
+    xml_params_1 = []
+    xml_where_2 = ""
+    xml_params_2 = []
+
+    # Deferred execution flag for NL modes (query runs AFTER XML filters are rendered)
+    _deferred_ngram_query = None
+
     # 1. Configuration
     search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="ngram_search_mode")
     
@@ -60,14 +71,11 @@ def render_ngram_view():
                      basis = "Token"
                      positional_bases_primary = {str(i): basis for i in range(1, n_val + 1)}
                      
-                     run_ngram_query('primary', corpus_path, corpus_name, 
-                                     n_val, 
-                                     filters_primary, 
-                                     True, # Skip Punc 
-                                     basis, 
-                                     positional_bases_primary, 
-                                     [], # Neg filter 
-                                     xml_where, xml_params)
+                     # Defer execution until after XML filters are rendered below
+                     _deferred_ngram_query = {
+                         'n': n_val, 'filters': filters_primary, 'skip_punc': True,
+                         'basis': basis, 'pos_bases': positional_bases_primary, 'neg': []
+                     }
                  else:
                      st.error(f"Error parsing query: {err}")
 
@@ -87,7 +95,7 @@ def render_ngram_view():
              with col_punc:
                  skip_punc = st.checkbox("Skip Punctuation", value=True, key="ngram_skip_punc_rule")
              with col_basis:
-                 global_basis = st.selectbox("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, key="ngram_basis_rule")
+                 global_basis = st.radio("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, horizontal=True, key="ngram_basis_rule")
         
         if st.button("Generate N-Grams (Rule-Based)", type="primary"):
             if not nl_query:
@@ -111,14 +119,11 @@ def render_ngram_view():
                      
                      positional_bases_primary = {str(i): global_basis for i in range(1, n_val + 1)}
                      
-                     run_ngram_query('primary', corpus_path, corpus_name, 
-                                     n_val, 
-                                     filters_primary, 
-                                     skip_punc, 
-                                     global_basis, 
-                                     positional_bases_primary, 
-                                     [], 
-                                     xml_where, xml_params)
+                     # Defer execution until after XML filters are rendered below
+                     _deferred_ngram_query = {
+                         'n': n_val, 'filters': filters_primary, 'skip_punc': skip_punc,
+                         'basis': global_basis, 'pos_bases': positional_bases_primary, 'neg': []
+                     }
                  else:
                      st.error(f"Error parsing query: {err}")
 
@@ -131,7 +136,7 @@ def render_ngram_view():
                 skip_punc = st.checkbox("Skip Punctuation", value=True)
                 neg_filter = [] # Removed explicit box as per request; relying on positional negation
             with col_basis:
-                global_basis = st.selectbox("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, key="ngram_basis")
+                global_basis = st.radio("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, horizontal=True, key="ngram_basis")
                 
             st.markdown("##### Positional Filters & Basis")
             st.caption("Lower filters match the selected basis. Use `*`, `%`, `_` as wildcards. Use `_TAG` for POS tags, `[lemma]` to override, or `-term` to exclude.")
@@ -154,7 +159,7 @@ def render_ngram_view():
         for i in range(1, n_val + 1):
              with cols[i-1]:
                  st.markdown(f"**Pos {i}**")
-                 pos_basis = st.selectbox("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), key=f"ng_b{i}")
+                 pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}")
                  positional_bases_primary[str(i)] = pos_basis
                  
                  val = st.text_input(f"Filter", key=f"ng_p{i}")
@@ -170,7 +175,7 @@ def render_ngram_view():
             for i in range(1, n_val + 1):
                  with cols[i-1]:
                      st.markdown(f"**Pos {i}**")
-                     pos_basis = st.selectbox("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), key=f"ng_b{i}_c1")
+                     pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}_c1")
                      positional_bases_primary[str(i)] = pos_basis
                      
                      val = st.text_input(f"Filter", key=f"ng_p{i}_c1")
@@ -182,7 +187,7 @@ def render_ngram_view():
             for i in range(1, n_val + 1):
                  with cols2[i-1]:
                      st.markdown(f"**Pos {i}**")
-                     pos_basis = st.selectbox("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), key=f"ng_b{i}_c2")
+                     pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}_c2")
                      positional_bases_secondary[str(i)] = pos_basis
                      
                      val = st.text_input(f"Filter", key=f"ng_p{i}_c2")
@@ -205,6 +210,16 @@ def render_ngram_view():
                 xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
             else:
                 xml_where_2, xml_params_2 = "", []
+
+    # --- Deferred NL Query Execution (runs AFTER xml_where/xml_params are set) ---
+    if _deferred_ngram_query is not None:
+        _dq = _deferred_ngram_query
+        run_ngram_query(
+            'primary', corpus_path, corpus_name,
+            _dq['n'], _dq['filters'], _dq['skip_punc'],
+            _dq['basis'], _dq['pos_bases'], _dq['neg'],
+            xml_where, xml_params
+        )
 
     if not comp_mode:
         if st.button("Generate N-Grams", type="primary"):

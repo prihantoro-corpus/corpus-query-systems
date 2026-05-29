@@ -496,7 +496,7 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
                       c_kwic, _, _, _, c_sent_ids, _ = cached_generate_kwic(
                           db_path=path, query=current_term, left=5, right=5, 
                           corpus_name=corpus_name, pattern_collocate_input=coll, pattern_window=5, limit=1,
-                          xml_where_clause=xml_where, xml_params=xml_params
+                          xml_where_clause=xml_where, xml_params=tuple(xml_params) if xml_params else ()
                        )
                       if c_kwic:
                            row_data = {

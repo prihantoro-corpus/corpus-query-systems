@@ -84,7 +84,7 @@ def render_keyword_view():
             
             with tabs[0]:
                 available_corpora = get_available_corpora()
-                sel_name = st.selectbox("Built-in Corpora", list(available_corpora.keys()))
+                sel_name = st.radio("Built-in Corpora", list(available_corpora.keys()), horizontal=True)
                 if st.button("Load as Reference", key="load_builtin_ref"):
                     with st.spinner("Downloading and processing..."):
                         result = load_built_in_corpus(sel_name, available_corpora[sel_name])
@@ -150,7 +150,7 @@ def render_keyword_view():
         
         available = get_available_corpora()
         ref_options.extend([f"Built-in: {k}" for k in available.keys()])
-        sel_ref_label = st.selectbox("Reference Corpus", ref_options, index=0, key=f"kw_ref_sel{suffix}")
+        sel_ref_label = st.radio("Reference Corpus", ref_options, index=0, horizontal=True, key=f"kw_ref_sel{suffix}")
         
         ref_path_selected = None
         if sel_ref_label.startswith("Corpus: "):
@@ -169,7 +169,7 @@ def render_keyword_view():
         with c2:
             top_n = st.number_input("Top N", 10, 500, 50, key=f"kw_top{suffix}")
             
-        p_val = st.selectbox("P-Value Cutoff", ["0.05", "0.01", "0.001", "None"], index=2, key=f"kw_pval{suffix}")
+        p_val = st.radio("P-Value Cutoff", ["0.05", "0.01", "0.001", "None"], index=2, horizontal=True, key=f"kw_pval{suffix}")
         
         st.markdown("##### Target Restrictions")
         view_name = f"kw_target_{key_suffix}" if key_suffix else "kw_target"

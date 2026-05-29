@@ -24,6 +24,9 @@ def render_distribution_view():
     comp_path = get_state('comp_corpus_path')
     comp_name = get_state('comp_corpus_name')
 
+    # Deferred execution flag for NL modes (query runs AFTER XML filters are rendered)
+    _deferred_dist_query = None
+
     # 1. Controls
     search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="dist_search_mode")
     
@@ -50,19 +53,8 @@ def render_distribution_view():
                      set_state('dist_search_term', term)
                      st.success(f"✓ Found term: '{term}'")
                      
-                     # Execute Logic directly
-                     with st.spinner(f"Calculating distribution for '{term}'..."):
-                         # Basic default restrictions
-                         xml_filters = render_xml_restriction_filters(corpus_path, "distribution", corpus_name=corpus_name)
-                         xml_where, xml_params = apply_xml_restrictions(xml_filters)
-                         
-                         res = notify_timing("Distribution calculated")(calculate_distribution)(corpus_path, term, xml_where, xml_params)
-                         dist_df, meta_dists = res
-                         if dist_df.empty:
-                             st.warning("No matches found.")
-                             set_state('last_dist_results_primary', None)
-                         else:
-                             set_state('last_dist_results_primary', {'df': dist_df, 'meta_dists': meta_dists, 'term': term, 'corpus': corpus_name})
+                     # Defer execution until after XML filters are rendered below
+                     _deferred_dist_query = {'term': term}
                  else:
                      st.error("Could not determine search term from query.")
 
@@ -103,6 +95,18 @@ def render_distribution_view():
             else:
                 st.info("Load a comparison corpus in sidebar.")
                 xml_where_2, xml_params_2 = "", []
+    
+    # --- Deferred NL AI Query Execution (runs AFTER xml_where/xml_params are set) ---
+    if _deferred_dist_query is not None:
+        _dq = _deferred_dist_query
+        with st.spinner(f"Calculating distribution for '{_dq['term']}'..."):
+            res = notify_timing("Distribution calculated")(calculate_distribution)(corpus_path, _dq['term'], xml_where, xml_params)
+            dist_df, meta_dists = res
+            if dist_df.empty:
+                st.warning("No matches found.")
+                set_state('last_dist_results_primary', None)
+            else:
+                set_state('last_dist_results_primary', {'df': dist_df, 'meta_dists': meta_dists, 'term': _dq['term'], 'corpus': corpus_name})
     
     # 3. Execution (Shared Logic)
     if st.button("Generate Distribution", type="primary"):
