@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import shutil
 from ui_streamlit.state_manager import set_state, get_state, reset_tool_states
+from ui_streamlit.utils import notify_timing
 from core.preprocessing.corpus_loader import load_monolingual_corpus_files, load_built_in_corpus
 from core.modules.overview import calculate_corpus_statistics
 from core.config import get_available_corpora, BUILT_IN_CORPUS_DETAILS, STANZA_LANG_MAP
@@ -136,7 +137,7 @@ def render_sidebar():
                     status_text.caption(text)
 
                 with st.spinner("Processing Corpus..."):
-                    result = cl.load_monolingual_corpus_files(
+                    result = notify_timing("Corpus loaded")(cl.load_monolingual_corpus_files)(
                         files_to_process, 
                         explicit_lang_code=lang_code,
                         selected_format=fmt,
@@ -230,7 +231,7 @@ def render_sidebar():
                     # Get URLs for all selected corpora
                     selected_urls = [built_in_corpora[name] for name in selected_names]
                     
-                    result = load_built_in_corpus(
+                    result = notify_timing("Built-in corpus loaded")(load_built_in_corpus)(
                         selected_names, 
                         selected_urls,
                         progress_callback=update_progress

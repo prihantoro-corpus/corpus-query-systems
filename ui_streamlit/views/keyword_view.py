@@ -3,6 +3,7 @@ import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
 import importlib
 import core.modules.keyword
+from ui_streamlit.utils import notify_timing
 importlib.reload(core.modules.keyword)
 from core.modules.keyword import generate_keyword_list, generate_grouped_keyword_list
 from core.visualiser.wordcloud import generate_wordcloud
@@ -244,7 +245,7 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
             ref_total_tokens = st.session_state.get('comp_total_tokens', 0)
             final_ref_path = None # Ensure it doesn't try to connect to a DB
             
-        df_overall = generate_keyword_list(
+        df_overall = notify_timing("Keyword analysis completed")(generate_keyword_list)(
             target_path, 
             ref_db_path=final_ref_path, 
             target_xml_where=params['xml_where'], 

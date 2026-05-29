@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import altair as alt
 from ui_streamlit.state_manager import get_state, set_state
+from ui_streamlit.utils import notify_timing
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions, get_xml_attribute_columns
 from core.modules.word_profiler import load_wordlist, run_word_profiler_analysis
@@ -77,7 +78,7 @@ def render_word_profiler_view():
             with st.spinner("Analyzing..."):
                 all_results = {}
                 for wl_name, wl_dict in selected_wordlists.items():
-                    df_res = run_word_profiler_analysis(
+                    df_res = notify_timing(f"Word Profiler analysis for '{wl_name}' completed")(run_word_profiler_analysis)(
                         db_path=corpus_path,
                         wordlist=wl_dict,
                         basis=basis,

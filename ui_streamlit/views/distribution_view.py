@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from ui_streamlit.state_manager import get_state, set_state
+from ui_streamlit.utils import notify_timing
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
 from core.modules.distribution import calculate_distribution
@@ -55,7 +56,8 @@ def render_distribution_view():
                          xml_filters = render_xml_restriction_filters(corpus_path, "distribution", corpus_name=corpus_name)
                          xml_where, xml_params = apply_xml_restrictions(xml_filters)
                          
-                         dist_df, meta_dists = calculate_distribution(corpus_path, term, xml_where, xml_params)
+                         res = notify_timing("Distribution calculated")(calculate_distribution)(corpus_path, term, xml_where, xml_params)
+                         dist_df, meta_dists = res
                          if dist_df.empty:
                              st.warning("No matches found.")
                              set_state('last_dist_results_primary', None)
@@ -128,7 +130,8 @@ def render_distribution_view():
                 
             set_state('dist_search_term', term_to_use)
             with st.spinner(f"Calculating for '{term_to_use}'..."):
-                dist_df, meta_dists = calculate_distribution(corpus_path, term_to_use, xml_where, xml_params)
+                res = notify_timing("Distribution calculated")(calculate_distribution)(corpus_path, term_to_use, xml_where, xml_params)
+                dist_df, meta_dists = res
                 if dist_df.empty:
                     st.warning("No matches found.")
                     set_state('last_dist_results_primary', None)
@@ -162,11 +165,13 @@ def render_distribution_view():
             
             if term_1:
                 with st.spinner(f"Primary: {term_1}..."):
-                    d1, m1 = calculate_distribution(corpus_path, term_1, xml_where_1, xml_params_1)
+                    res1 = notify_timing("Primary distribution calculated")(calculate_distribution)(corpus_path, term_1, xml_where_1, xml_params_1)
+                    d1, m1 = res1
                     set_state('last_dist_results_primary', {'df': d1, 'meta_dists': m1, 'term': term_1, 'corpus': corpus_name})
             if term_2 and comp_path:
                 with st.spinner(f"Comparison: {term_2}..."):
-                    d2, m2 = calculate_distribution(comp_path, term_2, xml_where_2, xml_params_2)
+                    res2 = notify_timing("Comparison distribution calculated")(calculate_distribution)(comp_path, term_2, xml_where_2, xml_params_2)
+                    d2, m2 = res2
                     set_state('last_dist_results_secondary', {'df': d2, 'meta_dists': m2, 'term': term_2, 'corpus': comp_name})
 
     # 2. Results Display
