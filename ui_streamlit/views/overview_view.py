@@ -89,6 +89,34 @@ def _render_language_confirmation(path, key_suffix=""):
     
     set_state(f'current_language_{key_suffix}', selected_name)
 
+def render_custom_button_tabs(tabs_list, key_suffix=""):
+    """
+    Renders custom horizontal button-tabs in rows of max 5 tabs.
+    Returns the selected tab name.
+    """
+    state_key = f'selected_tab_{key_suffix}'
+    current_selection = get_state(state_key, tabs_list[0])
+    if current_selection not in tabs_list:
+        current_selection = tabs_list[0]
+        set_state(state_key, current_selection)
+        
+    # Render rows of 5
+    for row_start in range(0, len(tabs_list), 5):
+        row_tabs = tabs_list[row_start:row_start+5]
+        cols = st.columns(5)
+        for idx, tab_name in enumerate(row_tabs):
+            global_idx = row_start + idx
+            with cols[idx]:
+                is_selected = (current_selection == tab_name)
+                btn_type = "primary" if is_selected else "secondary"
+                if st.button(tab_name, key=f"tab_btn_{global_idx}_{key_suffix}", type=btn_type, use_container_width=True):
+                    set_state(state_key, tab_name)
+                    st.rerun()
+                    
+    # Render spacing below buttons
+    st.write("")
+    return get_state(state_key, tabs_list[0])
+
 def render_overview():
     st.header("Corpus Overview")
     
@@ -171,24 +199,21 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     # Show classification for ALL languages now (via Translation)
     show_classification = True
     
-    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "📖 Reading Ease"]
+    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "🏷️ Named Entities", "📖 Reading Ease"]
     
-    tabs = st.tabs(tabs_list)
+    selected_tab = render_custom_button_tabs(tabs_list, key_suffix)
     
-    # Unpack tabs
-    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls, tab_re = tabs
-        
-    with tab1:
+    if selected_tab == "XML":
         if error: st.error(error)
         if structure:
             html = format_structure_data_hierarchical(structure)
             st.markdown(f'<div style="font-family: monospace; font-size: 0.85em; padding: 10px; background: #1e1e1e; border-radius: 5px; color: #d4d4d4;">{html}</div>', unsafe_allow_html=True)
         else: st.caption("No XML structure.")
 
-    with tab_sub:
+    elif selected_tab == "Sub-corpus Stats":
         _render_subcorpus_stats(path, key_suffix)
         
-    with tab2:
+    elif selected_tab == "Freq":
         df = ov.get_top_frequencies_v2(path, limit=50, xml_where_clause=xml_where, xml_params=xml_params)
         if not df.empty:
             # Use restricted total for PMW calculation
@@ -197,24 +222,26 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
             st.dataframe(df, use_container_width=True, hide_index=True)
         else: st.caption("No frequencies.")
         
-    with tab3:
+    elif selected_tab == "POS":
         _render_pos_management_tab(path, xml_where, xml_params, key_suffix)
         
-    with tab4:
+    elif selected_tab == "Cloud":
         f_df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
         if not f_df.empty:
             fig = create_word_cloud(f_df, 'pos' in f_df.columns)
             if fig: st.pyplot(fig)
         else: st.caption("No wordcloud.")
 
-    with tab_meta:
+    elif selected_tab == "Metadata":
         _render_metadata_annotation_tab(path, key_suffix)
         
-    if tab_cls:
-        with tab_cls:
-            _render_classification_tab(path, key_suffix)
+    elif selected_tab == "🏷️ Sentiment & Topic":
+        _render_classification_tab(path, key_suffix)
 
-    with tab_re:
+    elif selected_tab == "🏷️ Named Entities":
+        _render_ner_tab(path, key_suffix)
+
+    elif selected_tab == "📖 Reading Ease":
         _render_reading_ease_tab(path, key_suffix)
 
 def render_full_overview(name, path, stats, structure, error):
@@ -242,12 +269,11 @@ def render_full_overview(name, path, stats, structure, error):
     current_lang = ov.get_corpus_language(path)
     show_classification = True
     
-    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "📖 Reading Ease"]
+    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "🏷️ Named Entity Recognition (NER)", "📖 Reading Ease"]
 
-    tabs = st.tabs(tabs_list)
-    tab1, tab_sub, tab2, tab3, tab4, tab_meta, tab_cls, tab_re = tabs
+    selected_tab = render_custom_button_tabs(tabs_list, "full")
     
-    with tab1:
+    if selected_tab == "XML Structure":
         if error: st.error(error)
         if structure:
             st.subheader("Structure and Attributes")
@@ -280,10 +306,10 @@ def render_full_overview(name, path, stats, structure, error):
                     st.error(str(e))
         else: st.info("No XML structure metadata available.")
 
-    with tab_sub:
+    elif selected_tab == "Sub-corpus Stats":
         _render_subcorpus_stats(path, "full")
             
-    with tab2:
+    elif selected_tab == "Top Frequencies":
         st.subheader("Top Frequency Tokens")
         df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
         if not df.empty:
@@ -294,11 +320,11 @@ def render_full_overview(name, path, stats, structure, error):
             st.download_button("⬇ Download Top 100", data=df_to_excel_bytes(df), file_name=f"{name}_top_freq.xlsx")
         else: st.info("No frequency data.")
 
-    with tab3:
+    elif selected_tab == "Unique POS Tags":
         st.subheader("Unique POS Tags (and Definitions)")
         _render_pos_management_tab(path, xml_where, xml_params, "full")
 
-    with tab4:
+    elif selected_tab == "Word Cloud":
         st.subheader("Word Cloud")
         f_df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
         if not f_df.empty:
@@ -309,14 +335,16 @@ def render_full_overview(name, path, stats, structure, error):
                 st.pyplot(fig)
         else: st.info("No frequency data.")
 
-    with tab_meta:
+    elif selected_tab == "Metadata Annotation":
         _render_metadata_annotation_tab(path, "full")
 
-    if tab_cls:
-        with tab_cls:
-            _render_classification_tab(path, "full")
+    elif selected_tab == "🏷️ Sentiment & Topic Analysis":
+        _render_classification_tab(path, "full")
 
-    with tab_re:
+    elif selected_tab == "🏷️ Named Entity Recognition (NER)":
+        _render_ner_tab(path, "full")
+
+    elif selected_tab == "📖 Reading Ease":
         _render_reading_ease_tab(path, "full")
 
     st.markdown("---")
@@ -1473,4 +1501,163 @@ def _render_reading_ease_tab(db_path, key_suffix=""):
                     st.rerun()
                 else:
                     st.error("Failed to write annotations to database.")
+
+
+def _render_ner_tab(db_path, key_suffix=""):
+    """
+    Renders the Named Entity Recognition UI and output views.
+    """
+    import plotly.express as px
+    import core.modules.ner_service as ner
+    
+    st.markdown("#### 🏷️ Named Entity Recognition (NER)")
+    
+    with st.expander("💡 **Method & Transparency: NER**", expanded=False):
+        st.markdown("""
+        **Dependency-based NER (spaCy):** Extracts entities using grammatical dependency trees and pre-trained models. Automatically classifies entities into categories (e.g., PERSON, ORG, GPE/Location).
+        
+        **Regex-based NER:** Scans the corpus text using custom regular expressions to match entities (e.g., Emails, URLs, Dates) under custom labels.
+        """)
+        
+    method = st.radio(
+        "**NER Extraction Method:**",
+        options=["Dependency-based (spaCy)", "Regex-based (Custom Patterns)"],
+        horizontal=True,
+        key=f"ner_method_{key_suffix}"
+    )
+    
+    is_spacy = "spaCy" in method
+    
+    if is_spacy:
+        st.caption("Extract standard semantic entities using a local spaCy pipeline.")
+        model_name = st.selectbox(
+            "spaCy Pipeline Model",
+            options=["en_core_web_sm", "en_core_web_md", "xx_ent_wiki_sm"],
+            index=0,
+            key=f"spacy_model_{key_suffix}",
+            help="en_core_web_sm: Fast & lightweight. xx_ent_wiki_sm: Multilingual entity detector."
+        )
+    else:
+        st.caption("Identify entities by matching regular expression patterns.")
+        default_regex_input = (
+            "Emails: \\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b\n"
+            "URLs: https?://[^\\s<>\"]+|www\\.[^\\s<>\"]+\n"
+            "Dates: \\b\\d{4}[-/.]\\d{2}[-/.]\\d{2}\\b|\\b\\d{2}[-/.]\\d{2}[-/.]\\d{4}\\b"
+        )
+        regex_input = st.text_area(
+            "Define Regex Categories (Format: `Label: Pattern` per line)",
+            value=default_regex_input,
+            height=120,
+            key=f"ner_regex_patterns_{key_suffix}"
+        )
+        
+    if st.button("🚀 Run NER Analysis", key=f"run_ner_btn_{key_suffix}", type="primary"):
+        with st.spinner("Running Named Entity Recognition on corpus sentences..."):
+            try:
+                if is_spacy:
+                    df_flat, df_matrix_files, df_matrix_top, raw_ents = ner.run_spacy_ner(db_path, model_name=model_name)
+                else:
+                    # Parse regex input
+                    patterns_dict = {}
+                    for line in regex_input.split('\n'):
+                        line = line.strip()
+                        if not line or ':' not in line:
+                            continue
+                        cat, pat = line.split(':', 1)
+                        patterns_dict[cat.strip()] = pat.strip()
+                        
+                    if not patterns_dict:
+                        st.error("Please define at least one valid Category: Pattern line.")
+                        return
+                        
+                    df_flat, df_matrix_files, df_matrix_top, raw_ents = ner.run_regex_ner(db_path, patterns_dict)
+                    
+                set_state(f'ner_flat_{key_suffix}', df_flat)
+                set_state(f'ner_matrix_files_{key_suffix}', df_matrix_files)
+                set_state(f'ner_matrix_top_{key_suffix}', df_matrix_top)
+                set_state(f'ner_raw_entities_{key_suffix}', raw_ents)
+                
+                st.toast("Named Entity Recognition completed successfully!", icon="🎉")
+                st.rerun()
+            except Exception as e:
+                st.error(f"NER failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+                
+    # Display Results
+    df_flat = get_state(f'ner_flat_{key_suffix}')
+    df_matrix_files = get_state(f'ner_matrix_files_{key_suffix}')
+    df_matrix_top = get_state(f'ner_matrix_top_{key_suffix}')
+    
+    if df_flat is not None and not df_flat.empty:
+        st.divider()
+        st.subheader("📊 NER Findings & Distribution")
+        
+        # High-level Metrics
+        total_ents = df_flat['Frequency'].sum()
+        uniq_ents = len(df_flat['Entity'].unique())
+        top_row = df_flat.iloc[0] if not df_flat.empty else None
+        
+        mcol1, mcol2, mcol3 = st.columns(3)
+        mcol1.metric("Total Entities Found", f"{total_ents:,}")
+        mcol2.metric("Unique Entities", f"{uniq_ents:,}")
+        if top_row is not None:
+            mcol3.metric("Top Entity (Freq)", f"{top_row['Entity']} ({top_row['Frequency']})")
+            
+        r_tab1, r_tab2, r_tab3, r_tab4 = st.tabs([
+            "📊 Frequency Distribution", 
+            "📁 Matrix: Category vs. Files", 
+            "🏆 Matrix: Top Entities by Category", 
+            "📋 All Matches"
+        ])
+        
+        with r_tab1:
+            st.markdown("##### Entity Category Distribution")
+            df_cat = df_flat.groupby('Category')['Frequency'].sum().reset_index()
+            fig_pie = px.pie(df_cat, names='Category', values='Frequency', title="Entity Counts by Category", hole=0.4)
+            fig_pie.update_layout(margin=dict(t=30, b=10, l=10, r=10))
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+            st.markdown("##### Top 15 Overall Entities")
+            fig_bar = px.bar(df_flat.head(15), x='Entity', y='Frequency', color='Category', title="Top 15 Most Frequent Entities")
+            fig_bar.update_layout(xaxis={'categoryorder':'total descending'}, margin=dict(t=30, b=10, l=10, r=10))
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        with r_tab2:
+            st.markdown("##### Category Counts per File")
+            st.caption("This pivot matrix shows the occurrence of entity categories across the files in the corpus.")
+            st.dataframe(df_matrix_files, use_container_width=True, hide_index=True)
+            
+        with r_tab3:
+            st.markdown("##### Top Entities side-by-side by Category")
+            st.caption("Wide matrix representation showing the top recognized terms and their frequencies for each category.")
+            st.dataframe(df_matrix_top, use_container_width=True, hide_index=True)
+            
+        with r_tab4:
+            st.markdown("##### Complete Identified Entities")
+            st.dataframe(df_flat, use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇ Download NER Results (Excel)",
+                data=df_to_excel_bytes(df_flat),
+                file_name=f"cortex_ner_results_{key_suffix}.xlsx"
+            )
+
+        # Database Annotation Section
+        st.divider()
+        st.markdown("#### 🚀 Database XML Annotation")
+        st.caption("Annotate the corpus database with the identified Named Entities. Once annotated, they will be searchable in the Concordance tab as `<NER CATEGORY=\"Entity\">` tags (e.g. `<NER PERSON=\"Sarah Johnson\">` or `<NER ORG=\"*\">`).")
+        
+        raw_ents = get_state(f'ner_raw_entities_{key_suffix}')
+        if st.button("Annotate Corpus with XML Tags", key=f"btn_annotate_ner_{key_suffix}", type="primary"):
+            with st.spinner("Annotating database with XML tags..."):
+                if ner.annotate_ner_tags_in_db(db_path, raw_ents):
+                    st.toast("Corpus Annotated with XML tags successfully! 🚀", icon="✅")
+                    # Clear query cache to reload tag definitions
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error("Failed to write XML annotations to the database.")
+    elif df_flat is not None:
+        st.info("No entities were detected in the corpus matching the selected criteria.")
+
 
