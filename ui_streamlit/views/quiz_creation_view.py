@@ -124,9 +124,10 @@ def render_quiz_creation_view():
             if generated_quiz:
                 st.markdown("---")
                 st.markdown("#### 🔄 Regenerate Section")
-                section_to_regen = st.selectbox(
+                section_to_regen = st.radio(
                     "Select Section",
                     ["Section A (Discourse)", "Section B (Reordering)", "Section C (Grammar)", "Section D (MWE)"],
+                    horizontal=True,
                     key="select_section_to_regen"
                 )
                 

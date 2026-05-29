@@ -215,7 +215,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
                 meta_cols = [c[1] for c in cols_info if c[1] not in ('id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename')]
                 c0_xml_where = xml_where_clause
                 for col in meta_cols:
-                    c0_xml_where = re.sub(rf'\b({col})\b', rf"c0.\1", c0_xml_where, flags=re.IGNORECASE)
+                    c0_xml_where = re.sub(rf'"{col}"|\b{col}\b', lambda m: f'c0.{m.group(0)}', c0_xml_where, flags=re.IGNORECASE)
             except:
                 c0_xml_where = xml_where_clause
 

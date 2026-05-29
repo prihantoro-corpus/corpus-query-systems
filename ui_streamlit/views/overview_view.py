@@ -69,11 +69,12 @@ def _render_language_confirmation(path, key_suffix=""):
             current_idx = 0
             
         with c_lang1:
-            selected_fmt = st.selectbox(
+            selected_fmt = st.radio(
                 "Language", 
                 lang_options,
                 index=current_idx,
                 key=f"lang_select_{key_suffix}",
+                horizontal=True,
                 label_visibility="collapsed"
             )
             selected_code = selected_fmt.split(" - ")[0]
@@ -127,16 +128,14 @@ def render_overview():
         # Standard Single View
         corpus_path = get_state('current_corpus_path')
         source_type = get_state('source_type')
-        
         if not corpus_path:
             st.info("👋 **Welcome to CORTEX!** Please choose a corpus to get started.")
             
-            landing_tabs = st.tabs(["🏛️ Built-in Corpora", "📤 Upload Files", "🌐 Online Builder"])
-            
-            with landing_tabs[0]:
+            if source_type == "Online Corpus":
+                render_online_builder_ui()
+            elif source_type == "Built-in Corpora":
                 render_built_in_corpora_selection_ui()
-                
-            with landing_tabs[1]:
+            else:
                 st.markdown("### 📤 Upload Your Own Files")
                 st.write("You can upload XML, TXT, CSV, or XLSX files from the sidebar to process them.")
                 st.info("Check the sidebar on the left to select and process your files.")
@@ -147,9 +146,6 @@ def render_overview():
                     - **TXT**: Processed via Stanza for POS and Lemmatization.
                     - **CSV/XLSX**: Must contain a column named 'token'.
                     """)
-            
-            with landing_tabs[2]:
-                render_online_builder_ui()
             
             return
         
@@ -175,18 +171,14 @@ def render_overview():
         if not c1_path and not c2_path:
             st.info("👋 **Comparison Mode Enabled.** Please load two corpora to compare.")
             
-            landing_tabs = st.tabs(["🏛️ Built-in Corpora", "📤 Upload Files", "🌐 Online Builder"])
-            
-            with landing_tabs[0]:
+            if source_type == "Online Corpus":
+                render_online_builder_ui()
+            elif source_type == "Built-in Corpora":
                 render_built_in_corpora_selection_ui()
-                
-            with landing_tabs[1]:
+            else:
                 st.markdown("### 📤 Upload Your Own Files")
                 st.write("You can upload two different corpora from the sidebar and compare them side-by-side.")
                 st.info("Check the sidebar to load your Primary and Comparison corpora.")
-            
-            with landing_tabs[2]:
-                render_online_builder_ui()
             
             return
 
@@ -625,10 +617,11 @@ def _render_classification_tab(db_path, key_suffix):
         bcol1, bcol2 = st.columns(2)
         
         with bcol1:
-            n_topics_option = st.selectbox(
+            n_topics_option = st.radio(
                 "Number of Topics",
                 options=[8, 10, 12, 15, "Auto"] + list(range(5, 21)),
                 index=1,  # Default to 10
+                horizontal=True,
                 key=f"bertopic_n_topics_{key_suffix}",
                 help="Recommended: 8-12 topics. Auto may create too many."
             )
@@ -885,7 +878,7 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
             
             for attr in attr_cols:
                 # We limit unique values to avoid crashing charts with high-cardinality attributes (like IDs)
-                unique_count = conn.execute(f"SELECT COUNT(DISTINCT {attr}) FROM corpus").fetchone()[0]
+                unique_count = conn.execute(f'SELECT COUNT(DISTINCT "{attr}") FROM corpus').fetchone()[0]
                 
                 if unique_count > 50:
                     st.warning(f"Attribute **{attr}** has too many unique values ({unique_count}) to visualize effectively.")
@@ -893,12 +886,12 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                     
                 attr_data = conn.execute(f"""
                     SELECT 
-                        {attr} as Value, 
+                        "{attr}" as Value, 
                         COUNT(*) as Tokens,
                         CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
                     FROM corpus 
-                    WHERE {attr} IS NOT NULL 
-                    GROUP BY {attr} 
+                    WHERE "{attr}" IS NOT NULL 
+                    GROUP BY "{attr}" 
                     ORDER BY Tokens DESC
                 """).fetch_df()
                 
@@ -1212,7 +1205,7 @@ def _render_metadata_annotation_tab(db_path, key_suffix):
             st.warning("No files found.")
             return
 
-        selected_file = st.selectbox("Select File for Segmental Annotation", all_files, key=f"seg_file_select_{key_suffix}")
+        selected_file = st.radio("Select File for Segmental Annotation", all_files, horizontal=True, key=f"seg_file_select_{key_suffix}")
         
         if selected_file:
             # 1. Word Count Check
@@ -1557,10 +1550,11 @@ def _render_reading_ease_tab(db_path, key_suffix=""):
     
     col_ch1, col_ch2 = st.columns([1, 2])
     with col_ch1:
-        selected_chunk_size = st.selectbox(
+        selected_chunk_size = st.radio(
             "Select Chunk Size (Words):",
             options=[100, 1000, 10000, 100000],
             index=1, # Default to 1000
+            horizontal=True,
             key=f"chunk_size_select_{key_suffix}"
         )
         
@@ -1580,9 +1574,10 @@ def _render_reading_ease_tab(db_path, key_suffix=""):
     if not sub_options:
         st.info("No sub-corpora attributes (such as Topic, Sentiment, or XML Attributes) detected.")
     else:
-        selected_sub = st.selectbox(
+        selected_sub = st.radio(
             "Select Sub-corpus Grouping Category:",
             options=sub_options,
+            horizontal=True,
             key=f"sub_readability_select_{key_suffix}"
         )
         if selected_sub:
@@ -1690,10 +1685,11 @@ def _render_ner_tab(db_path, key_suffix=""):
     
     if is_spacy:
         st.caption("Extract standard semantic entities using a local spaCy pipeline.")
-        model_name = st.selectbox(
+        model_name = st.radio(
             "spaCy Pipeline Model",
             options=["en_core_web_sm", "en_core_web_md", "xx_ent_wiki_sm"],
             index=0,
+            horizontal=True,
             key=f"spacy_model_{key_suffix}",
             help="en_core_web_sm: Fast & lightweight. xx_ent_wiki_sm: Multilingual entity detector."
         )

@@ -36,6 +36,17 @@ def render_collocation_view():
         st.warning("Please load a corpus first.")
         return
 
+    # Initialize XML restriction variables to prevent NameError in NL search modes
+    xml_where = ""
+    xml_params = []
+    xml_where_1 = ""
+    xml_params_1 = []
+    xml_where_2 = ""
+    xml_params_2 = []
+
+    # Deferred execution flag for NL AI mode (query runs AFTER XML filters are rendered)
+    _deferred_coll_query = None
+
     comp_mode = get_state('comparison_mode', False)
     comp_path = get_state('comp_corpus_path')
     comp_name = get_state('comp_corpus_name')
@@ -89,22 +100,14 @@ def render_collocation_view():
                     
                     st.success("✓ Query interpretation successful! Running search...")
                     
-                    # Execute Search (XML filters are now defined in common area below)
-                    run_collocation_query(
-                        'primary', corpus_path, 
-                        params.get('node_word', ''), 
-                        win, 
-                        freq, 
-                        mx, 
-                        corpus_stats, 
-                        xml_where, xml_params, 
-                        params.get('token_filter', ''), 
-                        params.get('pos_filter', ''), 
-                        params.get('lemma_filter', ''),
-                        '', 
-                        50,
-                        stat_measure=get_state('coll_stat_measure', 'Log-Likelihood')
-                    )
+                    # Defer execution until after XML filters are rendered below
+                    _deferred_coll_query = {
+                        'node': params.get('node_word', ''),
+                        'win': win, 'freq': freq, 'mx': mx,
+                        'token_filter': params.get('token_filter', ''),
+                        'pos_filter': params.get('pos_filter', ''),
+                        'lemma_filter': params.get('lemma_filter', ''),
+                    }
                 else:
                     st.error(f"Failed to parse query: {err}")
 
@@ -124,7 +127,7 @@ def render_collocation_view():
                     min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq_rule")
                  with c_sub2:
                     max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max_rule")
-                 st.selectbox("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, key="coll_stat_measure_rule")
+                 st.radio("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, horizontal=True, key="coll_stat_measure_rule")
             
             st.markdown("---")
             f_col1, f_col2, f_col3 = st.columns(3)
@@ -164,7 +167,7 @@ def render_collocation_view():
                     min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq")
                  with c_sub2:
                     max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max", help="Increase this limit to download more results (up to 50,000).")
-                 st.selectbox("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, key="coll_stat_measure")
+                 st.radio("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, horizontal=True, key="coll_stat_measure")
             
             st.markdown("---")
             f_col1, f_col2, f_col3 = st.columns(3)
@@ -431,6 +434,19 @@ def render_collocation_view():
                 elif comp_path and not to_run_node_2:
                     st.warning("Comparison node word missing.")
 
+    # --- Deferred NL AI Query Execution (runs AFTER xml_where/xml_params are set) ---
+    if _deferred_coll_query is not None:
+        _dq = _deferred_coll_query
+        run_collocation_query(
+            'primary', corpus_path,
+            _dq['node'], _dq['win'], _dq['freq'], _dq['mx'],
+            corpus_stats,
+            xml_where, xml_params,
+            _dq['token_filter'], _dq['pos_filter'], _dq['lemma_filter'],
+            '', 50,
+            stat_measure=get_state('coll_stat_measure', 'Log-Likelihood')
+        )
+
     # 3. Display
     if not comp_mode:
         results = st.session_state.get('last_coll_results_primary')
@@ -677,7 +693,7 @@ def render_collocation_results_column(results, key_suffix=""):
                            pattern_window=win, 
                            limit=1,
                            xml_where_clause=xml_where,
-                           xml_params=xml_params
+                           xml_params=tuple(xml_params) if xml_params else ()
                        )
                        if c_kwic:
                            row_data = {

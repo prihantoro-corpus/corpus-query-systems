@@ -14,7 +14,7 @@ def render_sidebar():
     """
     # 1. Navigation (Tools) - MOVED TO TOP
     st.sidebar.title("Tools (v1.1 Stanza)")
-    st.sidebar.caption("App Version: v290526")
+    st.sidebar.caption("App Version: v300526")
     view = st.sidebar.radio(
         "Go to", 
         ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
@@ -47,7 +47,7 @@ def render_sidebar():
     if 'sidebar_source_selectbox' not in st.session_state:
         st.session_state['sidebar_source_selectbox'] = "Upload Files"
 
-    source_type = st.sidebar.selectbox(
+    source_type = st.sidebar.radio(
         "Source", 
         ["Upload Files", "Built-in Corpora", "Online Corpus"],
         key="sidebar_source_selectbox"
@@ -77,10 +77,11 @@ def render_sidebar():
         with lang_col:
             # Prepare language list. Add 'OTHER' at the end.
             lang_options = list(STANZA_LANG_MAP.keys()) + ["OTHER"]
-            selected_lang_label = st.selectbox(
+            selected_lang_label = st.radio(
                 "Language", 
                 lang_options, 
                 index=0,
+                horizontal=True,
                 key="upload_language_select"
             )
             
@@ -91,10 +92,11 @@ def render_sidebar():
                 lang_code = STANZA_LANG_MAP[selected_lang_label]
                 
         with fmt_col:
-            fmt = st.selectbox(
+            fmt = st.radio(
                 "Format", 
                 ["Raw (Natural text)", "Tagged (Vertical)"], 
                 index=0,
+                horizontal=True,
                 key="upload_format_select"
             )
         
@@ -178,7 +180,7 @@ def render_sidebar():
             st.sidebar.warning("No corpora found in local 'corpora' directory.")
             selected_names = []
         else:
-            selected_corpus = st.sidebar.selectbox(
+            selected_corpus = st.sidebar.radio(
                 "Select Corpus",
                 options=["Select a corpus..."] + list(built_in_corpora.keys()),
                 index=0,
@@ -320,7 +322,7 @@ def render_sidebar():
             if available_models:
                 if current_model not in available_models: available_models.append(current_model)
                 index = available_models.index(current_model) if current_model in available_models else 0
-                o_model = st.selectbox("Ollama Model", available_models, index=index, key="sidebar_ai_model_select")
+                o_model = st.radio("Ollama Model", available_models, index=index, horizontal=True, key="sidebar_ai_model_select")
             else:
                 o_model = st.text_input("Model (Manual)", value=current_model, key="sidebar_ai_model")
             

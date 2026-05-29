@@ -62,9 +62,10 @@ def render_statistical_testing_view():
             grouping_opts = ['filename']
             if 'doc_id' in cols: grouping_opts.insert(0, 'doc_id')
             
-            grouping_key = st.selectbox(
+            grouping_key = st.radio(
                 "Slice Corpus By", 
                 options=grouping_opts + sorted([c for c in cols if c not in grouping_opts and c not in ['token', 'pos', 'lemma', 'sent_id', '_token_low', 'id', 'filename']]),
+                horizontal=True,
                 key="shared_grouping"
             )
             
@@ -169,10 +170,11 @@ def render_statistical_testing_view():
         # Identify probable candidates (high cardinality, not token-level unique)
         # Actually simplest is to just let user choose or default to doc_id if present
         
-        grouping_key = st.selectbox(
+        grouping_key = st.radio(
             "Document Identifier (Grouping Key)", 
             grouping_opts + sorted([c for c in cols if c not in grouping_opts and c not in ['token', 'pos', 'lemma', 'sent_id', '_token_low', 'id', 'filename']]),
             index=0,
+            horizontal=True,
             help="What represents a 'Document'? For single-file corpora (like KOSLAT), use 'doc_id' or similar."
         )
         
@@ -183,7 +185,7 @@ def render_statistical_testing_view():
         # --- Variable X ---
         with col_x:
             st.markdown("### Variable X (Horizontal)")
-            type_x = st.selectbox("Type", ["Word Frequency", "Metadata (Numeric)", "Text Metric"], key="corr_type_x")
+            type_x = st.radio("Type", ["Word Frequency", "Metadata (Numeric)", "Text Metric"], horizontal=True, key="corr_type_x")
             
             x_config = {}
             if type_x == "Word Frequency":
@@ -192,14 +194,14 @@ def render_statistical_testing_view():
                 con = duckdb.connect(corpus_path, read_only=True)
                 attr_cols = get_xml_attribute_columns(con)
                 con.close()
-                x_config['attr'] = st.selectbox("Attribute X", attr_cols, key="corr_attr_x")
+                x_config['attr'] = st.radio("Attribute X", attr_cols, horizontal=True, key="corr_attr_x")
             elif type_x == "Text Metric":
-                x_config['metric'] = st.selectbox("Metric X", ["ttr", "token_count", "type_count"], key="corr_metric_x")
+                x_config['metric'] = st.radio("Metric X", ["ttr", "token_count", "type_count"], horizontal=True, key="corr_metric_x")
 
         # --- Variable Y ---
         with col_y:
             st.markdown("### Variable Y (Vertical)")
-            type_y = st.selectbox("Type", ["Word Frequency", "Metadata (Numeric)", "Text Metric"], key="corr_type_y")
+            type_y = st.radio("Type", ["Word Frequency", "Metadata (Numeric)", "Text Metric"], horizontal=True, key="corr_type_y")
             
             y_config = {}
             if type_y == "Word Frequency":
@@ -208,9 +210,9 @@ def render_statistical_testing_view():
                 con = duckdb.connect(corpus_path, read_only=True)
                 attr_cols = get_xml_attribute_columns(con)
                 con.close()
-                y_config['attr'] = st.selectbox("Attribute Y", attr_cols, key="corr_attr_y")
+                y_config['attr'] = st.radio("Attribute Y", attr_cols, horizontal=True, key="corr_attr_y")
             elif type_y == "Text Metric":
-                y_config['metric'] = st.selectbox("Metric Y", ["ttr", "token_count", "type_count"], key="corr_metric_y")
+                y_config['metric'] = st.radio("Metric Y", ["ttr", "token_count", "type_count"], horizontal=True, key="corr_metric_y")
          
         # --- Run Correlation ---
         st.markdown("---")
@@ -683,18 +685,20 @@ def render_statistical_testing_view():
             if possible_auth:
                 default_auth_idx = cols.index(possible_auth[0])
             
-            author_col = st.selectbox(
+            author_col = st.radio(
                 "Author Label Column",
                 options=cols,
                 index=default_auth_idx,
+                horizontal=True,
                 key="aa_auth_col",
                 help="Column containing author names for Known texts"
             )
 
-            aa_grouping_key = st.selectbox(
+            aa_grouping_key = st.radio(
                 "Document Identifier",
                 options=cols,
                 index=cols.index('filename') if 'filename' in cols else 0,
+                horizontal=True,
                 key="aa_grouping_key_box",
                 help="Unique identifier for each document/segment (e.g., 'doc_id' or 'filename')"
             )
@@ -1194,9 +1198,10 @@ def render_statistical_testing_view():
                 st.warning("No XML attributes found. Cannot perform group comparison.")
                 return
             
-            grouping_attr = st.selectbox(
+            grouping_attr = st.radio(
                 "Select grouping attribute",
                 options=attr_cols,
+                horizontal=True,
                 key="stats_grouping_attr"
             )
             
@@ -1232,9 +1237,10 @@ def render_statistical_testing_view():
             col_test1, col_test2 = st.columns(2)
             
             with col_test1:
-                correction_method = st.selectbox(
+                correction_method = st.radio(
                     "Multiple Comparison Correction",
                     options=["Bonferroni (conservative)", "FDR (Benjamini-Hochberg)", "None"],
+                    horizontal=True,
                     key="stats_correction"
                 )
                 correction_key = None if "None" in correction_method else ("bonferroni" if "Bonferroni" in correction_method else "fdr_bh")
@@ -1327,15 +1333,17 @@ def render_statistical_testing_view():
             # Filter controls
             col_f1, col_f2 = st.columns([2, 1])
             with col_f1:
-                show_filter = st.selectbox(
+                show_filter = st.radio(
                     "Show Results",
                     options=["All", "Significant Only (p < 0.05)", "Highly Significant (p < 0.01)"],
+                    horizontal=True,
                     key="stats_filter"
                 )
             with col_f2:
-                sort_by = st.selectbox(
+                sort_by = st.radio(
                     "Sort By",
                     options=["P-value (ascending)", "Effect Size (absolute)", "Word (alphabetical)"],
+                    horizontal=True,
                     key="stats_sort"
                 )
             

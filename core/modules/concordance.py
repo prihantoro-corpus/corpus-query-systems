@@ -251,7 +251,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 meta_cols = [c[1] for c in cols_info if c[1] not in ('id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename')]
                 c0_xml_where = xml_where_clause
                 for col in meta_cols:
-                    c0_xml_where = re.sub(rf'\b({col})\b', rf"c0.\1", c0_xml_where, flags=re.IGNORECASE)
+                    c0_xml_where = re.sub(rf'"{col}"|\b{col}\b', lambda m: f'c0.{m.group(0)}', c0_xml_where, flags=re.IGNORECASE)
             except:
                 c0_xml_where = xml_where_clause
 
@@ -264,7 +264,13 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         
         full_params = query_params + coll_filter_params + xml_params
         
+        with open("debug_query.log", "a", encoding="utf-8") as f_debug:
+            f_debug.write(f"--- QUERY START ---\nFinal Query: {final_query}\nParams: {full_params}\n")
+        
         df_matches = con.execute(final_query, full_params).fetch_df()
+        
+        with open("debug_query.log", "a", encoding="utf-8") as f_debug:
+            f_debug.write(f"Matches count: {len(df_matches)}\n--- QUERY END ---\n\n")
         
         if df_matches.empty:
             con.close()
@@ -391,10 +397,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         grouped = df_context.groupby('match_id')
         
         for match_id, group in grouped:
-            tokens = group['token'].tolist()
-            tokens_low = group['token'].str.lower().tolist()
-            poss = group['pos'].tolist()
-            lemmas = group['lemma'].tolist()
+            tokens = [str(t) if pd.notna(t) else "" for t in group['token'].tolist()]
+            tokens_low = [t.lower() for t in tokens]
+            poss = [str(p) if pd.notna(p) else "" for p in group['pos'].tolist()]
+            lemmas = [str(l) if pd.notna(l) else "" for l in group['lemma'].tolist()]
             c_ids = group['id'].tolist()
             chunk_sent_ids = group['sent_id'].tolist()
             

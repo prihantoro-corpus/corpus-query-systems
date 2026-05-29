@@ -2,7 +2,9 @@ import streamlit as st
 import re
 import pandas as pd
 import os
+import itertools
 from ui_streamlit.state_manager import get_state, set_state
+from ui_streamlit.utils import notify_timing
 from ui_streamlit.caching import cached_generate_kwic, cached_get_subcorpus_size
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
@@ -19,6 +21,17 @@ def render_concordance_view():
     if not corpus_path:
         st.warning("Please load a corpus first.")
         return
+
+    # Initialize XML restriction variables to prevent NameError in NL search modes
+    xml_where = ""
+    xml_params = []
+    xml_where_1 = ""
+    xml_params_1 = []
+    xml_where_2 = ""
+    xml_params_2 = []
+
+    # Deferred execution flag for NL modes (query runs AFTER XML filters are rendered)
+    _deferred_nl_query = None
 
     # 1. Controls
     search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="kwic_search_mode")
@@ -42,7 +55,7 @@ def render_concordance_view():
             with c_adv1:
                 coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
             with c_adv2:
-                sort_order = st.selectbox("Sort By", ["Node (Default)", "Left Context", "Right Context"], key="kwic_sort_rule")
+                sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
                 c_sh1, c_sh2, c_sh3 = st.columns(3)
                 with c_sh1:
                     show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
@@ -92,15 +105,11 @@ def render_concordance_view():
                     if coll_filter_parsed:
                         st.info(f"   + Collocate Filter: '{coll_filter_parsed}'")
                     
-                    # Execute the search (XML filters are now defined in common area below)
-                    run_concordance_query('primary', corpus_path, corpus_name, 
-                                          query, 
-                                          window_size, 
-                                          window_size,
-                                          limit, 
-                                          coll_filter_parsed, 
-                                          xml_where, xml_params,
-                                          show_pos, show_lemma)
+                    # Defer execution until after XML filters are rendered below
+                    _deferred_nl_query = {
+                        'query': query, 'window': window_size, 'limit': limit,
+                        'coll_filter': coll_filter_parsed, 'show_pos': show_pos, 'show_lemma': show_lemma
+                    }
                 else:
                     st.error(f"Error parsing query: {err}")
     
@@ -160,17 +169,15 @@ def render_concordance_view():
                     
                     st.success(f"✓ Executing search for '{query}'...")
                     
-                    # Execute (XML filters are now defined in common area below)
-                    run_concordance_query('primary', corpus_path, corpus_name, 
-                                          query, 
-                                          win, 
-                                          win,
-                                          100, # Default limit
-                                          "", # Coll filter
-                                          xml_where, xml_params,
-                                          False, False) # Show POS/Lemma defaults
+                    # Defer execution until after XML filters are rendered below
+                    _deferred_nl_query = {
+                        'query': query, 'window': win, 'limit': 100,
+                        'coll_filter': '', 'show_pos': False, 'show_lemma': False
+                    }
                 else:
                     st.error(f"Could not parse query: {err}")
+
+
 
     if search_mode == "Standard":
         with st.expander("Search Controls", expanded=True):
@@ -187,7 +194,7 @@ def render_concordance_view():
             with c_adv1:
                 coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
             with c_adv2:
-                sort_order = st.selectbox("Sort By", ["Node (Default)", "Left Context", "Right Context"])
+                sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
                 c_sh1, c_sh2, c_sh3 = st.columns(3)
                 with c_sh1:
                     show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
@@ -224,6 +231,8 @@ def render_concordance_view():
             else:
                 xml_where_2, xml_params_2 = "", []
 
+
+
     if search_mode == "Standard":
         if comp_mode:
             st.markdown("##### Comparison Search Inputs")
@@ -236,10 +245,65 @@ def render_concordance_view():
             search_term_1 = search_term # Use the main input
             search_term_2 = None
 
+        # Auto-reactive update on filter changes
         if not comp_mode:
-            if st.button("Generate Concordance Lines", type="primary"):
-                set_state('kwic_search_term', search_term)
-                run_concordance_query('primary', corpus_path, corpus_name, search_term, window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
+            current_results = st.session_state.get('last_kwic_results_primary')
+            if current_results and (current_results.get('xml_where') != xml_where or current_results.get('xml_params') != xml_params):
+                run_concordance_query('primary', corpus_path, corpus_name, current_results['search_term'], window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
+        else:
+            current_results_1 = st.session_state.get('last_kwic_results_primary')
+            if current_results_1 and (current_results_1.get('xml_where') != xml_where_1 or current_results_1.get('xml_params') != xml_params_1):
+                run_concordance_query('primary', corpus_path, corpus_name, current_results_1['search_term'], window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
+                
+            current_results_2 = st.session_state.get('last_kwic_results_secondary')
+            if current_results_2 and comp_path and (current_results_2.get('xml_where') != xml_where_2 or current_results_2.get('xml_params') != xml_params_2):
+                run_concordance_query('secondary', comp_path, comp_name, current_results_2['search_term'], window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
+
+        if not comp_mode:
+            has_results = bool(st.session_state.get('last_kwic_results_primary'))
+            _active_filters = xml_filters or {}
+            _has_categorical = any(
+                f.get('type') == 'list' and f.get('values') for f in _active_filters.values()
+            ) if _active_filters else False
+            cluster_examples_limit = st.radio(
+                "Examples per Cluster",
+                options=[5, 10, 15, 20, 25, "All"],
+                index=0,
+                horizontal=True,
+                key="cluster_examples_limit_select"
+            )
+            btn_col1, btn_col2 = st.columns([1, 1])
+            with btn_col1:
+                if st.button("Generate Concordance Lines", type="primary", use_container_width=True):
+                    # Clear any previous cluster results when re-generating
+                    st.session_state['last_kwic_results_cluster'] = None
+                    set_state('kwic_search_term', search_term_1)
+                    run_concordance_query('primary', corpus_path, corpus_name, search_term_1, window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
+            with btn_col2:
+                cluster_btn_help = (
+                    "Cluster concordance by selected metadata categories"
+                    if has_results and _has_categorical
+                    else "Generate concordance lines first, then select categorical metadata filters to enable clustering"
+                )
+                cluster_btn_disabled = not (has_results and _has_categorical)
+                if st.button(
+                    "🧩 Cluster Mode",
+                    type="secondary",
+                    disabled=cluster_btn_disabled,
+                    help=cluster_btn_help,
+                    use_container_width=True,
+                    key="btn_cluster_mode"
+                ):
+                    _cluster_limit = st.session_state.get('kwic_limit', 100)
+                    _active_search_term = get_state('kwic_search_term', search_term)
+                    limit_val = 999999 if cluster_examples_limit == "All" else int(cluster_examples_limit)
+                    run_cluster_concordance_query(
+                        corpus_path, corpus_name,
+                        _active_search_term,
+                        window_size,
+                        limit_val,  # samples per cluster
+                        _active_filters
+                    )
         else:
             if st.button("Generate Comparison Concordance", type="primary"):
                 set_state('kwic_search_term', search_term_1)
@@ -253,8 +317,20 @@ def render_concordance_view():
         search_term_1 = get_state('kwic_search_term', '')
         search_term_2 = None
 
+    # --- Deferred NL Query Execution (runs AFTER xml_where/xml_params are set) ---
+    if _deferred_nl_query is not None:
+        _dq = _deferred_nl_query
+        run_concordance_query(
+            'primary', corpus_path, corpus_name,
+            _dq['query'], _dq['window'], _dq['window'],
+            _dq['limit'], _dq['coll_filter'],
+            xml_where, xml_params,
+            _dq['show_pos'], _dq['show_lemma']
+        )
+
     # --- Results Display / Annotation Resume ---
     results = st.session_state.get('last_kwic_results_primary')
+    cluster_results = st.session_state.get('last_kwic_results_cluster')
     
     # Initialize multi-annotation state if missing
     if 'kwic_annotations' not in st.session_state:
@@ -400,8 +476,94 @@ def render_concordance_view():
                     if results_2:
                         render_concordance_column(results_2, get_state('kwic_search_term_2', ''), key_suffix="c2")
     elif not results and not comp_mode:
-         # Check if we have comparison but no primary (unlikely but safe)
          pass
+
+    # --- Cluster Results (shown below primary results regardless of mode) ---
+    if cluster_results:
+        st.markdown("---")
+        _cluster_search_term = get_state('kwic_search_term', search_term_1 if 'search_term_1' in dir() else '')
+        st.markdown(f"## 🧩 Cluster Concordance: *{_cluster_search_term}*")
+        st.caption(
+            f"**{len(cluster_results)} cluster(s)** generated from selected metadata filters. "
+            "Each cluster shows a random sample of concordance lines matching that combination."
+        )
+        for cluster_name, res in cluster_results.items():
+            _n = len(res.get('rows', []))
+            _total = res.get('total', _n)
+            with st.expander(f"📦 **{cluster_name}** — {_n} sample(s) of {_total:,} total", expanded=True):
+                render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
+
+@notify_timing("Cluster Concordance generated")
+def run_cluster_concordance_query(path, name, query, window, limit, filters):
+    # 1. Prepare Cartesian Product of list-based filters
+    keys = []
+    value_lists = []
+    for k, f in filters.items():
+        if f['type'] == 'list' and f['values']:
+            keys.append(k)
+            value_lists.append(f['values'])
+        elif f['type'] == 'range':
+            st.error(f"Attribute '{k}' is a numeric range and cannot be used for clustering. Please select categorical attributes (like domain or sentiment) instead.")
+            continue
+    
+    if not value_lists:
+        st.error("No categorical attributes selected for clustering. Please select at least one attribute and multiple values in the Restricted Search.")
+        return
+
+    combinations = list(itertools.product(*value_lists))
+    
+    cluster_results = {}
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, combo in enumerate(combinations):
+        # Build filter for this specific combo
+        current_filters = {}
+        combo_name_parts = []
+        for j, val in enumerate(combo):
+            current_filters[keys[j]] = {'type': 'list', 'values': [val]}
+            combo_name_parts.append(str(val))
+        
+        combo_name = " | ".join(combo_name_parts)
+        status_text.text(f"Processing cluster {i+1}/{len(combinations)}: {combo_name}")
+        
+        # Convert to where clause
+        where, params = apply_xml_restrictions(current_filters)
+        
+        # Run query with random sampling as requested
+        rows, total, _, _, _, _ = cached_generate_kwic(
+            db_path=path,
+            query=query,
+            left=window,
+            right=window,
+            corpus_name=name,
+            limit=limit,
+            do_random_sample=True,
+            xml_where_clause=where,
+            xml_params=tuple(params)
+        )
+        
+        if rows:
+            cluster_results[combo_name] = {
+                'rows': rows,
+                'total': total,
+                'path': path,
+                'name': combo_name,
+                'search_term': query,
+                'window': window,
+                'xml_where': where,
+                'xml_params': params,
+                'breakdown': pd.DataFrame() # Add empty breakdown
+            }
+        
+        progress_bar.progress((i + 1) / len(combinations))
+    
+    progress_bar.empty()
+    status_text.empty()
+    st.session_state['last_kwic_results_cluster'] = cluster_results
+    st.session_state['last_kwic_results_primary'] = None # Clear primary to focus on cluster
+    st.success(f"Generated {len(cluster_results)} clusters.")
 
 def run_concordance_query(identifier, path, name, query, left, right, limit, coll_filter, xml_where, xml_params, show_pos=False, show_lemma=False):
     if not query or not query.strip():
@@ -419,7 +581,7 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             pattern_window=left,
             limit=limit,
             xml_where_clause=xml_where,
-            xml_params=xml_params,
+            xml_params=tuple(xml_params) if xml_params else (),
             show_pos=show_pos,
             show_lemma=show_lemma
         )
