@@ -8,7 +8,7 @@ from core.modules.keyword import generate_keyword_list, generate_grouped_keyword
 from core.visualiser.wordcloud import generate_wordcloud
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.io_utils import df_to_excel_bytes, dfs_to_zip_excel_bytes
-from core.config import get_available_corpora
+from core.config import get_available_corpora, BUILT_IN_CORPORA
 from core.preprocessing.corpus_loader import load_monolingual_corpus_files, load_built_in_corpus
 from core.preprocessing.xml_parser import apply_xml_restrictions, get_xml_attribute_columns
 from core.ai_service import parse_nl_query

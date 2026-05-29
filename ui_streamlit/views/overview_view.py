@@ -125,13 +125,41 @@ def render_overview():
     if not comp_mode:
         # Standard Single View
         corpus_path = get_state('current_corpus_path')
+        source_type = get_state('source_type')
+        
         if not corpus_path:
-            source_type = get_state('source_type')
-            if source_type == "Online Corpus":
+            st.info("👋 **Welcome to CORTEX!** Please choose a corpus to get started.")
+            
+            landing_tabs = st.tabs(["🏛️ Built-in Corpora", "📤 Upload Files", "🌐 Online Builder"])
+            
+            with landing_tabs[0]:
+                render_built_in_corpora_selection_ui()
+                
+            with landing_tabs[1]:
+                st.markdown("### 📤 Upload Your Own Files")
+                st.write("You can upload XML, TXT, CSV, or XLSX files from the sidebar to process them.")
+                st.info("Check the sidebar on the left to select and process your files.")
+                
+                with st.expander("ℹ️ Supported Formats"):
+                    st.markdown("""
+                    - **XML**: CORTEX extracts tokens and attributes.
+                    - **TXT**: Processed via Stanza for POS and Lemmatization.
+                    - **CSV/XLSX**: Must contain a column named 'token'.
+                    """)
+            
+            with landing_tabs[2]:
                 render_online_builder_ui()
-            else:
-                st.info("Please load a corpus from the sidebar to view statistics.")
+            
             return
+        
+        # If corpus is loaded but user wants to switch in the main area
+        if source_type == "Online Corpus":
+            with st.expander("🌐 Online Corpus Builder (Load New)", expanded=False):
+                render_online_builder_ui()
+        elif source_type == "Built-in Corpora":
+            with st.expander("📚 Available Built-in Corpora (Load New)", expanded=False):
+                render_built_in_corpora_selection_ui()
+            
         stats = get_state('corpus_stats')
         name = get_state('current_corpus_name')
         structure = get_state('xml_structure_data')
@@ -141,10 +169,33 @@ def render_overview():
         # Comparison Side-by-Side
         c1_path = get_state('current_corpus_path')
         c2_path = get_state('comp_corpus_path')
+        source_type = get_state('source_type')
         
         if not c1_path and not c2_path:
-            st.info("Please load corpora to compare.")
+            st.info("👋 **Comparison Mode Enabled.** Please load two corpora to compare.")
+            
+            landing_tabs = st.tabs(["🏛️ Built-in Corpora", "📤 Upload Files", "🌐 Online Builder"])
+            
+            with landing_tabs[0]:
+                render_built_in_corpora_selection_ui()
+                
+            with landing_tabs[1]:
+                st.markdown("### 📤 Upload Your Own Files")
+                st.write("You can upload two different corpora from the sidebar and compare them side-by-side.")
+                st.info("Check the sidebar to load your Primary and Comparison corpora.")
+            
+            with landing_tabs[2]:
+                render_online_builder_ui()
+            
             return
+
+        # Show switcher if already loaded
+        if source_type == "Online Corpus":
+            with st.expander("🌐 Online Corpus Builder (Load New)", expanded=False):
+                render_online_builder_ui()
+        elif source_type == "Built-in Corpora":
+            with st.expander("📚 Available Built-in Corpora (Load New)", expanded=False):
+                render_built_in_corpora_selection_ui()
             
         col_a, col_b = st.columns(2)
         
@@ -869,6 +920,112 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
     finally:
         conn.close()
 
+def auto_process_online_files(files):
+    from core.preprocessing.corpus_loader import load_monolingual_corpus_files
+    from core.config import STANZA_LANG_MAP
+    import io
+    
+    if not files:
+        st.error("No online files were downloaded.")
+        return
+        
+    selected_lang_label = get_state('upload_language_select', 'English')
+    if selected_lang_label == "OTHER":
+        lang_code = "OTHER"
+    else:
+        lang_code = STANZA_LANG_MAP.get(selected_lang_label, 'en')
+        
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    def update_progress(val, text):
+        progress_bar.progress(val)
+        status_text.caption(text)
+        
+    files_to_process = []
+    for f_dict in files:
+        buf = io.BytesIO(f_dict['content'].encode('utf-8'))
+        buf.name = f_dict['filename']
+        files_to_process.append(buf)
+        
+    with st.spinner("Processing & indexing online corpus content..."):
+        result = load_monolingual_corpus_files(
+            files_to_process,
+            explicit_lang_code=lang_code,
+            selected_format="Raw (Natural text)",
+            progress_callback=update_progress
+        )
+        
+        if result.get('error'):
+            st.error(result['error'])
+        else:
+            set_state('current_corpus_path', result['db_path'])
+            set_state('corpus_stats', result['stats'])
+            set_state('current_corpus_name', "Online Scraped Batch")
+            set_state('xml_structure_data', result.get('structure'))
+            set_state('target_lang', lang_code)
+            st.success("Online corpus loaded successfully!")
+            st.rerun()
+
+def render_built_in_corpora_selection_ui():
+    from core.config import get_available_corpora, BUILT_IN_CORPUS_DETAILS
+    from core.preprocessing.corpus_loader import load_built_in_corpus
+    
+    st.subheader("📚 Available Built-in Corpora")
+    st.write("Select a pre-packaged corpus below to load it directly into the session:")
+    
+    built_in_corpora = get_available_corpora()
+    if not built_in_corpora:
+        st.warning("No built-in corpora found in the local 'corpora' directory.")
+        return
+        
+    for name, rel_path in built_in_corpora.items():
+        with st.container(border=True):
+            col_info, col_action = st.columns([4, 1])
+            with col_info:
+                st.markdown(f"### {name}")
+                detail = BUILT_IN_CORPUS_DETAILS.get(name)
+                if detail:
+                    st.markdown(detail, unsafe_allow_html=True)
+                else:
+                    st.caption(f"Path: `{rel_path}`")
+            with col_action:
+                st.write("") # spacer
+                st.write("") # spacer
+                if st.button(f"Load {name}", key=f"load_builtin_main_{name}", type="primary"):
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    def update_progress(val, text):
+                        progress_bar.progress(val)
+                        status_text.caption(text)
+                        
+                    with st.spinner(f"Loading {name}..."):
+                        result = load_built_in_corpus([name], [rel_path], progress_callback=update_progress)
+                        
+                        if result.get('error'):
+                            st.error(result['error'])
+                        else:
+                            if not get_state('comparison_mode'):
+                                set_state('current_corpus_path', result['db_path'])
+                                set_state('corpus_stats', result['stats'])
+                                set_state('current_corpus_name', name)
+                                set_state('xml_structure_data', result.get('structure'))
+                            else:
+                                if not get_state('current_corpus_path'):
+                                    set_state('current_corpus_path', result['db_path'])
+                                    set_state('corpus_stats', result['stats'])
+                                    set_state('current_corpus_name', name)
+                                    set_state('xml_structure_data', result.get('structure'))
+                                else:
+                                    set_state('comp_corpus_path', result['db_path'])
+                                    set_state('comp_corpus_stats', result['stats'])
+                                    set_state('comp_corpus_name', name)
+                                    set_state('comp_xml_structure_data', result.get('structure'))
+                                    
+                            st.success(f"Successfully loaded {name}!")
+                            st.rerun()
+
 def render_online_builder_ui():
     import re
     mode = get_state('online_builder_mode', 'YouTube')
@@ -898,10 +1055,10 @@ def render_online_builder_ui():
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Downloaded {len(files)} components!")
                         if warn: st.warning(warn)
-                        st.info("👉 Now click **'Process Downloaded Files'** in the sidebar to index your corpus.")
+                        auto_process_online_files(files)
                     else:
                         st.error(warn or "Failed to download. Ensure the video has a transcript and comments.")
-
+ 
     elif mode == "Link Collection":
         st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
         st.caption("Paste one URL per line.")
@@ -925,10 +1082,10 @@ def render_online_builder_ui():
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Scraped {len(files)} pages!")
                         if warn: st.warning(warn)
-                        st.info("👉 Now click **'Process Downloaded Files'** in the sidebar to index your corpus.")
+                        auto_process_online_files(files)
                     else:
                         st.error(warn or "Failed to scrape.")
-
+ 
     elif mode == "Keyword Search":
         st.info("💡 **Experimental:** Max 5 keywords and 100,000 words limit.")
         st.caption("Find pages containing at least **n-2** of your keywords (minimum 2).")
@@ -954,7 +1111,7 @@ def render_online_builder_ui():
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Built corpus with {len(files)} matching pages!")
                         if warn: st.warning(warn)
-                        st.info("👉 Now click **'Process Downloaded Files'** in the sidebar to index your corpus.")
+                        auto_process_online_files(files)
                     else:
                         st.error(warn or "No matching pages found or search limit exceeded.")
 

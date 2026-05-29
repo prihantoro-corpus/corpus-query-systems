@@ -11,6 +11,15 @@ if architecture_root not in sys.path:
 # Force reload logic removed to improve performance. 
 # Streamlit handles module reloading natively in development mode.
 import importlib
+import core.config
+import ui_streamlit.state_manager
+import ui_streamlit.components.sidebar
+import ui_streamlit.views.overview_view
+
+importlib.reload(core.config)
+importlib.reload(ui_streamlit.state_manager)
+importlib.reload(ui_streamlit.components.sidebar)
+importlib.reload(ui_streamlit.views.overview_view)
 
 # Debug Imports
 try:

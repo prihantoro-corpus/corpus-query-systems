@@ -100,14 +100,14 @@ exit /b 0
 for /f "tokens=2" %%v in ('!PYTHON_CMD! --version 2^>^&1') do set "PY_VER=%%v"
 echo Python !PY_VER! found.
 
-:: Git update check (only if it's a git repo)
-if exist ".git" (
-    where git >nul 2>nul
-    if %ERRORLEVEL% equ 0 (
-        echo Checking for updates from GitHub...
-        git pull
-    )
-)
+:: Git update check disabled to prevent overwriting local changes
+:: if exist ".git" (
+::     where git >nul 2>nul
+::     if %ERRORLEVEL% equ 0 (
+::         echo Checking for updates from GitHub...
+::         git pull
+::     )
+:: )
 
 :: Install/update dependencies (reuses existing global installations quickly)
 echo Checking and installing/updating dependencies...

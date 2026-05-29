@@ -19,6 +19,7 @@ from core.modules.statistical_testing import (
     get_feature_matrix, perform_clustering, generate_clustering_interpretation,
     perform_correspondence_analysis, generate_ca_interpretation, perform_burrows_delta
 )
+from core.modules.overview import get_pos_definitions, get_corpus_language
 from core.io_utils import df_to_excel_bytes
 import duckdb
 from scipy import stats
