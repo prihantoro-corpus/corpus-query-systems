@@ -13,7 +13,9 @@ from core.config import CORPORA_DIR, TAGSET_DIR
 from core.modules.overview import save_pos_definitions
 import core.preprocessing.tagging as tagging
 import time
+from core.utils.profiler import profile_func
 
+@profile_func
 def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None):
     """
     Loads one or more monolingual files into a DuckDB database.
@@ -250,6 +252,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         'warning': stanza_warning if 'stanza_warning' in locals() else None
     }
 
+@profile_func
 def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code, progress_callback=None):
     if src_file is None or tgt_file is None: return {'error': "Files missing"}
 
@@ -453,6 +456,7 @@ FOLDER_TO_LANG_MAP = {
     'hindi': 'Hindi'
 }
 
+@profile_func
 def load_built_in_corpus(name, url, progress_callback=None):
     """Downloads or loads one or more built-in corpora."""
     # Support both single and multiple corpora
