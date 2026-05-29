@@ -1462,8 +1462,8 @@ def _render_reading_ease_tab(db_path, key_suffix=""):
     with col_ann1:
         ann_scope = st.radio(
             "**Annotation Granularity:**",
-            options=["Sentence Level", f"Chunks (per {selected_chunk_size:,} words)"],
-            help="Sentence Level: Calculates difficulty for every individual sentence (great for multi-document/varied corpora). Chunk Level: Breaks the text into segments of the selected size (recommended for single large texts/flat corpora to see difficulty segments).",
+            options=["Sentence Level", "Chunk Level"],
+            help=f"Sentence Level: Calculates difficulty for every individual sentence (great for multi-document/varied corpora). Chunk Level: Breaks the text into segments of the selected size ({selected_chunk_size:,} words) (recommended for single large texts/flat corpora to see difficulty segments).",
             key=f"ann_scope_{key_suffix}"
         )
         
