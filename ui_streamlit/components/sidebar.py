@@ -57,6 +57,10 @@ def render_sidebar():
         key="sidebar_source_selectbox"
     )
     
+    # Debug info
+    st.sidebar.write(f"DEBUG: Selected={source_type}, Saved={saved_source}")
+    print(f"DEBUG: Selected={source_type}, Saved={saved_source}")
+    
     if source_type != saved_source:
         set_state('source_type', source_type)
         st.rerun()
