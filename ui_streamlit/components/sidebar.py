@@ -13,7 +13,7 @@ def render_sidebar():
     """
     # 1. Navigation (Tools) - MOVED TO TOP
     st.sidebar.title("Tools (v1.1 Stanza)")
-    st.sidebar.caption("App Version: v180526")
+    st.sidebar.caption("App Version: v290526")
     view = st.sidebar.radio(
         "Go to", 
         ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
