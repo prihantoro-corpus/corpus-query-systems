@@ -105,8 +105,9 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
         if len(lines) > 0:
             # Strictly require tabs for auto-detection of vertical format inside inline tags
             # to avoid false positives on horizontal segments with few words.
+            # Lowered threshold to 0.4 to be more inclusive of partially sparse vertical tags
             vertical_score = sum(1 for l in lines if '\t' in l) / len(lines)
-            if vertical_score > 0.6:
+            if vertical_score > 0.4:
                 is_vertical = True
 
         if is_vertical:
@@ -132,11 +133,6 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
         # 2. Use Stanza if available (for horizontal/inline text)
         if stanza_processor:
             try:
-                import time
-                log_file = f"xml_tagging_{int(time.time())}.log"
-                with open(log_file, "a") as f:
-                    f.write(f"Calling stanza for inline text: {text[:50]}...\n")
-                
                 tagged_data, err = stanza_processor(text, lang_code)
                 if not err and tagged_data:
                     for rec in tagged_data:
@@ -150,16 +146,8 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
                         row.update(context)
                         tokens_data.append(row)
                     return
-                else:
-                    with open(log_file, "a") as f:
-                        f.write(f"Stanza Error in inline: {err}\n")
-            except Exception as e:
-                import traceback
-                error_trace = traceback.format_exc()
-                import time
-                log_file = f"xml_tagging_{int(time.time())}.log"
-                with open(log_file, "a") as f:
-                    f.write(f"Stanza Exception in inline: {e}\n{error_trace}\n")
+            except Exception:
+                pass
         
         # 3. Fallback: simple whitespace tokenization
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', text)
@@ -407,23 +395,11 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
             else:
                 raw_text_to_tokenize = raw_sentence_text.replace('\n', ' ').replace('\t', ' ')
                 if stanza_processor:
-                    import time
-                    log_file = f"xml_tagging_{int(time.time())}.log"
-                    with open(log_file, "a") as f:
-                        f.write(f"Calling stanza for segment. Lang: {final_lang}\n")
-                        
                     res = stanza_processor(raw_text_to_tokenize, final_lang)
                     if isinstance(res, tuple) and len(res) == 2:
                         stanza_records, err = res
                     else:
                         stanza_records, err = res, None
-                    
-                    if not err and stanza_records:
-                        with open(log_file, "a") as f:
-                            f.write(f"Stanza success. Got {len(stanza_records)} records.\n")
-                    else:
-                        with open(log_file, "a") as f:
-                            f.write(f"Stanza error in segment: {err}\n")
                     
                     if not err and stanza_records:
                         current_stanza_sent = -1
