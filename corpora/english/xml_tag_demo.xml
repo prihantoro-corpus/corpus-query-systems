@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<corpus name="XMLTagDemo" lang="EN">
+    <text id="demo_001">
+        <s n="1"><PN type="person" role="CEO">Sarah Johnson</PN>, the CEO of <ORG type="company" sector="tech">TechCorp Inc</ORG>, announced the release of their new <TECH type="device" category="quantum">quantum scanner</TECH> in <PN type="place" country="USA">Silicon Valley</PN>.</s>
+        <s n="2">The device has <EVAL sentiment="positive" intensity="high" certainty="certain">outstanding</EVAL> performance and can process data at <EVAL sentiment="positive" intensity="medium" certainty="probable">amazing</EVAL> speeds.</s>
+        <s n="3">She noted that <ORG type="company" sector="finance">Global Bank</ORG> invested <NUM type="currency" unit="USD">5000000</NUM> in this project, which created <NUM type="quantity" unit="jobs">200</NUM> new jobs.</s>
+        <s n="4"><PN type="person" role="researcher">Michael Chen</PN>, a leading scientist at <ORG type="university">MIT</ORG>, confirmed the technological breakthrough.</s>
+        <s n="5">He explained that the device works by scanning the <PN type="place">Andromeda Nebula</PN> with a high-intensity <TECH type="device">laser beam</TECH>.</s>
+        <s n="6">However, some critics expressed <EVAL sentiment="negative" intensity="low" certainty="uncertain">slight</EVAL> concern about the energy consumption.</s>
+        <s n="7">Meanwhile, <PN type="person" role="athlete" sport="football">David Martinez</PN> scored a goal for his <ORG type="team" sport="football">Red Stars FC</ORG> team.</s>
+        <s n="8">Their victory was <EVAL sentiment="positive" intensity="high" certainty="certain">incredible</EVAL> and ended the championship match with a <NUM type="score">3-1</NUM> win.</s>
+    </text>
+</corpus>

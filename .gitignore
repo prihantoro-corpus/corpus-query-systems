@@ -20,8 +20,11 @@ home/stanza_resources/
 # User Data / Corpora (unless specifically added)
 corpora/**/*.txt
 corpora/**/*.xml
-!corpora/ID-BPPT-tagged.xml
-!corpora/EN-BPPT-tagged.xml
+!corpora/english/xml_tag_demo.xml
+!corpora/indonesian/ID-BPPT-tagged.xml
+!corpora/english/EN-BPPT-tagged.xml
+!corpora/english/BrownCorpus.xml
+!corpora/indonesian/KOSLAT-full.xml
 
 # Temporary / Testing
 test_stanza_standalone.py
