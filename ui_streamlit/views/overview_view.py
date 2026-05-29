@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
+from ui_streamlit.utils import notify_timing
 import core.modules.overview as ov
 import importlib
 importlib.reload(ov)
@@ -666,7 +667,7 @@ def _render_classification_tab(db_path, key_suffix):
                     st.write("Computing Sentiment...")
                     # Get current language from DB or State
                     lang_for_sent = ov.get_corpus_language(db_path)
-                    df_sents['Predicted Sentiment'] = classify_sentiment_vader(texts, lang=lang_for_sent)
+                    df_sents['Predicted Sentiment'] = notify_timing("Sentiment analysis completed")(classify_sentiment_vader)(texts, lang=lang_for_sent)
                 
                 # Topic Classification
                 topic_info = None
@@ -678,15 +679,17 @@ def _render_classification_tab(db_path, key_suffix):
                             st.error("BERTopic is not installed. Please run: `pip install bertopic sentence-transformers`")
                             return
                         
-                        topic_assignments, topic_info = classify_topics_bertopic(
+                        res = notify_timing("BERTopic classification completed")(classify_topics_bertopic)(
                             texts, 
                             n_topics=n_topics,
                             min_topic_size=min_topic_size
                         )
+                        topic_assignments, topic_info = res
                         df_sents['Predicted Topic'] = topic_assignments
                     else:
                         st.write("Computing Topics with TF-IDF...")
-                        topic_assignments, topic_info = classify_topics_keyword_weighted(texts)
+                        res = notify_timing("TF-IDF topic classification completed")(classify_topics_keyword_weighted)(texts)
+                        topic_assignments, topic_info = res
                         df_sents['Predicted Topic'] = topic_assignments
                 
                 # Store results

@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
+from ui_streamlit.utils import notify_timing
 from core.modules.summarisation import (
     get_summarization_metadata_fields, 
     get_metadata_values, 
@@ -92,9 +93,9 @@ def render_summarisation_view():
                             continue
                         
                         if method == "Traditional (Extractive)":
-                            summary = summarize_text_extractive(text, full_lang, word_limit, algorithm)
+                            summary = notify_timing(f"Extractive summary of {display_name} generated")(summarize_text_extractive)(text, full_lang, word_limit, algorithm)
                         else:
-                            summary = summarize_text_ai(
+                            summary = notify_timing(f"AI summary of {display_name} generated")(summarize_text_ai)(
                                 text, 
                                 provider=get_state('ai_provider'),
                                 model=get_state('ai_model'),

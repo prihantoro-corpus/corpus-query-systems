@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
+from ui_streamlit.utils import notify_timing
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions, get_xml_attribute_columns
 
@@ -241,7 +242,7 @@ def render_statistical_testing_view():
                         df_y = get_document_metric_vector(corpus_path, y_config['metric'], group_by=grouping_key)
                         
                     # Calculate
-                    res = calculate_correlation(df_x, df_y, method=method_code)
+                    res = notify_timing(f"Correlation calculated ({method_code})")(calculate_correlation)(df_x, df_y, method=method_code)
                     
                     if 'error' in res:
                         st.error(res['error'])
@@ -406,7 +407,7 @@ def render_statistical_testing_view():
             with st.spinner("Clustering segments..."):
                 try:
                     # 1. Get Feature Matrix
-                    df_matrix, top_words = get_feature_matrix(
+                    df_matrix, top_words = notify_timing("Feature matrix generated")(get_feature_matrix)(
                         corpus_path, 
                         group_by=grouping_key,
                         top_n_features=top_n,
@@ -426,7 +427,7 @@ def render_statistical_testing_view():
                         }
                         
                         # 2. Perform Clustering (to get linkage Z)
-                        res = perform_clustering(
+                        res = notify_timing("Clustering performed")(perform_clustering)(
                             df_matrix, 
                             distance_metric=metric_code, 
                             method='ward',
@@ -540,7 +541,7 @@ def render_statistical_testing_view():
                     try:
                         # 1. Reuse existing get_feature_matrix backend
                         # CA requires raw frequencies, NO z-scores.
-                        ca_matrix, ca_features = get_feature_matrix(
+                        ca_matrix, ca_features = notify_timing("CA feature matrix generated")(get_feature_matrix)(
                             corpus_path,
                             group_by=grouping_key,
                             top_n_features=ca_top_n,
@@ -552,7 +553,7 @@ def render_statistical_testing_view():
                             st.error("Matrix is empty. Try flexible filters.")
                         else:
                             # 2. Run CA
-                            ca_res = perform_correspondence_analysis(ca_matrix)
+                            ca_res = notify_timing("Correspondence Analysis completed")(perform_correspondence_analysis)(ca_matrix)
                             
                             if 'error' in ca_res:
                                 st.error(ca_res['error'])
@@ -847,7 +848,7 @@ def render_statistical_testing_view():
                             st.stop()
                         
                         status_placeholder.info(f"📊 Building restricted feature matrix for {len(all_selected)} segments...")
-                        raw_matrix, features = get_feature_matrix(
+                        raw_matrix, features = notify_timing("Stylometric matrix generated")(get_feature_matrix)(
                             corpus_path,
                             group_by=aa_grouping_key,
                             top_n_features=aa_top_n,
@@ -906,7 +907,7 @@ def render_statistical_testing_view():
                             # 5. Calculate Results
                             # Delta
                             status_placeholder.info(f"🔍 Computing Delta ({len(train_indices)} Known → {len(test_indices)} Questioned)...")
-                            delta_res = perform_burrows_delta(z_matrix, labels_list, train_indices, test_indices)
+                            delta_res = notify_timing("Burrows' Delta calculated")(perform_burrows_delta)(z_matrix, labels_list, train_indices, test_indices)
                             
                             # PCA
                             status_placeholder.info("📍 Calculating PCA Map...")
@@ -1264,7 +1265,7 @@ def render_statistical_testing_view():
             else:
                 with st.spinner(f"Running Chi-square test: {groups[0]} vs {groups[1]}..."):
                     try:
-                        results_df = compare_groups_by_word(
+                        results_df = notify_timing("Group comparison (Chi-square) completed")(compare_groups_by_word)(
                             corpus_db_path=corpus_path,
                             query=query,
                             grouping_attr=grouping_attr,
