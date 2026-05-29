@@ -6,6 +6,83 @@ logging.getLogger('stanza').setLevel(logging.WARNING)
 
 # Cache for Stanza pipelines to avoid reloading
 _STANZA_PIPELINES = {}
+_SPACY_PIPELINES = {}
+
+# Map standard language codes to small/fast SpaCy models
+SPACY_MODEL_MAP = {
+    'en': 'en_core_web_sm',
+    'id': 'id_core_news_sm',
+    'zh': 'zh_core_web_sm',
+    'ja': 'ja_core_news_sm',
+    'ko': 'ko_core_news_sm',
+    'de': 'de_core_news_sm',
+    'fr': 'fr_core_news_sm',
+    'es': 'es_core_news_sm',
+    'it': 'it_core_news_sm',
+    'ru': 'ru_core_news_sm',
+    'pt': 'pt_core_news_sm',
+}
+
+def get_spacy_pipeline(lang_code):
+    """
+    Get or dynamically download a SpaCy pipeline for the specified language.
+    """
+    global _SPACY_PIPELINES
+    if lang_code in _SPACY_PIPELINES:
+        return _SPACY_PIPELINES[lang_code]
+    
+    if lang_code not in SPACY_MODEL_MAP:
+        return None
+        
+    model_name = SPACY_MODEL_MAP[lang_code]
+    try:
+        import spacy
+        nlp = spacy.load(model_name)
+        _SPACY_PIPELINES[lang_code] = nlp
+        return nlp
+    except (OSError, ImportError):
+        try:
+            print(f"SpaCy model '{model_name}' not found. Downloading dynamically...")
+            import spacy.cli
+            spacy.cli.download(model_name)
+            import spacy
+            nlp = spacy.load(model_name)
+            _SPACY_PIPELINES[lang_code] = nlp
+            return nlp
+        except Exception as e:
+            print(f"Failed to download/load SpaCy model '{model_name}': {e}")
+            return None
+
+def tag_text_with_spacy(text, lang_code):
+    """
+    Process text with SpaCy.
+    """
+    try:
+        nlp = get_spacy_pipeline(lang_code)
+        if not nlp:
+            return None, "SpaCy model mapping not available or download failed"
+            
+        # Handle large text inputs safely
+        if len(text) > nlp.max_length:
+            nlp.max_length = len(text) + 1000
+            
+        doc = nlp(text)
+        results = []
+        sent_id = 0
+        for sent in doc.sents:
+            sent_id += 1
+            for token in sent:
+                if token.is_space:
+                    continue
+                results.append({
+                    'token': token.text,
+                    'pos': token.pos_,  # Returns Universal Part of Speech tags (UPOS)
+                    'lemma': token.lemma_ if token.lemma_ else token.text,
+                    'sent_id': sent_id
+                })
+        return results, None
+    except Exception as e:
+        return None, str(e)
 
 def split_sentences_custom(text):
     r"""
@@ -50,9 +127,18 @@ def get_stanza_pipeline(lang_code):
 
 def tag_text_with_stanza(text, lang_code):
     """
-    Process text with Stanza.
+    Process text. Tries SpaCy first for massive speedups, falls back to Stanza if unavailable.
     Returns a tuple (list of dicts, error_msg)
     """
+    # 1. Try SpaCy first
+    spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
+    if spacy_results is not None:
+        print(f"Text tagged successfully using SpaCy for '{lang_code}'.")
+        return spacy_results, None
+        
+    print(f"SpaCy not available/failed for '{lang_code}' (Error: {spacy_err}). Falling back to Stanza...")
+    
+    # 2. Stanza Fallback
     try:
         nlp = get_stanza_pipeline(lang_code)
         if not nlp:
