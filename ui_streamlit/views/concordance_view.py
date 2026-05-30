@@ -43,6 +43,9 @@ def render_concordance_view():
         if st.button("Generate Concordance", type="primary", key="btn_generate_simple", use_container_width=True):
             set_state('kwic_search_term', search_term_simple)
             st.session_state['last_kwic_results_cluster'] = None
+            set_state('kwic_show_meta', False)
+            set_state('kwic_show_pos', False)
+            set_state('kwic_show_lemma', False)
             run_concordance_query(
                 identifier='primary',
                 path=corpus_path,
