@@ -38,7 +38,7 @@ def render_concordance_view():
     results = st.session_state.get('last_kwic_results_primary')
     cluster_results = st.session_state.get('last_kwic_results_cluster')
 
-    tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
+    tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"], key="kwic_active_tab")
 
     with tab_simple:
         search_term_simple = st.text_input("Node Word(s)", value=get_state('kwic_search_term', ''), key="kwic_input_simple", help="Search word or phrase")
@@ -96,9 +96,11 @@ def render_concordance_view():
                     with c_sh3:
                         show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_rule")
                     
-                    set_state('kwic_show_pos', show_pos)
-                    set_state('kwic_show_lemma', show_lemma)
-                    set_state('kwic_show_meta', show_meta)
+                    if st.session_state.get('kwic_active_tab', 0) == 1:
+                        set_state('kwic_show_pos', show_pos)
+                        set_state('kwic_show_lemma', show_lemma)
+                        set_state('kwic_show_meta', show_meta)
+                    
                     
                     wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
                     set_state('kwic_wrap_mode', wrap_mode)
@@ -233,9 +235,11 @@ def render_concordance_view():
                     with c_sh3:
                         show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_cb")
                     
-                    set_state('kwic_show_pos', show_pos)
-                    set_state('kwic_show_lemma', show_lemma)
-                    set_state('kwic_show_meta', show_meta)
+                    if st.session_state.get('kwic_active_tab', 0) == 1:
+                        set_state('kwic_show_pos', show_pos)
+                        set_state('kwic_show_lemma', show_lemma)
+                        set_state('kwic_show_meta', show_meta)
+                    
                     
                     wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
                     set_state('kwic_wrap_mode', wrap_mode)
@@ -772,17 +776,17 @@ def render_concordance_column(results, search_term, key_suffix=""):
             if st.button("💾 Save Annotation Progress", key=f"save_ann_top_{key_suffix}"):
                 save_annotations(results, kwic_annotations)
 
+            show_meta_active = get_state('kwic_show_meta', True)
             for i, row in enumerate(sorted_rows):
                 m_id = str(row['match_id'])
-                col_m, col_l, col_n, col_r, col_a = st.columns([1, 3.5, 2, 3.5, 2])
-                
-                with col_m:
-                    if get_state('kwic_show_meta', True):
+                if show_meta_active:
+                    col_m, col_l, col_n, col_r, col_a = st.columns([1, 3.5, 2, 3.5, 2])
+                    with col_m:
                         m = row.get('Metadata', {})
                         for k, v in m.items():
                             st.caption(f"{v}")
-                    else:
-                        st.empty()
+                else:
+                    col_l, col_n, col_r, col_a = st.columns([4, 2, 4, 2])
                 
                 with col_l:
                     st.markdown(f"<div style='text-align:right; color:#bbb;'>{row['Left']}</div>", unsafe_allow_html=True)
