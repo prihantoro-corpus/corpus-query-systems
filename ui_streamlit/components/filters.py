@@ -66,23 +66,19 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
                     except Exception as e:
                         st.error(f"Error loading {attr}: {e}")
                 else: 
-                    # Categorical Logic (Checkboxes)
+                    # Categorical Logic (Multiselect)
                     # Clean, strip, and deduplicate values
                     cleaned_vals = [str(v).strip() for v in raw_vals if str(v).strip() and str(v).lower() != 'nan']
                     unique_vals = list(dict.fromkeys(cleaned_vals))
                     
                     if not unique_vals: continue
                 
-                    st.markdown(f"**{attr.capitalize()}**")
-                    selected = []
-                    for val in unique_vals:
-                        chk_key = f"xml_filter_chk_{attr}_{val}_{view_name}"
-                        is_checked = st.checkbox(
-                            label=val, 
-                            key=chk_key
-                        )
-                        if is_checked:
-                            selected.append(val)
+                    selected = st.multiselect(
+                        label=f"**{attr.capitalize()}**",
+                        options=unique_vals,
+                        default=[],
+                        key=f"xml_filter_ms_{attr}_{view_name}"
+                    )
                             
                     if selected:
                         selected_filters[attr] = {'type': 'list', 'values': selected}
