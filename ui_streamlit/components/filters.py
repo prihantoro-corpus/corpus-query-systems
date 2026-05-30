@@ -30,8 +30,8 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
             
             selected_filters = {}
             
-            # Place 3 filters per row horizontally
-            num_cols = 3
+            # Place 5 filters per row horizontally
+            num_cols = 5
             for row_idx in range(0, len(attr_cols), num_cols):
                 cols = st.columns(min(num_cols, len(attr_cols) - row_idx))
                 for col_idx, attr in enumerate(attr_cols[row_idx:row_idx + num_cols]):
