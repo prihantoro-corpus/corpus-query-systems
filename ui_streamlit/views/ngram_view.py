@@ -29,219 +29,244 @@ def render_ngram_view():
     # Deferred execution flag for NL modes (query runs AFTER XML filters are rendered)
     _deferred_ngram_query = None
 
-    # 1. Configuration
-    search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="ngram_search_mode")
-    
-    if search_mode == "Natural Language (AI)":
-        st.markdown("### 🧠 Natural Language Search")
-        nl_query = st.text_area("Describe what n-grams you want", height=70, placeholder="e.g. Show me trigrams containing 'data' appearing at least 5 times")
+    tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
+
+    with tab_simple:
+        n_val_simple = st.slider("N-Gram Size (N)", 2, 5, 2, key="ngram_n_simple")
+        if st.button("Generate N-Grams", type="primary", key="btn_generate_ngram_simple", use_container_width=True):
+             positional_bases_simple = {str(i): 'Token' for i in range(1, n_val_simple + 1)}
+             run_ngram_query(
+                 identifier='primary',
+                 path=corpus_path,
+                 name=corpus_name,
+                 n=n_val_simple,
+                 filters={},
+                 skip_punc=True,
+                 basis='Token',
+                 positional_bases=positional_bases_simple,
+                 neg_filter=[],
+                 xml_where="",
+                 xml_params=[],
+                 source='simple'
+             )
+             st.rerun()
+
+    with tab_advanced:
+        # 1. Configuration
+        search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="ngram_search_mode")
         
-        col_ai1, col_ai2 = st.columns([1, 4])
-        with col_ai1:
-            analyze_btn = st.button("Search with AI", type="primary")
+        if search_mode == "Natural Language (AI)":
+            st.markdown("### 🧠 Natural Language Search")
+            nl_query = st.text_area("Describe what n-grams you want", height=70, placeholder="e.g. Show me trigrams containing 'data' appearing at least 5 times")
             
-        if analyze_btn:
-             if not nl_query:
-                 st.warning("Please enter a query.")
-             else:
-                 with st.spinner("AI is configuring n-grams..."):
-                     params, err = parse_nl_query(
-                         nl_query, 
-                         "ngram",
-                         ai_provider=get_state('ai_provider'),
-                         gemini_api_key=get_state('gemini_api_key'),
-                         ollama_url=get_state('ollama_url'),
-                         ollama_model=get_state('ai_model')
-                     )
-                 
-                 if params:
-                     try:
-                         n_val = int(params.get('n_size', 2))
-                     except (ValueError, TypeError): n_val = 2
-                     
-                     set_state('ngram_n', n_val)
-                     
-                     st.success(f"✓ Configured for {n_val}-grams.")
-                     
-                     filters_primary = {}
-                     if params.get('search_term'):
-                         filters_primary['1'] = params.get('search_term')
-                         st.info(f"Adding filter '{params.get('search_term')}' to Position 1.")
-                     
-                     basis = "Token"
-                     positional_bases_primary = {str(i): basis for i in range(1, n_val + 1)}
-                     
-                     # Defer execution until after XML filters are rendered below
-                     _deferred_ngram_query = {
-                         'n': n_val, 'filters': filters_primary, 'skip_punc': True,
-                         'basis': basis, 'pos_bases': positional_bases_primary, 'neg': []
-                     }
-                 else:
-                     st.error(f"Error parsing query: {err}")
-
-    if search_mode == "Natural Language (Rule)":
-        st.markdown("### ⚡ Natural Language Search (Rule-Based)")
-        st.caption("Fast, deterministic parsing. Describe N-gram constraints.")
-        
-        with st.expander("N-Gram Settings", expanded=True):
-             col1, col2 = st.columns([2, 1])
-             with col1:
-                 nl_query = st.text_input("N-Gram Query (NL/Rule)", value=get_state('ngram_nl_query_rule', ''), placeholder="e.g. trigrams starting with 'the'", key="ngram_nl_input_rule")
-             with col2:
-                 n_val = st.slider("N-Gram Size (N)", 2, 5, 2, key="ngram_n_rule")
-                 
-             st.markdown("---")
-             col_punc, col_basis = st.columns(2)
-             with col_punc:
-                 skip_punc = st.checkbox("Skip Punctuation", value=True, key="ngram_skip_punc_rule")
-             with col_basis:
-                 global_basis = st.radio("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, horizontal=True, key="ngram_basis_rule")
-        
-        if st.button("Generate N-Grams (Rule-Based)", type="primary"):
-            if not nl_query:
-                st.warning("Please enter a query.")
-            else:
-                 set_state('ngram_nl_query_rule', nl_query)
-                 
-                 pos_defs = ov.get_pos_definitions(corpus_path) or {}
-                 reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
-                 
-                 params, err = parse_nl_query_rules_only(nl_query, "ngram", reverse_pos_map=reverse_pos_map)
-                 
-                 if params:
-                     search_term = params.get('search_term', '')
-                     st.success(f"✓ Configured for {n_val}-grams.")
-                     
-                     filters_primary = {}
-                     if search_term:
-                         filters_primary['1'] = search_term
-                         st.info(f"   + Filter (Pos 1): '{search_term}'")
-                     
-                     positional_bases_primary = {str(i): global_basis for i in range(1, n_val + 1)}
-                     
-                     # Defer execution until after XML filters are rendered below
-                     _deferred_ngram_query = {
-                         'n': n_val, 'filters': filters_primary, 'skip_punc': skip_punc,
-                         'basis': global_basis, 'pos_bases': positional_bases_primary, 'neg': []
-                     }
-                 else:
-                     st.error(f"Error parsing query: {err}")
-
-    if search_mode == "Standard":
-        with st.expander("N-Gram Settings", expanded=True):
-            col_n, col_punc, col_basis = st.columns([1, 1, 1])
-            with col_n:
-                n_val = st.slider("N-Gram Size (N)", 2, 5, 2, key="ngram_n")
-            with col_punc:
-                skip_punc = st.checkbox("Skip Punctuation", value=True)
-                neg_filter = [] # Removed explicit box as per request; relying on positional negation
-            with col_basis:
-                global_basis = st.radio("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, horizontal=True, key="ngram_basis")
+            col_ai1, col_ai2 = st.columns([1, 4])
+            with col_ai1:
+                analyze_btn = st.button("Search with AI", type="primary")
                 
-            st.markdown("##### Positional Filters & Basis")
-            st.caption("Lower filters match the selected basis. Use `*`, `%`, `_` as wildcards. Use `_TAG` for POS tags, `[lemma]` to override, or `-term` to exclude.")
+            if analyze_btn:
+                 if not nl_query:
+                     st.warning("Please enter a query.")
+                 else:
+                     with st.spinner("AI is configuring n-grams..."):
+                         params, err = parse_nl_query(
+                             nl_query, 
+                             "ngram",
+                             ai_provider=get_state('ai_provider'),
+                             gemini_api_key=get_state('gemini_api_key'),
+                             ollama_url=get_state('ollama_url'),
+                             ollama_model=get_state('ai_model')
+                         )
+                     
+                     if params:
+                         try:
+                             n_val = int(params.get('n_size', 2))
+                         except (ValueError, TypeError): n_val = 2
+                         
+                         set_state('ngram_n', n_val)
+                         
+                         st.success(f"✓ Configured for {n_val}-grams.")
+                         
+                         filters_primary = {}
+                         if params.get('search_term'):
+                             filters_primary['1'] = params.get('search_term')
+                             st.info(f"Adding filter '{params.get('search_term')}' to Position 1.")
+                         
+                         basis = "Token"
+                         positional_bases_primary = {str(i): basis for i in range(1, n_val + 1)}
+                         
+                         # Defer execution until after XML filters are rendered below
+                         _deferred_ngram_query = {
+                             'n': n_val, 'filters': filters_primary, 'skip_punc': True,
+                             'basis': basis, 'pos_bases': positional_bases_primary, 'neg': []
+                         }
+                     else:
+                         st.error(f"Error parsing query: {err}")
+
+        if search_mode == "Natural Language (Rule)":
+            st.markdown("### ⚡ Natural Language Search (Rule-Based)")
+            st.caption("Fast, deterministic parsing. Describe N-gram constraints.")
+            
+            with st.expander("N-Gram Settings", expanded=True):
+                 col1, col2 = st.columns([2, 1])
+                 with col1:
+                     nl_query = st.text_input("N-Gram Query (NL/Rule)", value=get_state('ngram_nl_query_rule', ''), placeholder="e.g. trigrams starting with 'the'", key="ngram_nl_input_rule")
+                 with col2:
+                     n_val = st.slider("N-Gram Size (N)", 2, 5, 2, key="ngram_n_rule")
+                     
+                 st.markdown("---")
+                 col_punc, col_basis = st.columns(2)
+                 with col_punc:
+                     skip_punc = st.checkbox("Skip Punctuation", value=True, key="ngram_skip_punc_rule")
+                 with col_basis:
+                     global_basis = st.radio("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, horizontal=True, key="ngram_basis_rule")
+            
+            if st.button("Generate N-Grams (Rule-Based)", type="primary"):
+                if not nl_query:
+                    st.warning("Please enter a query.")
+                else:
+                     set_state('ngram_nl_query_rule', nl_query)
+                     
+                     pos_defs = ov.get_pos_definitions(corpus_path) or {}
+                     reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
+                     
+                     params, err = parse_nl_query_rules_only(nl_query, "ngram", reverse_pos_map=reverse_pos_map)
+                     
+                     if params:
+                         search_term = params.get('search_term', '')
+                         st.success(f"✓ Configured for {n_val}-grams.")
+                         
+                         filters_primary = {}
+                         if search_term:
+                             filters_primary['1'] = search_term
+                             st.info(f"   + Filter (Pos 1): '{search_term}'")
+                         
+                         positional_bases_primary = {str(i): global_basis for i in range(1, n_val + 1)}
+                         
+                         # Defer execution until after XML filters are rendered below
+                         _deferred_ngram_query = {
+                             'n': n_val, 'filters': filters_primary, 'skip_punc': skip_punc,
+                             'basis': global_basis, 'pos_bases': positional_bases_primary, 'neg': []
+                         }
+                     else:
+                         st.error(f"Error parsing query: {err}")
+
+        if search_mode == "Standard":
+            with st.expander("N-Gram Settings", expanded=True):
+                col_n, col_punc, col_basis = st.columns([1, 1, 1])
+                with col_n:
+                    n_val = st.slider("N-Gram Size (N)", 2, 5, 2, key="ngram_n")
+                with col_punc:
+                    skip_punc = st.checkbox("Skip Punctuation", value=True)
+                    neg_filter = [] # Removed explicit box as per request; relying on positional negation
+                with col_basis:
+                    global_basis = st.radio("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, horizontal=True, key="ngram_basis")
+                    
+                st.markdown("##### Positional Filters & Basis")
+                st.caption("Lower filters match the selected basis. Use `*`, `%`, `_` as wildcards. Use `_TAG` for POS tags, `[lemma]` to override, or `-term` to exclude.")
+            
+        # --- XML Restriction Filters ---
+        comp_mode = get_state('comparison_mode', False)
+        comp_path = get_state('comp_corpus_path')
+        comp_name = get_state('comp_corpus_name')
         
-    # --- XML Restriction Filters ---
-    comp_mode = get_state('comparison_mode', False)
-    comp_path = get_state('comp_corpus_path')
-    comp_name = get_state('comp_corpus_name')
-    
-    # 2. Dynamic Filters per Corpus
-    filters_primary = {}
-    positional_bases_primary = {}
-    
-    filters_secondary = {}
-    positional_bases_secondary = {}
-    
-    if not comp_mode:
-        # Standard Single View
-        cols = st.columns(n_val)
-        for i in range(1, n_val + 1):
-             with cols[i-1]:
-                 st.markdown(f"**Pos {i}**")
-                 pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}")
-                 positional_bases_primary[str(i)] = pos_basis
-                 
-                 val = st.text_input(f"Filter", key=f"ng_p{i}")
-                 if val:
-                     filters_primary[str(i)] = val
-    else:
-        # Comparison Mode: Tabs or Columns
-        st.markdown("##### N-Gram Filters by Corpus")
-        tab1, tab2 = st.tabs([f"Primary: {get_state('current_corpus_name', 'Corpus')}", f"Comparison: {comp_name if comp_name else 'Secondary'}"])
+        # 2. Dynamic Filters per Corpus
+        filters_primary = {}
+        positional_bases_primary = {}
         
-        with tab1:
+        filters_secondary = {}
+        positional_bases_secondary = {}
+        
+        if not comp_mode:
+            # Standard Single View
             cols = st.columns(n_val)
             for i in range(1, n_val + 1):
                  with cols[i-1]:
                      st.markdown(f"**Pos {i}**")
-                     pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}_c1")
+                     pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}")
                      positional_bases_primary[str(i)] = pos_basis
                      
-                     val = st.text_input(f"Filter", key=f"ng_p{i}_c1")
+                     val = st.text_input(f"Filter", key=f"ng_p{i}")
                      if val:
                          filters_primary[str(i)] = val
+        else:
+            # Comparison Mode: Tabs or Columns
+            st.markdown("##### N-Gram Filters by Corpus")
+            tab1, tab2 = st.tabs([f"Primary: {get_state('current_corpus_name', 'Corpus')}", f"Comparison: {comp_name if comp_name else 'Secondary'}"])
+            
+            with tab1:
+                cols = st.columns(n_val)
+                for i in range(1, n_val + 1):
+                     with cols[i-1]:
+                         st.markdown(f"**Pos {i}**")
+                         pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}_c1")
+                         positional_bases_primary[str(i)] = pos_basis
+                         
+                         val = st.text_input(f"Filter", key=f"ng_p{i}_c1")
+                         if val:
+                             filters_primary[str(i)] = val
 
-        with tab2:
-            cols2 = st.columns(n_val)
-            for i in range(1, n_val + 1):
-                 with cols2[i-1]:
-                     st.markdown(f"**Pos {i}**")
-                     pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}_c2")
-                     positional_bases_secondary[str(i)] = pos_basis
-                     
-                     val = st.text_input(f"Filter", key=f"ng_p{i}_c2")
-                     if val:
-                         filters_secondary[str(i)] = val
+            with tab2:
+                cols2 = st.columns(n_val)
+                for i in range(1, n_val + 1):
+                     with cols2[i-1]:
+                         st.markdown(f"**Pos {i}**")
+                         pos_basis = st.radio("Basis", ["Token", "Lemma", "POS Tag"], index=["Token", "Lemma", "POS Tag"].index(global_basis), horizontal=True, key=f"ng_b{i}_c2")
+                         positional_bases_secondary[str(i)] = pos_basis
+                         
+                         val = st.text_input(f"Filter", key=f"ng_p{i}_c2")
+                         if val:
+                             filters_secondary[str(i)] = val
 
 
-    # --- XML Restriction Filters ---
-    if not comp_mode:
-        xml_filters = render_xml_restriction_filters(corpus_path, "ngram", corpus_name=corpus_name)
-        xml_where, xml_params = apply_xml_restrictions(xml_filters)
-    else:
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            xml_filters_1 = render_xml_restriction_filters(corpus_path, "ngram_c1", corpus_name=corpus_name)
-            xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
-        with col_f2:
-            if comp_path:
-                xml_filters_2 = render_xml_restriction_filters(comp_path, "ngram_c2", corpus_name=comp_name)
-                xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
-            else:
-                xml_where_2, xml_params_2 = "", []
+        # --- XML Restriction Filters ---
+        if not comp_mode:
+            xml_filters = render_xml_restriction_filters(corpus_path, "ngram", corpus_name=corpus_name)
+            xml_where, xml_params = apply_xml_restrictions(xml_filters)
+        else:
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                xml_filters_1 = render_xml_restriction_filters(corpus_path, "ngram_c1", corpus_name=corpus_name)
+                xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
+            with col_f2:
+                if comp_path:
+                    xml_filters_2 = render_xml_restriction_filters(comp_path, "ngram_c2", corpus_name=comp_name)
+                    xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
+                else:
+                    xml_where_2, xml_params_2 = "", []
 
-    # --- Deferred NL Query Execution (runs AFTER xml_where/xml_params are set) ---
-    if _deferred_ngram_query is not None:
-        _dq = _deferred_ngram_query
-        run_ngram_query(
-            'primary', corpus_path, corpus_name,
-            _dq['n'], _dq['filters'], _dq['skip_punc'],
-            _dq['basis'], _dq['pos_bases'], _dq['neg'],
-            xml_where, xml_params
-        )
+        # --- Deferred NL Query Execution (runs AFTER xml_where/xml_params are set) ---
+        if _deferred_ngram_query is not None:
+            _dq = _deferred_ngram_query
+            run_ngram_query(
+                'primary', corpus_path, corpus_name,
+                _dq['n'], _dq['filters'], _dq['skip_punc'],
+                _dq['basis'], _dq['pos_bases'], _dq['neg'],
+                xml_where, xml_params
+            )
 
-    if not comp_mode:
-        if st.button("Generate N-Grams", type="primary"):
-            run_ngram_query('primary', corpus_path, corpus_name, n_val, filters_primary, skip_punc, global_basis, positional_bases_primary, neg_filter, xml_where, xml_params)
-    else:
-        if st.button("Generate Comparison N-Grams", type="primary"):
-            run_ngram_query('primary', corpus_path, corpus_name, n_val, filters_primary, skip_punc, global_basis, positional_bases_primary, neg_filter, xml_where_1, xml_params_1)
-            if comp_path:
-                run_ngram_query('secondary', comp_path, comp_name, n_val, filters_secondary, skip_punc, global_basis, positional_bases_secondary, neg_filter, xml_where_2, xml_params_2)
+        if not comp_mode:
+            if st.button("Generate N-Grams", type="primary", key="btn_generate_ngram_advanced"):
+                run_ngram_query('primary', corpus_path, corpus_name, n_val, filters_primary, skip_punc, global_basis, positional_bases_primary, neg_filter, xml_where, xml_params)
+        else:
+            if st.button("Generate Comparison N-Grams", type="primary", key="btn_generate_ngram_comp_advanced"):
+                run_ngram_query('primary', corpus_path, corpus_name, n_val, filters_primary, skip_punc, global_basis, positional_bases_primary, neg_filter, xml_where_1, xml_params_1)
+                if comp_path:
+                    run_ngram_query('secondary', comp_path, comp_name, n_val, filters_secondary, skip_punc, global_basis, positional_bases_secondary, neg_filter, xml_where_2, xml_params_2)
 
     # 3. Results
     if not comp_mode:
         df_results = st.session_state.get('last_ngram_results_primary')
         if df_results is not None:
-            render_ngram_results_column(df_results, n_val, corpus_name)
+            n_size = df_results.attrs.get('n', n_val if 'n_val' in locals() else 2)
+            render_ngram_results_column(df_results, n_size, corpus_name)
     else:
         col1, col2 = st.columns(2)
         with col1:
             st.subheader(f"Primary: {corpus_name}")
             res1 = st.session_state.get('last_ngram_results_primary')
             if res1 is not None:
-                render_ngram_results_column(res1, n_val, corpus_name, key_suffix="c1")
+                n_size1 = res1.attrs.get('n', n_val if 'n_val' in locals() else 2)
+                render_ngram_results_column(res1, n_size1, corpus_name, key_suffix="c1")
         with col2:
             st.subheader(f"Comparison: {comp_name}")
             if not comp_path:
@@ -249,7 +274,8 @@ def render_ngram_view():
             else:
                 res2 = st.session_state.get('last_ngram_results_secondary')
                 if res2 is not None:
-                    render_ngram_results_column(res2, n_val, comp_name, key_suffix="c2")
+                    n_size2 = res2.attrs.get('n', n_val if 'n_val' in locals() else 2)
+                    render_ngram_results_column(res2, n_size2, comp_name, key_suffix="c2")
         
         # Comparison Analysis Tables
         if res1 is not None and res2 is not None and not res1.empty and not res2.empty:
@@ -281,7 +307,7 @@ def render_ngram_view():
             render_comparison_tables(shared_df, df1_unique, df2_unique,
                                     corpus_name, comp_name, analysis_type='ngram')
 
-def run_ngram_query(identifier, path, name, n, filters, skip_punc, basis, positional_bases, neg_filter, xml_where, xml_params):
+def run_ngram_query(identifier, path, name, n, filters, skip_punc, basis, positional_bases, neg_filter, xml_where, xml_params, source='advanced'):
     with st.spinner(f"Generating n-grams for {name}..."):
         df = cached_generate_ngrams(
             db_path=path,
@@ -296,9 +322,12 @@ def run_ngram_query(identifier, path, name, n, filters, skip_punc, basis, positi
             xml_where_clause=xml_where,
             xml_params=xml_params
         )
+        df.attrs['source'] = source
+        df.attrs['n'] = n
         st.session_state[f'last_ngram_results_{identifier}'] = df
 
 def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
+    n_val_actual = df.attrs.get('n', n_val)
     if df is not None and not df.empty:
         total_results = len(df)
         display_limit = 100
@@ -404,10 +433,10 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
         if st.button("Interpret with AI", key=f"btn_ngram_ai_{key_suffix}"):
              with st.spinner("Analyzing..."):
                   top_n = df.head(10).to_string(index=False)
-                  data_desc = f"Top {n_val}-grams from corpus '{corpus_name}'."
+                  data_desc = f"Top {n_val_actual}-grams from corpus '{corpus_name}'."
                   
                   resp, err = interpret_results_llm(
-                       target_word=f"Top {n_val}-Grams",
+                       target_word=f"Top {n_val_actual}-Grams",
                        analysis_type="N-Gram Frequency Analysis",
                        data_description=data_desc,
                        data=top_n,
