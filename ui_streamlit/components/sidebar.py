@@ -273,11 +273,13 @@ def render_sidebar():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Active Corpus")
     if current_path:
-        st.sidebar.success(f"Primary: **{get_state('current_corpus_name')}**")
+        display_name = "USER CORPUS" if get_state('current_corpus_name') == "Uploaded Batch" else get_state('current_corpus_name')
+        st.sidebar.success(f"Primary: **{display_name}**")
         
     comp_path = get_state('comp_corpus_path')
     if get_state('comparison_mode') and comp_path:
-        st.sidebar.info(f"Comparison: **{get_state('comp_corpus_name')}**")
+        display_comp = "USER CORPUS" if get_state('comp_corpus_name') == "Uploaded Batch" else get_state('comp_corpus_name')
+        st.sidebar.info(f"Comparison: **{display_comp}**")
     elif get_state('comparison_mode'):
         st.sidebar.warning("Load a 2nd corpus to compare.")
     
