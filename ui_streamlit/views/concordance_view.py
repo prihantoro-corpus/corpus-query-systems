@@ -353,6 +353,127 @@ def render_concordance_view():
                 _dq['show_pos'], _dq['show_lemma']
             )
 
+        # 2. Annotation Resume (High visibility at the top)
+        col_res1, col_res2 = st.columns([1, 3])
+        with col_res1:
+            if st.button("📁 Continue Annotation", help="Resume annotation by uploading a saved file", use_container_width=True):
+                set_state('show_ann_upload', True)
+        
+        if get_state('show_ann_upload'):
+            with st.container(border=True):
+                st.markdown("##### Resume Annotation Session")
+                uploaded_file = st.file_uploader("Upload Annotation JSON", type="json", key="ann_uploader_main")
+                if uploaded_file:
+                    import json
+                    try:
+                        data = json.load(uploaded_file)
+                        ann_path = data.get('corpus_path')
+                        ann_term = data.get('search_term')
+                        
+                        if ann_path and ann_term:
+                            # Migration: Ensure all annotations are lists
+                            raw_ann = data.get('annotations', {})
+                            processed_ann = {}
+                            for k, v in raw_ann.items():
+                                if isinstance(v, list):
+                                    processed_ann[k] = v
+                                else:
+                                    processed_ann[k] = [v] # Wrap old single pair in list
+                            
+                            st.session_state['kwic_annotations'] = processed_ann
+                            st.success(f"✅ Loaded annotations for '{ann_term}'")
+                            
+                            # Logic to determine if it's the SAME corpus logically, even if path changed
+                            raw_source_name = data.get('corpus_name', os.path.basename(ann_path))
+                            
+                            def clean_name(n, p=None):
+                                if not n: return "Unknown"
+                                n = n.replace('.duckdb', '')
+                                if n.startswith('corpus_') and len(n) > 20 and p:
+                                    parts = p.replace('\\', '/').split('/')
+                                    for part in reversed(parts[:-1]):
+                                        if part.lower() not in ('temp', 'corpora', 'cortex', 'documents', 'users'):
+                                            return f"{part} (Uploaded)"
+                                    return "Uploaded Corpus"
+                                return n
+                            
+                            source_display = clean_name(raw_source_name, ann_path)
+                            current_display = clean_name(corpus_name, corpus_path)
+                            
+                            # Auto-trigger search if it looks like the right corpus and query
+                            is_match = (ann_path == corpus_path) or (source_display == current_display)
+                            
+                            if is_match and ann_term == search_term_1:
+                                st.info("🔄 Re-generating concordance lines...")
+                                run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
+                                set_state('show_ann_upload', False)
+                                st.rerun()
+                            else:
+                                # Show mismatch UI with Force Load option
+                                st.error("🚫 **Annotation Mismatch**")
+                                st.write(f"This annotation file is linked to a different corpus or search query.")
+                                
+                                col_war1, col_war2 = st.columns(2)
+                                with col_war1:
+                                    st.markdown(f"**Required (from file):**\n- 📂 Corpus: `{source_display}`\n- 🔍 Query: `{ann_term}`")
+                                with col_war2:
+                                    q_status = "✅ Match" if ann_term == search_term_1 else f"❌ `{search_term_1}`"
+                                    st.markdown(f"**Current (Active):**\n- 📂 Corpus: `{current_display}`\n- 🔍 Query: {q_status}")
+                                
+                                st.info("💡 If you are sure this is the correct data, you can force the load below.")
+                                if st.button("⚠️ Force Load Annotations Anyway", type="secondary"):
+                                    run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
+                                    set_state('show_ann_upload', False)
+                                    st.rerun()
+                        else:
+                            st.error("❌ Invalid annotation file format.")
+                    except Exception as e:
+                        st.error(f"Error loading file: {e}")
+                if st.button("Close"):
+                    set_state('show_ann_upload', False)
+                    st.rerun()
+
+        if results:
+            # Annotation Mode Toggle
+            col_ann1, col_ann2, col_ann3 = st.columns([1, 1, 2])
+            with col_ann1:
+                ann_mode = st.toggle("✍️ Annotation Mode", value=get_state('kwic_ann_mode', False), key="kwic_ann_mode_toggle")
+                set_state('kwic_ann_mode', ann_mode)
+            
+            with col_ann2:
+                if ann_mode:
+                    if st.button("🏛️ Apply to Session", help="Add these annotations to the active working corpus for all tabs"):
+                        set_state('show_db_save_confirm', True)
+            
+            if get_state('show_db_save_confirm'):
+                with st.container(border=True):
+                    st.info("ℹ️ **Apply to Active Session**")
+                    st.write("This will add these labels to the current working corpus in this session. They will be visible in the Overview and Restricted Search tabs.")
+                    st.write("⚠️ *Note: These changes are not saved to the source XML. If you re-upload the corpus, you will need to restore your annotations from a backup file.*")
+                    st.checkbox("I understand and want to proceed", key="db_save_confirm_check")
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("🚀 Apply Labels", type="primary", disabled=not st.session_state.get('db_save_confirm_check')):
+                            import importlib
+                            import core.modules.concordance as cm
+                            importlib.reload(cm) 
+                            if hasattr(cm, 'persist_annotations_to_db'):
+                                success, msg = cm.persist_annotations_to_db(results['path'], st.session_state.get('kwic_annotations', {}))
+                            else:
+                                success, msg = False, "Internal Error: Persistence function not found in module after reload."
+                            if success:
+                                st.success(f"✅ {msg}")
+                                set_state('show_db_save_confirm', False)
+                                # Reset some caches to make sure other modules see the change
+                                st.cache_data.clear() 
+                            else:
+                                st.error(f"❌ {msg}")
+                    with c2:
+                        if st.button("Cancel"):
+                            set_state('show_db_save_confirm', False)
+                            st.rerun()
+
     # --- Results Display / Annotation Resume ---
     results = st.session_state.get('last_kwic_results_primary')
     cluster_results = st.session_state.get('last_kwic_results_cluster')
@@ -361,136 +482,14 @@ def render_concordance_view():
     if 'kwic_annotations' not in st.session_state:
         st.session_state['kwic_annotations'] = {}
     kwic_annotations = st.session_state['kwic_annotations']
-    
-    # 2. Annotation Resume (High visibility at the top)
-    col_res1, col_res2 = st.columns([1, 3])
-    with col_res1:
-        if st.button("📁 Continue Annotation", help="Resume annotation by uploading a saved file", use_container_width=True):
-            set_state('show_ann_upload', True)
-    
-    if get_state('show_ann_upload'):
-        with st.container(border=True):
-            st.markdown("##### Resume Annotation Session")
-            uploaded_file = st.file_uploader("Upload Annotation JSON", type="json", key="ann_uploader_main")
-            if uploaded_file:
-                import json
-                try:
-                    data = json.load(uploaded_file)
-                    ann_path = data.get('corpus_path')
-                    ann_term = data.get('search_term')
-                    
-                    if ann_path and ann_term:
-                        # Migration: Ensure all annotations are lists
-                        raw_ann = data.get('annotations', {})
-                        processed_ann = {}
-                        for k, v in raw_ann.items():
-                            if isinstance(v, list):
-                                processed_ann[k] = v
-                            else:
-                                processed_ann[k] = [v] # Wrap old single pair in list
-                        
-                        st.session_state['kwic_annotations'] = processed_ann
-                        st.success(f"✅ Loaded annotations for '{ann_term}'")
-                        
-                        # Logic to determine if it's the SAME corpus logically, even if path changed
-                        raw_source_name = data.get('corpus_name', os.path.basename(ann_path))
-                        
-                        def clean_name(n, p=None):
-                            if not n: return "Unknown"
-                            n = n.replace('.duckdb', '')
-                            if n.startswith('corpus_') and len(n) > 20 and p:
-                                parts = p.replace('\\', '/').split('/')
-                                for part in reversed(parts[:-1]):
-                                    if part.lower() not in ('temp', 'corpora', 'cortex', 'documents', 'users'):
-                                        return f"{part} (Uploaded)"
-                                return "Uploaded Corpus"
-                            return n
-                        
-                        source_display = clean_name(raw_source_name, ann_path)
-                        current_display = clean_name(corpus_name, corpus_path)
-                        
-                        # Auto-trigger search if it looks like the right corpus and query
-                        is_match = (ann_path == corpus_path) or (source_display == current_display)
-                        
-                        if is_match and ann_term == search_term_1:
-                            st.info("🔄 Re-generating concordance lines...")
-                            run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
-                            set_state('show_ann_upload', False)
-                            st.rerun()
-                        else:
-                            # Show mismatch UI with Force Load option
-                            st.error("🚫 **Annotation Mismatch**")
-                            st.write(f"This annotation file is linked to a different corpus or search query.")
-                            
-                            col_war1, col_war2 = st.columns(2)
-                            with col_war1:
-                                st.markdown(f"**Required (from file):**\n- 📂 Corpus: `{source_display}`\n- 🔍 Query: `{ann_term}`")
-                            with col_war2:
-                                q_status = "✅ Match" if ann_term == search_term_1 else f"❌ `{search_term_1}`"
-                                st.markdown(f"**Current (Active):**\n- 📂 Corpus: `{current_display}`\n- 🔍 Query: {q_status}")
-                            
-                            st.info("💡 If you are sure this is the correct data, you can force the load below.")
-                            if st.button("⚠️ Force Load Annotations Anyway", type="secondary"):
-                                run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
-                                set_state('show_ann_upload', False)
-                                st.rerun()
-                    else:
-                        st.error("❌ Invalid annotation file format.")
-                except Exception as e:
-                    st.error(f"Error loading file: {e}")
-            if st.button("Close"):
-                set_state('show_ann_upload', False)
-                st.rerun()
-
     if results:
-        # Annotation Mode Toggle
-        col_ann1, col_ann2, col_ann3 = st.columns([1, 1, 2])
-        with col_ann1:
-            ann_mode = st.toggle("✍️ Annotation Mode", value=get_state('kwic_ann_mode', False), key="kwic_ann_mode_toggle")
-            set_state('kwic_ann_mode', ann_mode)
-        
-        with col_ann2:
-            if ann_mode:
-                if st.button("🏛️ Apply to Session", help="Add these annotations to the active working corpus for all tabs"):
-                    set_state('show_db_save_confirm', True)
-        
-        if get_state('show_db_save_confirm'):
-            with st.container(border=True):
-                st.info("ℹ️ **Apply to Active Session**")
-                st.write("This will add these labels to the current working corpus in this session. They will be visible in the Overview and Restricted Search tabs.")
-                st.write("⚠️ *Note: These changes are not saved to the source XML. If you re-upload the corpus, you will need to restore your annotations from a backup file.*")
-                st.checkbox("I understand and want to proceed", key="db_save_confirm_check")
-                
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("🚀 Apply Labels", type="primary", disabled=not st.session_state.get('db_save_confirm_check')):
-                        import importlib
-                        import core.modules.concordance as cm
-                        importlib.reload(cm) 
-                        if hasattr(cm, 'persist_annotations_to_db'):
-                            success, msg = cm.persist_annotations_to_db(results['path'], st.session_state.get('kwic_annotations', {}))
-                        else:
-                            success, msg = False, "Internal Error: Persistence function not found in module after reload."
-                        if success:
-                            st.success(f"✅ {msg}")
-                            set_state('show_db_save_confirm', False)
-                            # Reset some caches to make sure other modules see the change
-                            st.cache_data.clear() 
-                        else:
-                            st.error(f"❌ {msg}")
-                with c2:
-                    if st.button("Cancel"):
-                        set_state('show_db_save_confirm', False)
-                        st.rerun()
-
         if not comp_mode:
             render_concordance_column(results, search_term_1)
         else:
             col_c1, col_c2 = st.columns(2)
             with col_c1:
                 st.subheader(f"Primary: {corpus_name}")
-                if results:
-                    render_concordance_column(results, search_term_1, key_suffix="c1")
+                render_concordance_column(results, search_term_1, key_suffix="c1")
             with col_c2:
                 st.subheader(f"Comparison: {get_state('comp_corpus_name', 'Comparison')}")
                 comp_path = get_state('comp_corpus_path')
@@ -500,8 +499,6 @@ def render_concordance_view():
                     results_2 = st.session_state.get('last_kwic_results_secondary')
                     if results_2:
                         render_concordance_column(results_2, get_state('kwic_search_term_2', ''), key_suffix="c2")
-    elif not results and not comp_mode:
-         pass
 
     # --- Cluster Results (shown below primary results regardless of mode) ---
     if cluster_results:
