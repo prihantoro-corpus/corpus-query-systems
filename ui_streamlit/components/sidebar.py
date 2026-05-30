@@ -12,6 +12,22 @@ def render_sidebar():
     Renders the sidebar for corpus selection and settings.
     Returns: The selected view name.
     """
+    # Active Corpus Display Banner in Sidebar
+    current_path = get_state('current_corpus_path')
+    active_corpus_name = get_state('current_corpus_name')
+    if current_path:
+        display_name = "USER CORPUS" if active_corpus_name == "Uploaded Batch" else active_corpus_name
+        
+        comp_path = get_state('comp_corpus_path')
+        comp_name = get_state('comp_corpus_name')
+        if get_state('comparison_mode') and comp_path:
+            display_comp = "USER CORPUS" if comp_name == "Uploaded Batch" else comp_name
+            st.sidebar.markdown(f"<div style='background-color:#1e293b; padding:10px; border-radius:8px; border:1px solid #00ADB5; margin-bottom:15px;'>📂 <span style='color:#00FFF5; font-weight:bold;'>Active:</span> <span style='color:white; font-weight:bold;'>{display_name}</span> vs <span style='color:white; font-weight:bold;'>{display_comp}</span></div>", unsafe_allow_html=True)
+        else:
+            st.sidebar.markdown(f"<div style='background-color:#1e293b; padding:10px; border-radius:8px; border:1px solid #00ADB5; margin-bottom:15px;'>📂 <span style='color:#00FFF5; font-weight:bold;'>Active:</span> <span style='color:white; font-weight:bold;'>{display_name}</span></div>", unsafe_allow_html=True)
+    else:
+        st.sidebar.markdown("<div style='background-color:#1e293b; padding:10px; border-radius:8px; border:1px solid #475569; margin-bottom:15px;'>📂 <span style='color:#94a3b8; font-weight:bold;'>Active:</span> <span style='color:#94a3b8; font-weight:bold;'>None Loaded</span></div>", unsafe_allow_html=True)
+
     # 1. Navigation (Tools) - MOVED TO TOP
     st.sidebar.title("Tools (v1.1 Stanza)")
     st.sidebar.caption("App Version: v300526")
