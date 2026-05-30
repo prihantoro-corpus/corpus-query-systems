@@ -263,6 +263,25 @@ def main():
 
     st.markdown("## CORTEX: Advanced Corpus Query System <span style='font-size: 0.5em; color: rgba(255,255,255,0.5); font-weight: normal; vertical-align: middle; margin-left: 10px;'>v300526</span>", unsafe_allow_html=True)
     
+    # Active Corpus Display Banner
+    from ui_streamlit.state_manager import get_state
+    current_path = get_state('current_corpus_path')
+    active_corpus_name = get_state('current_corpus_name')
+    if current_path:
+        display_name = "USER CORPUS" if active_corpus_name == "Uploaded Batch" else active_corpus_name
+        
+        comp_path = get_state('comp_corpus_path')
+        comp_name = get_state('comp_corpus_name')
+        if get_state('comparison_mode') and comp_path:
+            display_comp = "USER CORPUS" if comp_name == "Uploaded Batch" else comp_name
+            st.markdown(f"📂 **Active Corpus:** <span style='background-color: #00ADB5; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em;'>{display_name}</span> vs <span style='background-color: #00767C; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em;'>{display_comp}</span>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"📂 **Active Corpus:** <span style='background-color: #00ADB5; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em;'>{display_name}</span>", unsafe_allow_html=True)
+    else:
+        st.markdown("📂 **Active Corpus:** <span style='background-color: #334155; color: #cbd5e1; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em;'>None Loaded</span>", unsafe_allow_html=True)
+    
+    st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
+    
     # Render Sidebar and get current view
     current_view = render_sidebar()
     
