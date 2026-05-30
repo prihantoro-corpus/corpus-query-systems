@@ -38,7 +38,7 @@ def render_concordance_view():
     results = st.session_state.get('last_kwic_results_primary')
     cluster_results = st.session_state.get('last_kwic_results_cluster')
 
-    tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"], key="kwic_active_tab")
+    tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
 
     with tab_simple:
         search_term_simple = st.text_input("Node Word(s)", value=get_state('kwic_search_term', ''), key="kwic_input_simple", help="Search word or phrase")
@@ -60,7 +60,8 @@ def render_concordance_view():
                 xml_where="",
                 xml_params=[],
                 show_pos=False,
-                show_lemma=False
+                show_lemma=False,
+                source='simple'
             )
             st.rerun()
 
@@ -96,10 +97,9 @@ def render_concordance_view():
                     with c_sh3:
                         show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_rule")
                     
-                    if st.session_state.get('kwic_active_tab', 0) == 1:
-                        set_state('kwic_show_pos', show_pos)
-                        set_state('kwic_show_lemma', show_lemma)
-                        set_state('kwic_show_meta', show_meta)
+                    set_state('kwic_show_pos', show_pos)
+                    set_state('kwic_show_lemma', show_lemma)
+                    set_state('kwic_show_meta', show_meta)
                     
                     
                     wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
@@ -235,10 +235,9 @@ def render_concordance_view():
                     with c_sh3:
                         show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_cb")
                     
-                    if st.session_state.get('kwic_active_tab', 0) == 1:
-                        set_state('kwic_show_pos', show_pos)
-                        set_state('kwic_show_lemma', show_lemma)
-                        set_state('kwic_show_meta', show_meta)
+                    set_state('kwic_show_pos', show_pos)
+                    set_state('kwic_show_lemma', show_lemma)
+                    set_state('kwic_show_meta', show_meta)
                     
                     
                     wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
@@ -593,7 +592,7 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters):
     st.session_state['last_kwic_results_primary'] = None # Clear primary to focus on cluster
     st.success(f"Generated {len(cluster_results)} clusters.")
 
-def run_concordance_query(identifier, path, name, query, left, right, limit, coll_filter, xml_where, xml_params, show_pos=False, show_lemma=False):
+def run_concordance_query(identifier, path, name, query, left, right, limit, coll_filter, xml_where, xml_params, show_pos=False, show_lemma=False, source='advanced'):
     if not query or not query.strip():
         st.warning(f"Please enter a Node Word(s) to search for in {name}.")
         return
@@ -621,7 +620,8 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             'search_term': query,
             'xml_where': xml_where,
             'xml_params': xml_params,
-            'path': path
+            'path': path,
+            'source': source
         }
 
 def render_concordance_column(results, search_term, key_suffix=""):
@@ -629,6 +629,8 @@ def render_concordance_column(results, search_term, key_suffix=""):
      total = results['total']
      breakdown = results['breakdown']
      name = results['name']
+     is_simple = (results.get('source') == 'simple')
+     show_meta = False if is_simple else get_state('kwic_show_meta', True)
      
      # metrics (Target Query Summary table replacement)
      stats_key = 'corpus_stats' if key_suffix != "c2" else 'comp_corpus_stats'
@@ -710,7 +712,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
          <style>
          .kwic-table {{ width: 100%; min-width: 800px; font-family: 'Courier New', monospace; font-size: 0.9em; border-collapse: collapse; table-layout: auto; }}
          .kwic-table td {{ padding: 8px 10px; border-bottom: 1px solid #333; vertical-align: middle; line-height: 1.6; }}
-         .meta-col {{ text-align: left; width: 15%; font-size: 0.8em; border-right: 1px solid #444; color: #e2e8f0; vertical-align: top; display: {'table-cell' if get_state('kwic_show_meta', True) else 'none'}; }}
+         .meta-col {{ text-align: left; width: 15%; font-size: 0.8em; border-right: 1px solid #444; color: #e2e8f0; vertical-align: top; display: {'table-cell' if show_meta else 'none'}; }}
          .ctx-l {{ text-align: right; width: 35%; color: #bbb; {wrap_style} }}
          .node {{ text-align: center; width: auto; white-space: nowrap; font-weight: bold; background-color: #222; color: #FFEA00; border-left: 1px solid #444; border-right: 1px solid #444; padding: 8px 15px; }}
          .ctx-r {{ text-align: left; width: 35%; color: #bbb; {wrap_style} }}
@@ -776,7 +778,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
             if st.button("💾 Save Annotation Progress", key=f"save_ann_top_{key_suffix}"):
                 save_annotations(results, kwic_annotations)
 
-            show_meta_active = get_state('kwic_show_meta', True)
+            show_meta_active = show_meta
             for i, row in enumerate(sorted_rows):
                 m_id = str(row['match_id'])
                 if show_meta_active:
