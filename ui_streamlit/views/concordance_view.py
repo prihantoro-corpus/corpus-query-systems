@@ -35,6 +35,8 @@ def render_concordance_view():
 
     search_term_1 = get_state('kwic_search_term', '')
     search_term_2 = None
+    results = st.session_state.get('last_kwic_results_primary')
+    cluster_results = st.session_state.get('last_kwic_results_cluster')
 
     tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
 
