@@ -51,401 +51,430 @@ def render_collocation_view():
     comp_path = get_state('comp_corpus_path')
     comp_name = get_state('comp_corpus_name')
 
-    # 1. Inputs
-    search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="coll_search_mode")
-    
-    if search_mode == "Natural Language (AI)":
-        st.markdown("### 🧠 Natural Language Search")
-        nl_query = st.text_area("Describe what you want to find", height=70, placeholder="e.g. Find adjectives that appear within 3 words of 'environment' appearing at least 5 times")
+    tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
+
+    with tab_simple:
+        node_word_simple = st.text_input("Node Word", value="", key="coll_node_simple", help="Search word or phrase")
+        if st.button("Calculate Collocations", type="primary", key="btn_calculate_collocation_simple", use_container_width=True):
+             if node_word_simple:
+                 run_collocation_query(
+                     identifier='primary',
+                     path=corpus_path,
+                     word=node_word_simple,
+                     window=5,
+                     min_freq=3,
+                     max_rows=100,
+                     stats=corpus_stats,
+                     xml_where="",
+                     xml_params=[],
+                     token_filter="",
+                     pos_filter="",
+                     lemma_filter="",
+                     pattern_text="",
+                     pattern_limit=50,
+                     stat_measure="Log-Likelihood",
+                     source='simple'
+                 )
+                 st.rerun()
+             else:
+                 st.warning("Please enter a Node Word.")
+
+    with tab_advanced:
+        # 1. Inputs
+        search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="coll_search_mode")
         
-        col_ai1, col_ai2 = st.columns([1, 4])
-        with col_ai1:
-            analyze_btn = st.button("Analyze & Search", type="primary")
-        
-        if analyze_btn:
-            if not nl_query:
-                st.warning("Please enter a query.")
-            else:
-                with st.spinner("AI is parsing your query..."):
-                    params, err = parse_nl_query(
-                        nl_query, 
-                        "collocation",
-                        ai_provider=get_state('ai_provider'),
-                        gemini_api_key=get_state('gemini_api_key'),
-                        ollama_url=get_state('ollama_url'),
-                        ollama_model=get_state('ai_model')
-                    )
-                
-                if params:
-                    # Safely parse params
-                    try:
-                        win = int(params.get('window', 5))
-                    except (ValueError, TypeError): win = 5
-                    
-                    try:
-                        freq = int(params.get('min_freq', 3))
-                    except (ValueError, TypeError): freq = 3
-                    
-                    try:
-                        mx = int(params.get('max_rows', 100))
-                    except (ValueError, TypeError): mx = 100
-
-                    # Update state with parsed parameters
-                    set_state('coll_node', params.get('node_word', ''))
-                    set_state('coll_window', win)
-                    set_state('coll_min_freq', freq)
-                    set_state('coll_token_filt', params.get('token_filter', ''))
-                    set_state('coll_pos_filt', params.get('pos_filter', ''))
-                    set_state('coll_lemma_filt', params.get('lemma_filter', ''))
-                    
-                    st.success("✓ Query interpretation successful! Running search...")
-                    
-                    # Defer execution until after XML filters are rendered below
-                    _deferred_coll_query = {
-                        'node': params.get('node_word', ''),
-                        'win': win, 'freq': freq, 'mx': mx,
-                        'token_filter': params.get('token_filter', ''),
-                        'pos_filter': params.get('pos_filter', ''),
-                        'lemma_filter': params.get('lemma_filter', ''),
-                    }
-                else:
-                    st.error(f"Failed to parse query: {err}")
-
-    if search_mode == "Natural Language (Rule)":
-        st.markdown("### ⚡ Natural Language Search (Rule-Based)")
-        st.caption("Fast, deterministic parsing. Use terms like 'noun', 'verb', or 'word followed by...'. Filters also support these terms.")
-        
-        with st.expander("Collocation Settings", expanded=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                 nl_query = st.text_input("Node Word Query (NL/Rule)", value=get_state('coll_nl_query_rule', ''), placeholder="e.g. adjective followed by noun", key="coll_nl_input_rule")
-            with col2:
-                 # Shared settings
-                 window = st.slider("Span (Window)", 1, 10, 5, key="coll_window_rule")
-                 c_sub1, c_sub2 = st.columns(2)
-                 with c_sub1:
-                    min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq_rule")
-                 with c_sub2:
-                    max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max_rule")
-                 st.radio("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, horizontal=True, key="coll_stat_measure_rule")
+        if search_mode == "Natural Language (AI)":
+            st.markdown("### 🧠 Natural Language Search")
+            nl_query = st.text_area("Describe what you want to find", height=70, placeholder="e.g. Find adjectives that appear within 3 words of 'environment' appearing at least 5 times")
             
-            st.markdown("---")
-            f_col1, f_col2, f_col3 = st.columns(3)
-            with f_col1:
-                token_filter_input = st.text_input("Token Filter (NL)", placeholder="e.g. not 'the'", key="coll_token_filt_rule", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
-            with f_col2:
-                pos_filter_input = st.text_input("POS Filter (NL)", placeholder="e.g. noun, verb", key="coll_pos_filt_rule", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
-            with f_col3:
-                lemma_filter_input = st.text_input("Lemma Filter (NL)", placeholder="e.g. be, have", key="coll_lemma_filt_rule", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
-                
-            # Pattern Matching Section (Reusable)
-            st.markdown("---")
-            apply_patterns = st.checkbox("Apply Patterns (Advanced)", value=get_state('coll_apply_patterns', False), key="coll_apply_patterns_rule")
-            if apply_patterns:
-                pattern_text = st.text_area("Pattern Definitions", value=get_state('coll_pattern_text', ''), height=100, key="coll_pattern_input_rule")
-                set_state('coll_pattern_text', pattern_text)
-                pattern_limit = st.number_input("Max Collocates for Patterns", 10, 100, 50, key="coll_pattern_limit_rule")
-                set_state('coll_pattern_limit', pattern_limit)
-
-    if search_mode == "Standard":
-        with st.expander("Collocation Settings", expanded=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                 if not comp_mode:
-                     node_word = st.text_input("Node Word", value="", placeholder="e.g. beautiful, [lemma]*, _VB*, *kan", key="coll_node", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma (e.g. [run]), token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN>)")
-                 else:
-                     st.markdown("**Node Words**")
-                     node_primary = st.text_input(f"Primary ({get_state('current_corpus_name', 'Corpus')})", value="", key="coll_node_primary")
-                     node_secondary = st.text_input(f"Comparison ({comp_name if comp_name else 'Secondary'})", value="", key="coll_node_secondary")
-                     node_word = node_primary # Default for single-path logic logic below if needed, though we split paths
-                     
-            with col2:
-                 # Shared settings for now
-                 window = st.slider("Span (Window)", 1, 10, 5, key="coll_window")
-                 c_sub1, c_sub2 = st.columns(2)
-                 with c_sub1:
-                    min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq")
-                 with c_sub2:
-                    max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max", help="Increase this limit to download more results (up to 50,000).")
-                 st.radio("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, horizontal=True, key="coll_stat_measure")
+            col_ai1, col_ai2 = st.columns([1, 4])
+            with col_ai1:
+                analyze_btn = st.button("Analyze & Search", type="primary")
             
-            st.markdown("---")
-            f_col1, f_col2, f_col3 = st.columns(3)
-            with f_col1:
-                token_filter = st.text_input("Token Filter", placeholder="e.g. no, non OR -no, -non", key="coll_token_filt", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
-            with f_col2:
-                pos_filter = st.text_input("POS Filter", placeholder="e.g. JJ, NN OR -JJ, -NN", key="coll_pos_filt", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
-            with f_col3:
-                lemma_filter = st.text_input("Lemma Filter", placeholder="e.g. see OR -see", key="coll_lemma_filt", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
-            
-            # Pattern Matching Section
-            st.markdown("---")
-            st.markdown("### 🔍 Collocation Patterns (Optional)")
-            
-            # Pattern syntax help
-            with st.expander("ℹ️ Pattern Syntax Guide", expanded=False):
-                st.markdown("""
-                **Pattern Format:** `label : pattern`
-                
-                **Symbols:**
-                - `<>` : the node word
-                - `#` : the collocate
-                - `*` : optional token (any word, 0 or 1)
-                - `+` : required token (exactly 1 word)
-                - `token` : specific token (obligatory)
-                - `(token)` : optional specific token
-                
-                **Constraints:**
-                - `[lemma]` : token must be from specified lemma
-                - `_TAG` : token must have specified POS tag
-                - `(_TAG)` : optional POS tag constraint
-                - `([lemma])` : optional lemma constraint
-                
-                **Examples:**
-                ```
-                Agent of passive di- : <> * * #
-                Patient/theme : # * <>
-                Strict adjacency : # <>
-                Gap of one : <> + #
-                ```
-                
-                **Note:** One pattern per line, up to 50 patterns.
-                """)
-            
-            # Pattern input
-            pattern_text = st.text_area(
-                "Pattern Definitions",
-                value=get_state('coll_pattern_text', ''),
-                height=150,
-                placeholder="Example:\nAgent of passive di- : <> * * #\nPatient of passive di- : # * <>",
-                help="Enter one pattern per line. Format: label : pattern",
-                key="coll_pattern_input"
-            )
-            
-            # Save pattern text to state
-            if pattern_text != get_state('coll_pattern_text', ''):
-                set_state('coll_pattern_text', pattern_text)
-            
-            # Pattern controls
-            p_col1, p_col2 = st.columns([1, 1])
-            with p_col1:
-                pattern_limit = st.number_input(
-                    "Max Collocates for Patterns",
-                    min_value=10,
-                    max_value=100,
-                    value=get_state('coll_pattern_limit', 50),
-                    step=10,
-                    help="Limit pattern matching to top N collocates for performance",
-                    key="coll_pattern_limit_input"
-                )
-                if pattern_limit != get_state('coll_pattern_limit', 50):
-                    set_state('coll_pattern_limit', pattern_limit)
-            
-            with p_col2:
-                apply_patterns = st.checkbox(
-                    "Apply Patterns",
-                    value=get_state('coll_apply_patterns', False),
-                    help="Enable pattern-based clustering of collocates",
-                    key="coll_apply_patterns_check"
-                )
-                if apply_patterns != get_state('coll_apply_patterns', False):
-                    set_state('coll_apply_patterns', apply_patterns)
-
-
-    # --- XML Restriction Filters ---
-    if not comp_mode:
-        xml_filters = render_xml_restriction_filters(corpus_path, "collocation", corpus_name=corpus_name)
-        xml_where, xml_params = apply_xml_restrictions(xml_filters)
-    else:
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            xml_filters_1 = render_xml_restriction_filters(corpus_path, "collocation_c1", corpus_name=corpus_name)
-            xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
-        with col_f2:
-            if comp_path:
-                xml_filters_2 = render_xml_restriction_filters(comp_path, "collocation_c2", corpus_name=comp_name)
-                xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
-            else:
-                xml_where_2, xml_params_2 = "", []
-
-    if not comp_mode:
-        if st.button("Calculate Collocations", type="primary"):
-            # EXECUTION LOGIC
-            
-            # Determine effective parameters based on Mode
-            to_run_node = ""
-            to_run_win = 5
-            to_run_min_freq = 3
-            to_run_max = 100
-            
-            to_run_tok = ""
-            to_run_pos = ""
-            to_run_lem = ""
-            
-            run_valid = False
-            
-            if search_mode == "Standard":
-                to_run_node = node_word
-                to_run_win = window
-                to_run_min_freq = min_freq
-                to_run_max = max_rows
-                to_run_tok = token_filter
-                to_run_pos = pos_filter
-                to_run_lem = lemma_filter
-                run_valid = bool(to_run_node)
-                
-            elif search_mode == "Natural Language (Rule)":
+            if analyze_btn:
                 if not nl_query:
-                     st.warning("Please enter a Node Word query.")
-                     run_valid = False
+                    st.warning("Please enter a query.")
                 else:
-                    set_state('coll_nl_query_rule', nl_query)
-                    # Parse Main Node Query
-                    pos_defs = ov.get_pos_definitions(corpus_path) or {}
-                    reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
+                    with st.spinner("AI is parsing your query..."):
+                        params, err = parse_nl_query(
+                            nl_query, 
+                            "collocation",
+                            ai_provider=get_state('ai_provider'),
+                            gemini_api_key=get_state('gemini_api_key'),
+                            ollama_url=get_state('ollama_url'),
+                            ollama_model=get_state('ai_model')
+                        )
                     
-                    params, err = parse_nl_query_rules_only(nl_query, "collocation", reverse_pos_map=reverse_pos_map)
                     if params:
-                        def quick_parse(txt, r_map=reverse_pos_map):
-                            if not txt: return ""
-                            p, _ = parse_nl_query_rules_only(txt, "collocation", reverse_pos_map=r_map)
-                            return p.get('node_word', txt) if p else txt
-                            
-                        to_run_node = params.get('node_word', '')
-                        to_run_win = window # from shared inputs in Rule block
-                        to_run_min_freq = min_freq
-                        to_run_max = max_rows
+                        # Safely parse params
+                        try:
+                            win = int(params.get('window', 5))
+                        except (ValueError, TypeError): win = 5
                         
-                        to_run_tok = quick_parse(token_filter_input)
-                        to_run_pos = quick_parse(pos_filter_input)
-                        to_run_lem = quick_parse(lemma_filter_input)
+                        try:
+                            freq = int(params.get('min_freq', 3))
+                        except (ValueError, TypeError): freq = 3
                         
-                        run_valid = bool(to_run_node)
-                        if run_valid:
-                             st.success(f"✓ Searching for: **{to_run_node}**")
+                        try:
+                            mx = int(params.get('max_rows', 100))
+                        except (ValueError, TypeError): mx = 100
+    
+                        # Update state with parsed parameters
+                        set_state('coll_node', params.get('node_word', ''))
+                        set_state('coll_window', win)
+                        set_state('coll_min_freq', freq)
+                        set_state('coll_token_filt', params.get('token_filter', ''))
+                        set_state('coll_pos_filt', params.get('pos_filter', ''))
+                        set_state('coll_lemma_filt', params.get('lemma_filter', ''))
+                        
+                        st.success("✓ Query interpretation successful! Running search...")
+                        
+                        # Defer execution until after XML filters are rendered below
+                        _deferred_coll_query = {
+                            'node': params.get('node_word', ''),
+                            'win': win, 'freq': freq, 'mx': mx,
+                            'token_filter': params.get('token_filter', ''),
+                            'pos_filter': params.get('pos_filter', ''),
+                            'lemma_filter': params.get('lemma_filter', ''),
+                        }
                     else:
-                        st.error(f"Error parsing query: {err}")
-                        run_valid = False
-
-            if run_valid:
-                # Get pattern settings
-                pattern_text = get_state('coll_pattern_text', '')
-                apply_patterns = get_state('coll_apply_patterns', False)
-                pattern_limit = get_state('coll_pattern_limit', 50)
+                        st.error(f"Failed to parse query: {err}")
+    
+        if search_mode == "Natural Language (Rule)":
+            st.markdown("### ⚡ Natural Language Search (Rule-Based)")
+            st.caption("Fast, deterministic parsing. Use terms like 'noun', 'verb', or 'word followed by...'. Filters also support these terms.")
+            
+            with st.expander("Collocation Settings", expanded=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                     nl_query = st.text_input("Node Word Query (NL/Rule)", value=get_state('coll_nl_query_rule', ''), placeholder="e.g. adjective followed by noun", key="coll_nl_input_rule")
+                with col2:
+                     # Shared settings
+                     window = st.slider("Span (Window)", 1, 10, 5, key="coll_window_rule")
+                     c_sub1, c_sub2 = st.columns(2)
+                     with c_sub1:
+                        min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq_rule")
+                     with c_sub2:
+                        max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max_rule")
+                     st.radio("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, horizontal=True, key="coll_stat_measure_rule")
                 
-                run_collocation_query(
-                    'primary', corpus_path, to_run_node, to_run_win, to_run_min_freq, to_run_max, 
-                    corpus_stats, xml_where, xml_params, to_run_tok, to_run_pos, to_run_lem,
-                    pattern_text if apply_patterns else '', pattern_limit,
-                    stat_measure=get_state('coll_stat_measure', 'Log-Likelihood') if search_mode == "Standard" else get_state('coll_stat_measure_rule', 'Log-Likelihood')
-                )
-    else:
-        if st.button("Calculate Comparison Collocations", type="primary"):
-            # Determine effective parameters
-            to_run_node_1 = ""
-            to_run_node_2 = ""
-            
-            # Shared params
-            to_run_win = 5
-            to_run_min_freq = 3
-            to_run_max = 100
-            to_run_tok = ""
-            to_run_pos = ""
-            to_run_lem = ""
-            
-            run_valid = False
-            
-            if search_mode == "Standard":
-                to_run_node_1 = node_primary
-                to_run_node_2 = node_secondary
-                to_run_win = window
-                to_run_min_freq = min_freq
-                to_run_max = max_rows
-                to_run_tok = token_filter
-                to_run_pos = pos_filter
-                to_run_lem = lemma_filter
-                run_valid = True
-                
-            elif search_mode == "Natural Language (Rule)":
-                 # Use same node for both
-                 if not nl_query:
-                     st.warning("Please enter a Node Word query.")
-                     run_valid = False
-                 else:
-                     set_state('coll_nl_query_rule', nl_query)
-                     
-                     pos_defs = ov.get_pos_definitions(corpus_path) or {}
-                     reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
-
-                     params, err = parse_nl_query_rules_only(nl_query, "collocation", reverse_pos_map=reverse_pos_map)
-                     if params:
-                         def quick_parse(txt, r_map=reverse_pos_map):
-                            if not txt: return ""
-                            p, _ = parse_nl_query_rules_only(txt, "collocation", reverse_pos_map=r_map)
-                            return p.get('node_word', txt) if p else txt
-                            
-                         parsed_node = params.get('node_word', '')
-                         to_run_node_1 = parsed_node
-                         to_run_node_2 = parsed_node
-                         
-                         to_run_win = window
-                         to_run_min_freq = min_freq
-                         to_run_max = max_rows
-                         
-                         to_run_tok = quick_parse(token_filter_input)
-                         to_run_pos = quick_parse(pos_filter_input)
-                         to_run_lem = quick_parse(lemma_filter_input)
-                         
-                         run_valid = bool(parsed_node)
-                         if run_valid:
-                             st.success(f"✓ Searching for: **{parsed_node}** in both corpora")
+                st.markdown("---")
+                f_col1, f_col2, f_col3 = st.columns(3)
+                with f_col1:
+                    token_filter_input = st.text_input("Token Filter (NL)", placeholder="e.g. not 'the'", key="coll_token_filt_rule", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
+                with f_col2:
+                    pos_filter_input = st.text_input("POS Filter (NL)", placeholder="e.g. noun, verb", key="coll_pos_filt_rule", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
+                with f_col3:
+                    lemma_filter_input = st.text_input("Lemma Filter (NL)", placeholder="e.g. be, have", key="coll_lemma_filt_rule", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
+                    
+                # Pattern Matching Section (Reusable)
+                st.markdown("---")
+                apply_patterns = st.checkbox("Apply Patterns (Advanced)", value=get_state('coll_apply_patterns', False), key="coll_apply_patterns_rule")
+                if apply_patterns:
+                    pattern_text = st.text_area("Pattern Definitions", value=get_state('coll_pattern_text', ''), height=100, key="coll_pattern_input_rule")
+                    set_state('coll_pattern_text', pattern_text)
+                    pattern_limit = st.number_input("Max Collocates for Patterns", 10, 100, 50, key="coll_pattern_limit_rule")
+                    set_state('coll_pattern_limit', pattern_limit)
+    
+        if search_mode == "Standard":
+            with st.expander("Collocation Settings", expanded=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                     if not comp_mode:
+                         node_word = st.text_input("Node Word", value="", placeholder="e.g. beautiful, [lemma]*, _VB*, *kan", key="coll_node", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma (e.g. [run]), token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN>)")
                      else:
-                        st.error(f"Error parsing query: {err}")
-                        run_valid = False
-
-            if run_valid:
-                # Get pattern settings
-                pattern_text = get_state('coll_pattern_text', '')
-                apply_patterns = get_state('coll_apply_patterns', False)
-                pattern_limit = get_state('coll_pattern_limit', 50)
+                         st.markdown("**Node Words**")
+                         node_primary = st.text_input(f"Primary ({get_state('current_corpus_name', 'Corpus')})", value="", key="coll_node_primary")
+                         node_secondary = st.text_input(f"Comparison ({comp_name if comp_name else 'Secondary'})", value="", key="coll_node_secondary")
+                         node_word = node_primary # Default for single-path logic logic below if needed, though we split paths
+                         
+                with col2:
+                     # Shared settings for now
+                     window = st.slider("Span (Window)", 1, 10, 5, key="coll_window")
+                     c_sub1, c_sub2 = st.columns(2)
+                     with c_sub1:
+                        min_freq = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq")
+                     with c_sub2:
+                        max_rows = st.number_input("Max Collocates", 10, 50000, 100, step=10, key="coll_max", help="Increase this limit to download more results (up to 50,000).")
+                     st.radio("Association Measure", ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"], index=0, horizontal=True, key="coll_stat_measure")
                 
-                stat_measure = get_state('coll_stat_measure', 'Log-Likelihood') if search_mode == "Standard" else get_state('coll_stat_measure_rule', 'Log-Likelihood')
+                st.markdown("---")
+                f_col1, f_col2, f_col3 = st.columns(3)
+                with f_col1:
+                    token_filter = st.text_input("Token Filter", placeholder="e.g. no, non OR -no, -non", key="coll_token_filt", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
+                with f_col2:
+                    pos_filter = st.text_input("POS Filter", placeholder="e.g. JJ, NN OR -JJ, -NN", key="coll_pos_filt", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
+                with f_col3:
+                    lemma_filter = st.text_input("Lemma Filter", placeholder="e.g. see OR -see", key="coll_lemma_filt", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
                 
-                # Run Primary
-                if to_run_node_1:
-                    run_collocation_query(
-                        'primary', corpus_path, to_run_node_1, to_run_win, to_run_min_freq, to_run_max, 
-                        corpus_stats, xml_where_1, xml_params_1, to_run_tok, to_run_pos, to_run_lem,
-                        pattern_text if apply_patterns else '', pattern_limit,
-                        stat_measure=stat_measure
+                # Pattern Matching Section
+                st.markdown("---")
+                st.markdown("### 🔍 Collocation Patterns (Optional)")
+                
+                # Pattern syntax help
+                with st.expander("ℹ️ Pattern Syntax Guide", expanded=False):
+                    st.markdown("""
+                    **Pattern Format:** `label : pattern`
+                    
+                    **Symbols:**
+                    - `<>` : the node word
+                    - `#` : the collocate
+                    - `*` : optional token (any word, 0 or 1)
+                    - `+` : required token (exactly 1 word)
+                    - `token` : specific token (obligatory)
+                    - `(token)` : optional specific token
+                    
+                    **Constraints:**
+                    - `[lemma]` : token must be from specified lemma
+                    - `_TAG` : token must have specified POS tag
+                    - `(_TAG)` : optional POS tag constraint
+                    - `([lemma])` : optional lemma constraint
+                    
+                    **Examples:**
+                    ```
+                    Agent of passive di- : <> * * #
+                    Patient/theme : # * <>
+                    Strict adjacency : # <>
+                    Gap of one : <> + #
+                    ```
+                    
+                    **Note:** One pattern per line, up to 50 patterns.
+                    """)
+                
+                # Pattern input
+                pattern_text = st.text_area(
+                    "Pattern Definitions",
+                    value=get_state('coll_pattern_text', ''),
+                    height=150,
+                    placeholder="Example:\nAgent of passive di- : <> * * #\nPatient of passive di- : # * <>",
+                    help="Enter one pattern per line. Format: label : pattern",
+                    key="coll_pattern_input"
+                )
+                
+                # Save pattern text to state
+                if pattern_text != get_state('coll_pattern_text', ''):
+                    set_state('coll_pattern_text', pattern_text)
+                
+                # Pattern controls
+                p_col1, p_col2 = st.columns([1, 1])
+                with p_col1:
+                    pattern_limit = st.number_input(
+                        "Max Collocates for Patterns",
+                        min_value=10,
+                        max_value=100,
+                        value=get_state('coll_pattern_limit', 50),
+                        step=10,
+                        help="Limit pattern matching to top N collocates for performance",
+                        key="coll_pattern_limit_input"
                     )
+                    if pattern_limit != get_state('coll_pattern_limit', 50):
+                        set_state('coll_pattern_limit', pattern_limit)
+                
+                with p_col2:
+                    apply_patterns = st.checkbox(
+                        "Apply Patterns",
+                        value=get_state('coll_apply_patterns', False),
+                        help="Enable pattern-based clustering of collocates",
+                        key="coll_apply_patterns_check"
+                    )
+                    if apply_patterns != get_state('coll_apply_patterns', False):
+                        set_state('coll_apply_patterns', apply_patterns)
+    
+    
+        # --- XML Restriction Filters ---
+        if not comp_mode:
+            xml_filters = render_xml_restriction_filters(corpus_path, "collocation", corpus_name=corpus_name)
+            xml_where, xml_params = apply_xml_restrictions(xml_filters)
+        else:
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                xml_filters_1 = render_xml_restriction_filters(corpus_path, "collocation_c1", corpus_name=corpus_name)
+                xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
+            with col_f2:
+                if comp_path:
+                    xml_filters_2 = render_xml_restriction_filters(comp_path, "collocation_c2", corpus_name=comp_name)
+                    xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
                 else:
-                     st.warning("Primary node word missing.")
+                    xml_where_2, xml_params_2 = "", []
+    
+        if not comp_mode:
+            if st.button("Calculate Collocations", type="primary", key="btn_calculate_coll_advanced"):
+                # EXECUTION LOGIC
                 
-                # Run Comparison
-                if comp_path and to_run_node_2:
-                    comp_stats = get_state('comp_corpus_stats')
+                # Determine effective parameters based on Mode
+                to_run_node = ""
+                to_run_win = 5
+                to_run_min_freq = 3
+                to_run_max = 100
+                
+                to_run_tok = ""
+                to_run_pos = ""
+                to_run_lem = ""
+                
+                run_valid = False
+                
+                if search_mode == "Standard":
+                    to_run_node = node_word
+                    to_run_win = window
+                    to_run_min_freq = min_freq
+                    to_run_max = max_rows
+                    to_run_tok = token_filter
+                    to_run_pos = pos_filter
+                    to_run_lem = lemma_filter
+                    run_valid = bool(to_run_node)
+                    
+                elif search_mode == "Natural Language (Rule)":
+                    if not nl_query:
+                         st.warning("Please enter a Node Word query.")
+                         run_valid = False
+                    else:
+                        set_state('coll_nl_query_rule', nl_query)
+                        # Parse Main Node Query
+                        pos_defs = ov.get_pos_definitions(corpus_path) or {}
+                        reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
+                        
+                        params, err = parse_nl_query_rules_only(nl_query, "collocation", reverse_pos_map=reverse_pos_map)
+                        if params:
+                            def quick_parse(txt, r_map=reverse_pos_map):
+                                if not txt: return ""
+                                p, _ = parse_nl_query_rules_only(txt, "collocation", reverse_pos_map=r_map)
+                                return p.get('node_word', txt) if p else txt
+                                
+                            to_run_node = params.get('node_word', '')
+                            to_run_win = window # from shared inputs in Rule block
+                            to_run_min_freq = min_freq
+                            to_run_max = max_rows
+                            
+                            to_run_tok = quick_parse(token_filter_input)
+                            to_run_pos = quick_parse(pos_filter_input)
+                            to_run_lem = quick_parse(lemma_filter_input)
+                            
+                            run_valid = bool(to_run_node)
+                            if run_valid:
+                                 st.success(f"✓ Searching for: **{to_run_node}**")
+                        else:
+                            st.error(f"Error parsing query: {err}")
+                            run_valid = False
+    
+                if run_valid:
+                    # Get pattern settings
+                    pattern_text = get_state('coll_pattern_text', '')
+                    apply_patterns = get_state('coll_apply_patterns', False)
+                    pattern_limit = get_state('coll_pattern_limit', 50)
+                    
                     run_collocation_query(
-                        'secondary', comp_path, to_run_node_2, to_run_win, to_run_min_freq, to_run_max, 
-                        comp_stats, xml_where_2, xml_params_2, to_run_tok, to_run_pos, to_run_lem,
+                        'primary', corpus_path, to_run_node, to_run_win, to_run_min_freq, to_run_max, 
+                        corpus_stats, xml_where, xml_params, to_run_tok, to_run_pos, to_run_lem,
                         pattern_text if apply_patterns else '', pattern_limit,
-                        stat_measure=stat_measure
+                        stat_measure=get_state('coll_stat_measure', 'Log-Likelihood') if search_mode == "Standard" else get_state('coll_stat_measure_rule', 'Log-Likelihood')
                     )
-                elif comp_path and not to_run_node_2:
-                    st.warning("Comparison node word missing.")
-
-    # --- Deferred NL AI Query Execution (runs AFTER xml_where/xml_params are set) ---
-    if _deferred_coll_query is not None:
-        _dq = _deferred_coll_query
-        run_collocation_query(
-            'primary', corpus_path,
-            _dq['node'], _dq['win'], _dq['freq'], _dq['mx'],
-            corpus_stats,
-            xml_where, xml_params,
-            _dq['token_filter'], _dq['pos_filter'], _dq['lemma_filter'],
-            '', 50,
-            stat_measure=get_state('coll_stat_measure', 'Log-Likelihood')
-        )
+        else:
+            if st.button("Calculate Comparison Collocations", type="primary", key="btn_calculate_coll_comp_advanced"):
+                # Determine effective parameters
+                to_run_node_1 = ""
+                to_run_node_2 = ""
+                
+                # Shared params
+                to_run_win = 5
+                to_run_min_freq = 3
+                to_run_max = 100
+                to_run_tok = ""
+                to_run_pos = ""
+                to_run_lem = ""
+                
+                run_valid = False
+                
+                if search_mode == "Standard":
+                    to_run_node_1 = node_primary
+                    to_run_node_2 = node_secondary
+                    to_run_win = window
+                    to_run_min_freq = min_freq
+                    to_run_max = max_rows
+                    to_run_tok = token_filter
+                    to_run_pos = pos_filter
+                    to_run_lem = lemma_filter
+                    run_valid = True
+                    
+                elif search_mode == "Natural Language (Rule)":
+                     # Use same node for both
+                     if not nl_query:
+                         st.warning("Please enter a Node Word query.")
+                         run_valid = False
+                     else:
+                         set_state('coll_nl_query_rule', nl_query)
+                         
+                         pos_defs = ov.get_pos_definitions(corpus_path) or {}
+                         reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
+    
+                         params, err = parse_nl_query_rules_only(nl_query, "collocation", reverse_pos_map=reverse_pos_map)
+                         if params:
+                             def quick_parse(txt, r_map=reverse_pos_map):
+                                if not txt: return ""
+                                p, _ = parse_nl_query_rules_only(txt, "collocation", reverse_pos_map=r_map)
+                                return p.get('node_word', txt) if p else txt
+                                
+                             parsed_node = params.get('node_word', '')
+                             to_run_node_1 = parsed_node
+                             to_run_node_2 = parsed_node
+                             
+                             to_run_win = window
+                             to_run_min_freq = min_freq
+                             to_run_max = max_rows
+                             
+                             to_run_tok = quick_parse(token_filter_input)
+                             to_run_pos = quick_parse(pos_filter_input)
+                             to_run_lem = quick_parse(lemma_filter_input)
+                             
+                             run_valid = bool(parsed_node)
+                             if run_valid:
+                                 st.success(f"✓ Searching for: **{parsed_node}** in both corpora")
+                         else:
+                            st.error(f"Error parsing query: {err}")
+                            run_valid = False
+    
+                if run_valid:
+                    # Get pattern settings
+                    pattern_text = get_state('coll_pattern_text', '')
+                    apply_patterns = get_state('coll_apply_patterns', False)
+                    pattern_limit = get_state('coll_pattern_limit', 50)
+                    
+                    stat_measure = get_state('coll_stat_measure', 'Log-Likelihood') if search_mode == "Standard" else get_state('coll_stat_measure_rule', 'Log-Likelihood')
+                    
+                    # Run Primary
+                    if to_run_node_1:
+                        run_collocation_query(
+                            'primary', corpus_path, to_run_node_1, to_run_win, to_run_min_freq, to_run_max, 
+                            corpus_stats, xml_where_1, xml_params_1, to_run_tok, to_run_pos, to_run_lem,
+                            pattern_text if apply_patterns else '', pattern_limit,
+                            stat_measure=stat_measure
+                        )
+                    else:
+                         st.warning("Primary node word missing.")
+                    
+                    # Run Comparison
+                    if comp_path and to_run_node_2:
+                        comp_stats = get_state('comp_corpus_stats')
+                        run_collocation_query(
+                            'secondary', comp_path, to_run_node_2, to_run_win, to_run_min_freq, to_run_max, 
+                            comp_stats, xml_where_2, xml_params_2, to_run_tok, to_run_pos, to_run_lem,
+                            pattern_text if apply_patterns else '', pattern_limit,
+                            stat_measure=stat_measure
+                        )
+                    elif comp_path and not to_run_node_2:
+                        st.warning("Comparison node word missing.")
+    
+        # --- Deferred NL AI Query Execution (runs AFTER xml_where/xml_params are set) ---
+        if _deferred_coll_query is not None:
+            _dq = _deferred_coll_query
+            run_collocation_query(
+                'primary', corpus_path,
+                _dq['node'], _dq['win'], _dq['freq'], _dq['mx'],
+                corpus_stats,
+                xml_where, xml_params,
+                _dq['token_filter'], _dq['pos_filter'], _dq['lemma_filter'],
+                '', 50,
+                stat_measure=get_state('coll_stat_measure', 'Log-Likelihood')
+            )
 
     # 3. Display
     if not comp_mode:
@@ -519,7 +548,7 @@ def render_collocation_view():
 
 def run_collocation_query(identifier, path, word, window, min_freq, max_rows, stats, xml_where, xml_params, 
                           token_filter="", pos_filter="", lemma_filter="", pattern_text="", pattern_limit=50,
-                          stat_measure="Log-Likelihood"):
+                          stat_measure="Log-Likelihood", source='advanced'):
     with st.spinner(f"Computing collocations..."):
         stats_df, freq, node_mwu = cached_generate_collocation(
             db_path=path,
@@ -544,7 +573,8 @@ def run_collocation_query(identifier, path, word, window, min_freq, max_rows, st
             'corpus_name': identifier,
             'xml_where': xml_where,
             'xml_params': xml_params,
-            'stat_measure': stat_measure
+            'stat_measure': stat_measure,
+            'source': source
         }
         
         # Apply pattern matching if requested
