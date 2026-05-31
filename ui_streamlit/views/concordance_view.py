@@ -15,510 +15,517 @@ import core.modules.overview as ov
 def render_concordance_view():
     st.header("Concordance (KWIC)")
     
-    corpus_path = get_state('current_corpus_path')
-    corpus_name = get_state('current_corpus_name', 'Corpus')
-    
-    if not corpus_path:
-        st.warning("Please load a corpus first.")
-        return
+    # Guidelines Layout using shared component
+    from ui_streamlit.components.guidelines import render_guidelines
+    col_main = render_guidelines("Concordance")
 
-    # Initialize XML restriction variables to prevent NameError in NL search modes
-    xml_where = ""
-    xml_params = []
-    xml_where_1 = ""
-    xml_params_1 = []
-    xml_where_2 = ""
-    xml_params_2 = []
+    with col_main:
 
-    # Deferred execution flag for NL modes (query runs AFTER XML filters are rendered)
-    _deferred_nl_query = None
 
-    search_term_1 = get_state('kwic_search_term', '')
-    search_term_2 = None
-    results = st.session_state.get('last_kwic_results_primary')
-    cluster_results = st.session_state.get('last_kwic_results_cluster')
+            corpus_path = get_state('current_corpus_path')
+            corpus_name = get_state('current_corpus_name', 'Corpus')
 
-    tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
+            if not corpus_path:
+                st.warning("Please load a corpus first.")
+                return
 
-    with tab_simple:
-        search_term_simple = st.text_input("Node Word(s)", value=get_state('kwic_search_term', ''), key="kwic_input_simple", help="Search word or phrase")
-        if st.button("Generate Concordance", type="primary", key="btn_generate_simple", use_container_width=True):
-            set_state('kwic_search_term', search_term_simple)
-            st.session_state['last_kwic_results_cluster'] = None
-            set_state('kwic_show_meta', False)
-            set_state('kwic_show_pos', False)
-            set_state('kwic_show_lemma', False)
-            run_concordance_query(
-                identifier='primary',
-                path=corpus_path,
-                name=corpus_name,
-                query=search_term_simple,
-                left=5,
-                right=5,
-                limit=100,
-                coll_filter="",
-                xml_where="",
-                xml_params=[],
-                show_pos=False,
-                show_lemma=False,
-                source='simple'
-            )
-            st.rerun()
+            # Initialize XML restriction variables to prevent NameError in NL search modes
+            xml_where = ""
+            xml_params = []
+            xml_where_1 = ""
+            xml_params_1 = []
+            xml_where_2 = ""
+            xml_params_2 = []
 
-    with tab_advanced:
-        # 1. Controls
-        search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="kwic_search_mode")
-        search_term = get_state('kwic_search_term', '')
-        
-        if search_mode == "Natural Language (Rule)":
-            st.markdown("### ⚡ Natural Language Search (Rule-Based)")
-            st.caption("Fast, deterministic parsing without AI. Supports: 'followed by', 'preceded by', 'before', 'after', and POS terms like 'noun', 'verb', 'adjective'.")
-            
-            with st.expander("Search Controls", expanded=True):
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                     nl_query = st.text_input("Natural Language Query", value=get_state('kwic_nl_query_rule', ''), key="kwic_nl_input_rule", help="e.g. any word followed by 'adjective'")
-                with col2:
-                     window_size = st.slider("Context Window", 1, 20, 5, key="kwic_window_rule")
-                with col3:
-                     limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit_rule")
-                 
-                # Advanced Filters
-                c_adv1, c_adv2 = st.columns(2)
-                with c_adv1:
-                    coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
-                with c_adv2:
-                    sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
-                    c_sh1, c_sh2, c_sh3 = st.columns(3)
-                    with c_sh1:
-                        show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
-                    with c_sh2:
-                        show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_rule")
-                    with c_sh3:
-                        show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_rule")
-                    
-                    set_state('kwic_show_pos', show_pos)
-                    set_state('kwic_show_lemma', show_lemma)
-                    set_state('kwic_show_meta', show_meta)
-                    
-                    
-                    wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
-                    set_state('kwic_wrap_mode', wrap_mode)
+            # Deferred execution flag for NL modes (query runs AFTER XML filters are rendered)
+            _deferred_nl_query = None
 
-            col_r1, col_r2 = st.columns([1, 4])
-            with col_r1:
-                analyze_btn = st.button("Search (Rule-Based)", type="primary")
-                
-            if analyze_btn:
-                if not nl_query:
-                    st.warning("Please enter a query.")
-                else:
-                    set_state('kwic_nl_query_rule', nl_query)
-                    
-                    # 1. Parse Main Query
-                    pos_defs = ov.get_pos_definitions(corpus_path) or {}
-                    reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
-                    
-                    params, err = parse_nl_query_rules_only(nl_query, "concordance", reverse_pos_map=reverse_pos_map)
-                    
-                    # 2. Parse Collocate Filter (treat as query fragment)
-                    coll_filter_parsed = ""
-                    if coll_filter_input:
-                         c_params, c_err = parse_nl_query_rules_only(coll_filter_input, "concordance", reverse_pos_map=reverse_pos_map)
-                         if c_params:
-                             coll_filter_parsed = c_params.get('query', '')
-                    
-                    if params:
-                        query = params.get('query', '')
-                        set_state('kwic_search_term', query)
-                        
-                        # Use UI slider for window, ignoring parser default for consistency
-                        set_state('kwic_window', window_size)
-                        
-                        st.success(f"✓ Executing search for '{query}'...")
-                        if coll_filter_parsed:
-                            st.info(f"   + Collocate Filter: '{coll_filter_parsed}'")
-                        
-                        # Defer execution until after XML filters are rendered below
-                        _deferred_nl_query = {
-                            'query': query, 'window': window_size, 'limit': limit,
-                            'coll_filter': coll_filter_parsed, 'show_pos': show_pos, 'show_lemma': show_lemma
-                        }
-                    else:
-                        st.error(f"Error parsing query: {err}")
-        
-        if search_mode == "Natural Language (AI)":
-            st.markdown("### 🧠 Natural Language Search")
-            nl_query = st.text_area("Describe your concordance query", height=70, placeholder="e.g. Find examples of 'make' followed by a noun")
-            
-            # Display Options for AI Mode
-            with st.expander("Display Options"):
-                wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_ai")
-                set_state('kwic_wrap_mode', wrap_mode)
-            
-            col_ai1, col_ai2 = st.columns([1, 4])
-            with col_ai1:
-                analyze_btn = st.button("Search with AI", type="primary")
-                
-            if analyze_btn:
-                if not nl_query:
-                    st.warning("Please enter a query.")
-                else:
-                    with st.spinner("AI is determining search parameters..."):
-                        # Fetch user definitions if available
-                        pos_defs = ov.get_pos_definitions(corpus_path) or {}
-                        lang = ov.get_corpus_language(corpus_path)
-                        
-                        # Safe-pass language context via pos_defs to avoid stale-cache TypeErrors
-                        if lang:
-                            pos_defs['__language_context__'] = lang
-
-                        params, err = parse_nl_query(
-                            nl_query, 
-                            "concordance",
-                            ai_provider=get_state('ai_provider'),
-                            gemini_api_key=get_state('gemini_api_key'),
-                            ollama_url=get_state('ollama_url'),
-                            ollama_model=get_state('ai_model'),
-                            pos_definitions=pos_defs
-                        )
-                    
-                    if params:
-                        # Map and update state
-                        # Query
-                        query = params.get('query', '')
-                        set_state('kwic_search_term', query)
-                        
-                        # Window/Limit defaults
-                        try:
-                            win = int(params.get('window', 5))
-                        except (ValueError, TypeError):
-                            win = 5
-                        set_state('kwic_window', win)
-                        
-                        # Sort
-                        sort = params.get('sort_order', 'Node')
-                        if 'left' in sort.lower(): set_state('kwic_sort_col_primary', 'Left') # We need to check exact key usage
-                        elif 'right' in sort.lower(): set_state('kwic_sort_col_primary', 'Right')
-                        
-                        st.success(f"✓ Executing search for '{query}'...")
-                        
-                        # Defer execution until after XML filters are rendered below
-                        _deferred_nl_query = {
-                            'query': query, 'window': win, 'limit': 100,
-                            'coll_filter': '', 'show_pos': False, 'show_lemma': False
-                        }
-                    else:
-                        st.error(f"Could not parse query: {err}")
-
-        if search_mode == "Standard":
-            with st.expander("Search Controls", expanded=True):
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                     search_term = st.text_input("Node Word(s)", value=get_state('kwic_search_term'), key="kwic_input", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma, token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN type=\"human\">)")
-                with col2:
-                     window_size = st.slider("Context Window", 1, 20, 5, key="kwic_window")
-                with col3:
-                     limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit")
-                 
-                # Advanced Filters
-                c_adv1, c_adv2 = st.columns(2)
-                with c_adv1:
-                    coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
-                with c_adv2:
-                    sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
-                    c_sh1, c_sh2, c_sh3 = st.columns(3)
-                    with c_sh1:
-                        show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
-                    with c_sh2:
-                        show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_cb")
-                    with c_sh3:
-                        show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_cb")
-                    
-                    set_state('kwic_show_pos', show_pos)
-                    set_state('kwic_show_lemma', show_lemma)
-                    set_state('kwic_show_meta', show_meta)
-                    
-                    
-                    wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
-                    set_state('kwic_wrap_mode', wrap_mode)
-
-        # --- XML Restriction Filters ---
-        comp_mode = get_state('comparison_mode', False)
-        comp_path = get_state('comp_corpus_path')
-        comp_name = get_state('comp_corpus_name')
-
-        if not comp_mode:
-            xml_filters = render_xml_restriction_filters(corpus_path, "concordance", corpus_name=corpus_name)
-            xml_where, xml_params = apply_xml_restrictions(xml_filters)
-        else:
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                xml_filters_1 = render_xml_restriction_filters(corpus_path, "concordance_c1", corpus_name=corpus_name)
-                xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
-            with col_f2:
-                if comp_path:
-                    xml_filters_2 = render_xml_restriction_filters(comp_path, "concordance_c2", corpus_name=comp_name)
-                    xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
-                else:
-                    xml_where_2, xml_params_2 = "", []
-
-        if search_mode == "Standard":
-            if comp_mode:
-                st.markdown("##### Comparison Search Inputs")
-                c_search_1, c_search_2 = st.columns(2)
-                with c_search_1:
-                    search_term_1 = st.text_input(f"Search {get_state('current_corpus_name', 'Primary')}", value=get_state('kwic_search_term'), key="kwic_input_1")
-                with c_search_2:
-                    search_term_2 = st.text_input(f"Search {comp_name if comp_name else 'Secondary'}", value=get_state('kwic_search_term_2', ''), key="kwic_input_2")
-            else:
-                search_term_1 = search_term # Use the main input
-                search_term_2 = None
-
-            # Auto-reactive update on filter changes
-            if not comp_mode:
-                current_results = st.session_state.get('last_kwic_results_primary')
-                if current_results and (current_results.get('xml_where') != xml_where or current_results.get('xml_params') != xml_params):
-                    run_concordance_query('primary', corpus_path, corpus_name, current_results['search_term'], window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
-            else:
-                current_results_1 = st.session_state.get('last_kwic_results_primary')
-                if current_results_1 and (current_results_1.get('xml_where') != xml_where_1 or current_results_1.get('xml_params') != xml_params_1):
-                    run_concordance_query('primary', corpus_path, corpus_name, current_results_1['search_term'], window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
-                    
-                current_results_2 = st.session_state.get('last_kwic_results_secondary')
-                if current_results_2 and comp_path and (current_results_2.get('xml_where') != xml_where_2 or current_results_2.get('xml_params') != xml_params_2):
-                    run_concordance_query('secondary', comp_path, comp_name, current_results_2['search_term'], window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
-
-            if not comp_mode:
-                has_results = bool(st.session_state.get('last_kwic_results_primary'))
-                _active_filters = xml_filters or {}
-                _has_categorical = any(
-                    f.get('type') == 'list' and f.get('values') for f in _active_filters.values()
-                ) if _active_filters else False
-                cluster_examples_limit = st.radio(
-                    "Examples per Cluster",
-                    options=[5, 10, 15, 20, 25, "All"],
-                    index=0,
-                    horizontal=True,
-                    key="cluster_examples_limit_select"
-                )
-                btn_col1, btn_col2 = st.columns([1, 1])
-                with btn_col1:
-                    if st.button("Generate Concordance Lines", type="primary", use_container_width=True):
-                        # Clear any previous cluster results when re-generating
-                        st.session_state['last_kwic_results_cluster'] = None
-                        set_state('kwic_search_term', search_term_1)
-                        run_concordance_query('primary', corpus_path, corpus_name, search_term_1, window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
-                with btn_col2:
-                    cluster_btn_help = (
-                        "Cluster concordance by selected metadata categories"
-                        if has_results and _has_categorical
-                        else "Generate concordance lines first, then select categorical metadata filters to enable clustering"
-                    )
-                    cluster_btn_disabled = not (has_results and _has_categorical)
-                    if st.button(
-                        "🧩 Cluster Mode",
-                        type="secondary",
-                        disabled=cluster_btn_disabled,
-                        help=cluster_btn_help,
-                        use_container_width=True,
-                        key="btn_cluster_mode"
-                    ):
-                        _cluster_limit = st.session_state.get('kwic_limit', 100)
-                        _active_search_term = get_state('kwic_search_term', search_term)
-                        limit_val = 999999 if cluster_examples_limit == "All" else int(cluster_examples_limit)
-                        run_cluster_concordance_query(
-                            corpus_path, corpus_name,
-                            _active_search_term,
-                            window_size,
-                            limit_val,  # samples per cluster
-                            _active_filters
-                        )
-            else:
-                if st.button("Generate Comparison Concordance", type="primary"):
-                    set_state('kwic_search_term', search_term_1)
-                    set_state('kwic_search_term_2', search_term_2) # New state for query 2
-                    
-                    run_concordance_query('primary', corpus_path, corpus_name, search_term_1, window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
-                    if comp_path:
-                        run_concordance_query('secondary', comp_path, comp_name, search_term_2, window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
-        else:
-            # For NL mode, ensure search_term_1 is defined for display logic
             search_term_1 = get_state('kwic_search_term', '')
             search_term_2 = None
+            results = st.session_state.get('last_kwic_results_primary')
+            cluster_results = st.session_state.get('last_kwic_results_cluster')
 
-        # --- Deferred NL Query Execution (runs AFTER xml_where/xml_params are set) ---
-        if _deferred_nl_query is not None:
-            _dq = _deferred_nl_query
-            run_concordance_query(
-                'primary', corpus_path, corpus_name,
-                _dq['query'], _dq['window'], _dq['window'],
-                _dq['limit'], _dq['coll_filter'],
-                xml_where, xml_params,
-                _dq['show_pos'], _dq['show_lemma']
-            )
+            tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
 
-        # 2. Annotation Resume (High visibility at the top)
-        col_res1, col_res2 = st.columns([1, 3])
-        with col_res1:
-            if st.button("📁 Continue Annotation", help="Resume annotation by uploading a saved file", use_container_width=True):
-                set_state('show_ann_upload', True)
-        
-        if get_state('show_ann_upload'):
-            with st.container(border=True):
-                st.markdown("##### Resume Annotation Session")
-                uploaded_file = st.file_uploader("Upload Annotation JSON", type="json", key="ann_uploader_main")
-                if uploaded_file:
-                    import json
-                    try:
-                        data = json.load(uploaded_file)
-                        ann_path = data.get('corpus_path')
-                        ann_term = data.get('search_term')
-                        
-                        if ann_path and ann_term:
-                            # Migration: Ensure all annotations are lists
-                            raw_ann = data.get('annotations', {})
-                            processed_ann = {}
-                            for k, v in raw_ann.items():
-                                if isinstance(v, list):
-                                    processed_ann[k] = v
-                                else:
-                                    processed_ann[k] = [v] # Wrap old single pair in list
-                            
-                            st.session_state['kwic_annotations'] = processed_ann
-                            st.success(f"✅ Loaded annotations for '{ann_term}'")
-                            
-                            # Logic to determine if it's the SAME corpus logically, even if path changed
-                            raw_source_name = data.get('corpus_name', os.path.basename(ann_path))
-                            
-                            def clean_name(n, p=None):
-                                if not n: return "Unknown"
-                                n = n.replace('.duckdb', '')
-                                if n.startswith('corpus_') and len(n) > 20 and p:
-                                    parts = p.replace('\\', '/').split('/')
-                                    for part in reversed(parts[:-1]):
-                                        if part.lower() not in ('temp', 'corpora', 'cortex', 'documents', 'users'):
-                                            return f"{part} (Uploaded)"
-                                    return "Uploaded Corpus"
-                                return n
-                            
-                            source_display = clean_name(raw_source_name, ann_path)
-                            current_display = clean_name(corpus_name, corpus_path)
-                            
-                            # Auto-trigger search if it looks like the right corpus and query
-                            is_match = (ann_path == corpus_path) or (source_display == current_display)
-                            
-                            if is_match and ann_term == search_term_1:
-                                st.info("🔄 Re-generating concordance lines...")
-                                run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
-                                set_state('show_ann_upload', False)
-                                st.rerun()
-                            else:
-                                # Show mismatch UI with Force Load option
-                                st.error("🚫 **Annotation Mismatch**")
-                                st.write(f"This annotation file is linked to a different corpus or search query.")
-                                
-                                col_war1, col_war2 = st.columns(2)
-                                with col_war1:
-                                    st.markdown(f"**Required (from file):**\n- 📂 Corpus: `{source_display}`\n- 🔍 Query: `{ann_term}`")
-                                with col_war2:
-                                    q_status = "✅ Match" if ann_term == search_term_1 else f"❌ `{search_term_1}`"
-                                    st.markdown(f"**Current (Active):**\n- 📂 Corpus: `{current_display}`\n- 🔍 Query: {q_status}")
-                                
-                                st.info("💡 If you are sure this is the correct data, you can force the load below.")
-                                if st.button("⚠️ Force Load Annotations Anyway", type="secondary"):
-                                    run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
-                                    set_state('show_ann_upload', False)
-                                    st.rerun()
-                        else:
-                            st.error("❌ Invalid annotation file format.")
-                    except Exception as e:
-                        st.error(f"Error loading file: {e}")
-                if st.button("Close"):
-                    set_state('show_ann_upload', False)
+            with tab_simple:
+                search_term_simple = st.text_input("Node Word(s)", value=get_state('kwic_search_term', ''), key="kwic_input_simple", help="Search word or phrase")
+                if st.button("Generate Concordance", type="primary", key="btn_generate_simple", use_container_width=True):
+                    set_state('kwic_search_term', search_term_simple)
+                    st.session_state['last_kwic_results_cluster'] = None
+                    set_state('kwic_show_meta', False)
+                    set_state('kwic_show_pos', False)
+                    set_state('kwic_show_lemma', False)
+                    run_concordance_query(
+                        identifier='primary',
+                        path=corpus_path,
+                        name=corpus_name,
+                        query=search_term_simple,
+                        left=5,
+                        right=5,
+                        limit=100,
+                        coll_filter="",
+                        xml_where="",
+                        xml_params=[],
+                        show_pos=False,
+                        show_lemma=False,
+                        source='simple'
+                    )
                     st.rerun()
 
-        if results:
-            # Annotation Mode Toggle
-            col_ann1, col_ann2, col_ann3 = st.columns([1, 1, 2])
-            with col_ann1:
-                ann_mode = st.toggle("✍️ Annotation Mode", value=get_state('kwic_ann_mode', False), key="kwic_ann_mode_toggle")
-                set_state('kwic_ann_mode', ann_mode)
-            
-            with col_ann2:
-                if ann_mode:
-                    if st.button("🏛️ Apply to Session", help="Add these annotations to the active working corpus for all tabs"):
-                        set_state('show_db_save_confirm', True)
-            
-            if get_state('show_db_save_confirm'):
-                with st.container(border=True):
-                    st.info("ℹ️ **Apply to Active Session**")
-                    st.write("This will add these labels to the current working corpus in this session. They will be visible in the Overview and Restricted Search tabs.")
-                    st.write("⚠️ *Note: These changes are not saved to the source XML. If you re-upload the corpus, you will need to restore your annotations from a backup file.*")
-                    st.checkbox("I understand and want to proceed", key="db_save_confirm_check")
-                    
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("🚀 Apply Labels", type="primary", disabled=not st.session_state.get('db_save_confirm_check')):
-                            import importlib
-                            import core.modules.concordance as cm
-                            importlib.reload(cm) 
-                            if hasattr(cm, 'persist_annotations_to_db'):
-                                success, msg = cm.persist_annotations_to_db(results['path'], st.session_state.get('kwic_annotations', {}))
+            with tab_advanced:
+                # 1. Controls
+                search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="kwic_search_mode")
+                search_term = get_state('kwic_search_term', '')
+
+                if search_mode == "Natural Language (Rule)":
+                    st.markdown("### ⚡ Natural Language Search (Rule-Based)")
+                    st.caption("Fast, deterministic parsing without AI. Supports: 'followed by', 'preceded by', 'before', 'after', and POS terms like 'noun', 'verb', 'adjective'.")
+
+                    with st.expander("Search Controls", expanded=True):
+                        col1, col2, col3 = st.columns([2, 1, 1])
+                        with col1:
+                             nl_query = st.text_input("Natural Language Query", value=get_state('kwic_nl_query_rule', ''), key="kwic_nl_input_rule", help="e.g. any word followed by 'adjective'")
+                        with col2:
+                             window_size = st.slider("Context Window", 1, 20, 5, key="kwic_window_rule")
+                        with col3:
+                             limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit_rule")
+
+                        # Advanced Filters
+                        c_adv1, c_adv2 = st.columns(2)
+                        with c_adv1:
+                            coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
+                        with c_adv2:
+                            sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
+                            c_sh1, c_sh2, c_sh3 = st.columns(3)
+                            with c_sh1:
+                                show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
+                            with c_sh2:
+                                show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_rule")
+                            with c_sh3:
+                                show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_rule")
+
+                            set_state('kwic_show_pos', show_pos)
+                            set_state('kwic_show_lemma', show_lemma)
+                            set_state('kwic_show_meta', show_meta)
+
+
+                            wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
+                            set_state('kwic_wrap_mode', wrap_mode)
+
+                    col_r1, col_r2 = st.columns([1, 4])
+                    with col_r1:
+                        analyze_btn = st.button("Search (Rule-Based)", type="primary")
+
+                    if analyze_btn:
+                        if not nl_query:
+                            st.warning("Please enter a query.")
+                        else:
+                            set_state('kwic_nl_query_rule', nl_query)
+
+                            # 1. Parse Main Query
+                            pos_defs = ov.get_pos_definitions(corpus_path) or {}
+                            reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
+
+                            params, err = parse_nl_query_rules_only(nl_query, "concordance", reverse_pos_map=reverse_pos_map)
+
+                            # 2. Parse Collocate Filter (treat as query fragment)
+                            coll_filter_parsed = ""
+                            if coll_filter_input:
+                                 c_params, c_err = parse_nl_query_rules_only(coll_filter_input, "concordance", reverse_pos_map=reverse_pos_map)
+                                 if c_params:
+                                     coll_filter_parsed = c_params.get('query', '')
+
+                            if params:
+                                query = params.get('query', '')
+                                set_state('kwic_search_term', query)
+
+                                # Use UI slider for window, ignoring parser default for consistency
+                                set_state('kwic_window', window_size)
+
+                                st.success(f"✓ Executing search for '{query}'...")
+                                if coll_filter_parsed:
+                                    st.info(f"   + Collocate Filter: '{coll_filter_parsed}'")
+
+                                # Defer execution until after XML filters are rendered below
+                                _deferred_nl_query = {
+                                    'query': query, 'window': window_size, 'limit': limit,
+                                    'coll_filter': coll_filter_parsed, 'show_pos': show_pos, 'show_lemma': show_lemma
+                                }
                             else:
-                                success, msg = False, "Internal Error: Persistence function not found in module after reload."
-                            if success:
-                                st.success(f"✅ {msg}")
-                                set_state('show_db_save_confirm', False)
-                                # Reset some caches to make sure other modules see the change
-                                st.cache_data.clear() 
+                                st.error(f"Error parsing query: {err}")
+
+                if search_mode == "Natural Language (AI)":
+                    st.markdown("### 🧠 Natural Language Search")
+                    nl_query = st.text_area("Describe your concordance query", height=70, placeholder="e.g. Find examples of 'make' followed by a noun")
+
+                    # Display Options for AI Mode
+                    with st.expander("Display Options"):
+                        wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_ai")
+                        set_state('kwic_wrap_mode', wrap_mode)
+
+                    col_ai1, col_ai2 = st.columns([1, 4])
+                    with col_ai1:
+                        analyze_btn = st.button("Search with AI", type="primary")
+
+                    if analyze_btn:
+                        if not nl_query:
+                            st.warning("Please enter a query.")
+                        else:
+                            with st.spinner("AI is determining search parameters..."):
+                                # Fetch user definitions if available
+                                pos_defs = ov.get_pos_definitions(corpus_path) or {}
+                                lang = ov.get_corpus_language(corpus_path)
+
+                                # Safe-pass language context via pos_defs to avoid stale-cache TypeErrors
+                                if lang:
+                                    pos_defs['__language_context__'] = lang
+
+                                params, err = parse_nl_query(
+                                    nl_query, 
+                                    "concordance",
+                                    ai_provider=get_state('ai_provider'),
+                                    gemini_api_key=get_state('gemini_api_key'),
+                                    ollama_url=get_state('ollama_url'),
+                                    ollama_model=get_state('ai_model'),
+                                    pos_definitions=pos_defs
+                                )
+
+                            if params:
+                                # Map and update state
+                                # Query
+                                query = params.get('query', '')
+                                set_state('kwic_search_term', query)
+
+                                # Window/Limit defaults
+                                try:
+                                    win = int(params.get('window', 5))
+                                except (ValueError, TypeError):
+                                    win = 5
+                                set_state('kwic_window', win)
+
+                                # Sort
+                                sort = params.get('sort_order', 'Node')
+                                if 'left' in sort.lower(): set_state('kwic_sort_col_primary', 'Left') # We need to check exact key usage
+                                elif 'right' in sort.lower(): set_state('kwic_sort_col_primary', 'Right')
+
+                                st.success(f"✓ Executing search for '{query}'...")
+
+                                # Defer execution until after XML filters are rendered below
+                                _deferred_nl_query = {
+                                    'query': query, 'window': win, 'limit': 100,
+                                    'coll_filter': '', 'show_pos': False, 'show_lemma': False
+                                }
                             else:
-                                st.error(f"❌ {msg}")
-                    with c2:
-                        if st.button("Cancel"):
-                            set_state('show_db_save_confirm', False)
+                                st.error(f"Could not parse query: {err}")
+
+                if search_mode == "Standard":
+                    with st.expander("Search Controls", expanded=True):
+                        col1, col2, col3 = st.columns([2, 1, 1])
+                        with col1:
+                             search_term = st.text_input("Node Word(s)", value=get_state('kwic_search_term'), key="kwic_input", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma, token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN type=\"human\">)")
+                        with col2:
+                             window_size = st.slider("Context Window", 1, 20, 5, key="kwic_window")
+                        with col3:
+                             limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit")
+
+                        # Advanced Filters
+                        c_adv1, c_adv2 = st.columns(2)
+                        with c_adv1:
+                            coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
+                        with c_adv2:
+                            sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
+                            c_sh1, c_sh2, c_sh3 = st.columns(3)
+                            with c_sh1:
+                                show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
+                            with c_sh2:
+                                show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_cb")
+                            with c_sh3:
+                                show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_cb")
+
+                            set_state('kwic_show_pos', show_pos)
+                            set_state('kwic_show_lemma', show_lemma)
+                            set_state('kwic_show_meta', show_meta)
+
+
+                            wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
+                            set_state('kwic_wrap_mode', wrap_mode)
+
+                # --- XML Restriction Filters ---
+                comp_mode = get_state('comparison_mode', False)
+                comp_path = get_state('comp_corpus_path')
+                comp_name = get_state('comp_corpus_name')
+
+                if not comp_mode:
+                    xml_filters = render_xml_restriction_filters(corpus_path, "concordance", corpus_name=corpus_name)
+                    xml_where, xml_params = apply_xml_restrictions(xml_filters)
+                else:
+                    col_f1, col_f2 = st.columns(2)
+                    with col_f1:
+                        xml_filters_1 = render_xml_restriction_filters(corpus_path, "concordance_c1", corpus_name=corpus_name)
+                        xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
+                    with col_f2:
+                        if comp_path:
+                            xml_filters_2 = render_xml_restriction_filters(comp_path, "concordance_c2", corpus_name=comp_name)
+                            xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
+                        else:
+                            xml_where_2, xml_params_2 = "", []
+
+                if search_mode == "Standard":
+                    if comp_mode:
+                        st.markdown("##### Comparison Search Inputs")
+                        c_search_1, c_search_2 = st.columns(2)
+                        with c_search_1:
+                            search_term_1 = st.text_input(f"Search {get_state('current_corpus_name', 'Primary')}", value=get_state('kwic_search_term'), key="kwic_input_1")
+                        with c_search_2:
+                            search_term_2 = st.text_input(f"Search {comp_name if comp_name else 'Secondary'}", value=get_state('kwic_search_term_2', ''), key="kwic_input_2")
+                    else:
+                        search_term_1 = search_term # Use the main input
+                        search_term_2 = None
+
+                    # Auto-reactive update on filter changes
+                    if not comp_mode:
+                        current_results = st.session_state.get('last_kwic_results_primary')
+                        if current_results and (current_results.get('xml_where') != xml_where or current_results.get('xml_params') != xml_params):
+                            run_concordance_query('primary', corpus_path, corpus_name, current_results['search_term'], window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
+                    else:
+                        current_results_1 = st.session_state.get('last_kwic_results_primary')
+                        if current_results_1 and (current_results_1.get('xml_where') != xml_where_1 or current_results_1.get('xml_params') != xml_params_1):
+                            run_concordance_query('primary', corpus_path, corpus_name, current_results_1['search_term'], window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
+
+                        current_results_2 = st.session_state.get('last_kwic_results_secondary')
+                        if current_results_2 and comp_path and (current_results_2.get('xml_where') != xml_where_2 or current_results_2.get('xml_params') != xml_params_2):
+                            run_concordance_query('secondary', comp_path, comp_name, current_results_2['search_term'], window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
+
+                    if not comp_mode:
+                        has_results = bool(st.session_state.get('last_kwic_results_primary'))
+                        _active_filters = xml_filters or {}
+                        _has_categorical = any(
+                            f.get('type') == 'list' and f.get('values') for f in _active_filters.values()
+                        ) if _active_filters else False
+                        cluster_examples_limit = st.radio(
+                            "Examples per Cluster",
+                            options=[5, 10, 15, 20, 25, "All"],
+                            index=0,
+                            horizontal=True,
+                            key="cluster_examples_limit_select"
+                        )
+                        btn_col1, btn_col2 = st.columns([1, 1])
+                        with btn_col1:
+                            if st.button("Generate Concordance Lines", type="primary", use_container_width=True):
+                                # Clear any previous cluster results when re-generating
+                                st.session_state['last_kwic_results_cluster'] = None
+                                set_state('kwic_search_term', search_term_1)
+                                run_concordance_query('primary', corpus_path, corpus_name, search_term_1, window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
+                        with btn_col2:
+                            cluster_btn_help = (
+                                "Cluster concordance by selected metadata categories"
+                                if has_results and _has_categorical
+                                else "Generate concordance lines first, then select categorical metadata filters to enable clustering"
+                            )
+                            cluster_btn_disabled = not (has_results and _has_categorical)
+                            if st.button(
+                                "🧩 Cluster Mode",
+                                type="secondary",
+                                disabled=cluster_btn_disabled,
+                                help=cluster_btn_help,
+                                use_container_width=True,
+                                key="btn_cluster_mode"
+                            ):
+                                _cluster_limit = st.session_state.get('kwic_limit', 100)
+                                _active_search_term = get_state('kwic_search_term', search_term)
+                                limit_val = 999999 if cluster_examples_limit == "All" else int(cluster_examples_limit)
+                                run_cluster_concordance_query(
+                                    corpus_path, corpus_name,
+                                    _active_search_term,
+                                    window_size,
+                                    limit_val,  # samples per cluster
+                                    _active_filters
+                                )
+                    else:
+                        if st.button("Generate Comparison Concordance", type="primary"):
+                            set_state('kwic_search_term', search_term_1)
+                            set_state('kwic_search_term_2', search_term_2) # New state for query 2
+
+                            run_concordance_query('primary', corpus_path, corpus_name, search_term_1, window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
+                            if comp_path:
+                                run_concordance_query('secondary', comp_path, comp_name, search_term_2, window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
+                else:
+                    # For NL mode, ensure search_term_1 is defined for display logic
+                    search_term_1 = get_state('kwic_search_term', '')
+                    search_term_2 = None
+
+                # --- Deferred NL Query Execution (runs AFTER xml_where/xml_params are set) ---
+                if _deferred_nl_query is not None:
+                    _dq = _deferred_nl_query
+                    run_concordance_query(
+                        'primary', corpus_path, corpus_name,
+                        _dq['query'], _dq['window'], _dq['window'],
+                        _dq['limit'], _dq['coll_filter'],
+                        xml_where, xml_params,
+                        _dq['show_pos'], _dq['show_lemma']
+                    )
+
+                # 2. Annotation Resume (High visibility at the top)
+                col_res1, col_res2 = st.columns([1, 3])
+                with col_res1:
+                    if st.button("📁 Continue Annotation", help="Resume annotation by uploading a saved file", use_container_width=True):
+                        set_state('show_ann_upload', True)
+
+                if get_state('show_ann_upload'):
+                    with st.container(border=True):
+                        st.markdown("##### Resume Annotation Session")
+                        uploaded_file = st.file_uploader("Upload Annotation JSON", type="json", key="ann_uploader_main")
+                        if uploaded_file:
+                            import json
+                            try:
+                                data = json.load(uploaded_file)
+                                ann_path = data.get('corpus_path')
+                                ann_term = data.get('search_term')
+
+                                if ann_path and ann_term:
+                                    # Migration: Ensure all annotations are lists
+                                    raw_ann = data.get('annotations', {})
+                                    processed_ann = {}
+                                    for k, v in raw_ann.items():
+                                        if isinstance(v, list):
+                                            processed_ann[k] = v
+                                        else:
+                                            processed_ann[k] = [v] # Wrap old single pair in list
+
+                                    st.session_state['kwic_annotations'] = processed_ann
+                                    st.success(f"✅ Loaded annotations for '{ann_term}'")
+
+                                    # Logic to determine if it's the SAME corpus logically, even if path changed
+                                    raw_source_name = data.get('corpus_name', os.path.basename(ann_path))
+
+                                    def clean_name(n, p=None):
+                                        if not n: return "Unknown"
+                                        n = n.replace('.duckdb', '')
+                                        if n.startswith('corpus_') and len(n) > 20 and p:
+                                            parts = p.replace('\\', '/').split('/')
+                                            for part in reversed(parts[:-1]):
+                                                if part.lower() not in ('temp', 'corpora', 'cortex', 'documents', 'users'):
+                                                    return f"{part} (Uploaded)"
+                                            return "Uploaded Corpus"
+                                        return n
+
+                                    source_display = clean_name(raw_source_name, ann_path)
+                                    current_display = clean_name(corpus_name, corpus_path)
+
+                                    # Auto-trigger search if it looks like the right corpus and query
+                                    is_match = (ann_path == corpus_path) or (source_display == current_display)
+
+                                    if is_match and ann_term == search_term_1:
+                                        st.info("🔄 Re-generating concordance lines...")
+                                        run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
+                                        set_state('show_ann_upload', False)
+                                        st.rerun()
+                                    else:
+                                        # Show mismatch UI with Force Load option
+                                        st.error("🚫 **Annotation Mismatch**")
+                                        st.write(f"This annotation file is linked to a different corpus or search query.")
+
+                                        col_war1, col_war2 = st.columns(2)
+                                        with col_war1:
+                                            st.markdown(f"**Required (from file):**\n- 📂 Corpus: `{source_display}`\n- 🔍 Query: `{ann_term}`")
+                                        with col_war2:
+                                            q_status = "✅ Match" if ann_term == search_term_1 else f"❌ `{search_term_1}`"
+                                            st.markdown(f"**Current (Active):**\n- 📂 Corpus: `{current_display}`\n- 🔍 Query: {q_status}")
+
+                                        st.info("💡 If you are sure this is the correct data, you can force the load below.")
+                                        if st.button("⚠️ Force Load Annotations Anyway", type="secondary"):
+                                            run_concordance_query('primary', corpus_path, corpus_name, ann_term, 5, 5, 100, "", "", [])
+                                            set_state('show_ann_upload', False)
+                                            st.rerun()
+                                else:
+                                    st.error("❌ Invalid annotation file format.")
+                            except Exception as e:
+                                st.error(f"Error loading file: {e}")
+                        if st.button("Close"):
+                            set_state('show_ann_upload', False)
                             st.rerun()
 
-    # --- Results Display / Annotation Resume ---
-    results = st.session_state.get('last_kwic_results_primary')
-    cluster_results = st.session_state.get('last_kwic_results_cluster')
-    
-    # Initialize multi-annotation state if missing
-    if 'kwic_annotations' not in st.session_state:
-        st.session_state['kwic_annotations'] = {}
-    kwic_annotations = st.session_state['kwic_annotations']
-    if results:
-        if not comp_mode:
-            render_concordance_column(results, search_term_1)
-        else:
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                st.subheader(f"Primary: {corpus_name}")
-                render_concordance_column(results, search_term_1, key_suffix="c1")
-            with col_c2:
-                st.subheader(f"Comparison: {get_state('comp_corpus_name', 'Comparison')}")
-                comp_path = get_state('comp_corpus_path')
-                if not comp_path:
-                    st.info("Load a comparison corpus in sidebar.")
-                else:
-                    results_2 = st.session_state.get('last_kwic_results_secondary')
-                    if results_2:
-                        render_concordance_column(results_2, get_state('kwic_search_term_2', ''), key_suffix="c2")
+                if results:
+                    # Annotation Mode Toggle
+                    col_ann1, col_ann2, col_ann3 = st.columns([1, 1, 2])
+                    with col_ann1:
+                        ann_mode = st.toggle("✍️ Annotation Mode", value=get_state('kwic_ann_mode', False), key="kwic_ann_mode_toggle")
+                        set_state('kwic_ann_mode', ann_mode)
 
-    # --- Cluster Results (shown below primary results regardless of mode) ---
-    if cluster_results:
-        st.markdown("---")
-        _cluster_search_term = get_state('kwic_search_term', search_term_1 if 'search_term_1' in dir() else '')
-        st.markdown(f"## 🧩 Cluster Concordance: *{_cluster_search_term}*")
-        st.caption(
-            f"**{len(cluster_results)} cluster(s)** generated from selected metadata filters. "
-            "Each cluster shows a random sample of concordance lines matching that combination."
-        )
-        for cluster_name, res in cluster_results.items():
-            _n = len(res.get('rows', []))
-            _total = res.get('total', _n)
-            with st.expander(f"📦 **{cluster_name}** — {_n} sample(s) of {_total:,} total", expanded=True):
-                render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
+                    with col_ann2:
+                        if ann_mode:
+                            if st.button("🏛️ Apply to Session", help="Add these annotations to the active working corpus for all tabs"):
+                                set_state('show_db_save_confirm', True)
+
+                    if get_state('show_db_save_confirm'):
+                        with st.container(border=True):
+                            st.info("ℹ️ **Apply to Active Session**")
+                            st.write("This will add these labels to the current working corpus in this session. They will be visible in the Overview and Restricted Search tabs.")
+                            st.write("⚠️ *Note: These changes are not saved to the source XML. If you re-upload the corpus, you will need to restore your annotations from a backup file.*")
+                            st.checkbox("I understand and want to proceed", key="db_save_confirm_check")
+
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if st.button("🚀 Apply Labels", type="primary", disabled=not st.session_state.get('db_save_confirm_check')):
+                                    import importlib
+                                    import core.modules.concordance as cm
+                                    importlib.reload(cm) 
+                                    if hasattr(cm, 'persist_annotations_to_db'):
+                                        success, msg = cm.persist_annotations_to_db(results['path'], st.session_state.get('kwic_annotations', {}))
+                                    else:
+                                        success, msg = False, "Internal Error: Persistence function not found in module after reload."
+                                    if success:
+                                        st.success(f"✅ {msg}")
+                                        set_state('show_db_save_confirm', False)
+                                        # Reset some caches to make sure other modules see the change
+                                        st.cache_data.clear() 
+                                    else:
+                                        st.error(f"❌ {msg}")
+                            with c2:
+                                if st.button("Cancel"):
+                                    set_state('show_db_save_confirm', False)
+                                    st.rerun()
+
+            # --- Results Display / Annotation Resume ---
+            results = st.session_state.get('last_kwic_results_primary')
+            cluster_results = st.session_state.get('last_kwic_results_cluster')
+
+            # Initialize multi-annotation state if missing
+            if 'kwic_annotations' not in st.session_state:
+                st.session_state['kwic_annotations'] = {}
+            kwic_annotations = st.session_state['kwic_annotations']
+            if results:
+                if not comp_mode:
+                    render_concordance_column(results, search_term_1)
+                else:
+                    col_c1, col_c2 = st.columns(2)
+                    with col_c1:
+                        st.subheader(f"Primary: {corpus_name}")
+                        render_concordance_column(results, search_term_1, key_suffix="c1")
+                    with col_c2:
+                        st.subheader(f"Comparison: {get_state('comp_corpus_name', 'Comparison')}")
+                        comp_path = get_state('comp_corpus_path')
+                        if not comp_path:
+                            st.info("Load a comparison corpus in sidebar.")
+                        else:
+                            results_2 = st.session_state.get('last_kwic_results_secondary')
+                            if results_2:
+                                render_concordance_column(results_2, get_state('kwic_search_term_2', ''), key_suffix="c2")
+
+            # --- Cluster Results (shown below primary results regardless of mode) ---
+            if cluster_results:
+                st.markdown("---")
+                _cluster_search_term = get_state('kwic_search_term', search_term_1 if 'search_term_1' in dir() else '')
+                st.markdown(f"## 🧩 Cluster Concordance: *{_cluster_search_term}*")
+                st.caption(
+                    f"**{len(cluster_results)} cluster(s)** generated from selected metadata filters. "
+                    "Each cluster shows a random sample of concordance lines matching that combination."
+                )
+                for cluster_name, res in cluster_results.items():
+                    _n = len(res.get('rows', []))
+                    _total = res.get('total', _n)
+                    with st.expander(f"📦 **{cluster_name}** — {_n} sample(s) of {_total:,} total", expanded=True):
+                        render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
 
 @notify_timing("Cluster Concordance generated")
 def run_cluster_concordance_query(path, name, query, window, limit, filters):

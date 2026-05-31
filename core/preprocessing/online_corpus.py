@@ -35,25 +35,48 @@ class OnlineCorpusBuilder:
 
     def get_youtube_transcript(self, video_id):
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            api = YouTubeTranscriptApi()
+            transcript_list = api.list(video_id)
             # Try to get English or Indonesian manually, or just use first available
             transcript = transcript_list.find_transcript(['en', 'id', 'ms'])
             data = transcript.fetch()
-            return " ".join([t['text'] for t in data])
+            if hasattr(data, 'snippets'):
+                return " ".join([t.text for t in data.snippets])
+            elif isinstance(data, list):
+                return " ".join([t['text'] for t in data])
+            return None
         except Exception:
             # Fallback to any transcript
             try:
-                data = YouTubeTranscriptApi.get_transcript(video_id)
-                return " ".join([t['text'] for t in data])
-            except:
+                api = YouTubeTranscriptApi()
+                transcript_list = api.list(video_id)
+                transcript = next(iter(transcript_list))
+                data = transcript.fetch()
+                if hasattr(data, 'snippets'):
+                    return " ".join([t.text for t in data.snippets])
+                elif isinstance(data, list):
+                    return " ".join([t['text'] for t in data])
                 return None
+            except:
+                try:
+                    api = YouTubeTranscriptApi()
+                    data = api.fetch(video_id)
+                    if hasattr(data, 'snippets'):
+                        return " ".join([t.text for t in data.snippets])
+                    elif isinstance(data, list):
+                        return " ".join([t['text'] for t in data])
+                except:
+                    return None
 
-    def get_youtube_comments(self, video_url):
+    def get_youtube_comments(self, video_url, max_comments=None):
         downloader = YoutubeCommentDownloader()
         comments = downloader.get_comments_from_url(video_url, sort_by=1) # 1 = sorted by newest
         results = []
+        count = 0
         for comment in comments:
             if self.is_limit_reached:
+                break
+            if max_comments is not None and count >= max_comments:
                 break
             
             text = comment.get('text', '')
@@ -63,6 +86,7 @@ class OnlineCorpusBuilder:
             # Create a pseudo-XML structure for the comment
             comment_str = f"<comment author=\"{author}\" date=\"{time_text}\">\n{text}\n</comment>\n"
             results.append(comment_str)
+            count += 1
             
             words = count_words(text)
             self.current_words += words
@@ -155,7 +179,8 @@ def build_online_corpus(mode_type, params, progress_callback=None):
         
         if not builder.is_limit_reached and mode in ('comments', 'both'):
             if progress_callback: progress_callback(0.5, "Downloading comments...")
-            comments = builder.get_youtube_comments(url)
+            max_comments = params.get('max_comments')
+            comments = builder.get_youtube_comments(url, max_comments=max_comments)
             if comments:
                 builder.add_content(f"yt_{video_id}_comments.xml", f"<text type=\"comments\" video_id=\"{video_id}\" url=\"{url}\">\n{comments}\n</text>")
     

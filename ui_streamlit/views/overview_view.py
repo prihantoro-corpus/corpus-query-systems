@@ -317,103 +317,109 @@ def render_full_overview(name, path, stats, structure, error):
 
     selected_tab = render_custom_button_tabs(tabs_list, "full")
     
-    if selected_tab == "XML Structure":
-        if error: st.error(error)
-        if structure:
-            st.subheader("Structure and Attributes")
-            html = format_structure_data_hierarchical(structure)
-            st.markdown(f'<div style="font-family: monospace; font-size: 0.9em; padding: 15px; background: #1e1e1e; border-radius: 8px; color: #d4d4d4;">{html}</div>', unsafe_allow_html=True)
-            
-            with st.expander("Show Raw Python Data (for diagnosis)"):
-                 st.info("The data below is the Python dictionary successfully produced by the XML parser.")
-                 st.json(structure)
+    # Guidelines Layout using shared component
+    from ui_streamlit.components.guidelines import render_guidelines
+    col_main = render_guidelines("Overview", sub_tab=selected_tab)
 
-            with st.expander("Database Diagnostics"):
-                import duckdb
-                st.write(f"DB Path: `{path}`")
-                try:
-                    c = duckdb.connect(path, read_only=True)
-                    info = c.execute("PRAGMA table_info(corpus)").fetch_df()
-                    st.write("Table Schema:", info)
-                    
-                    # Columns check
-                    cols = info['name'].tolist()
-                    standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename'}
-                    meta = [c for c in cols if c not in standard]
-                    st.write("Detected Metadata Columns:", meta)
-                    
-                    if meta:
-                        rows = c.execute(f"SELECT {', '.join(meta)} FROM corpus LIMIT 5").fetch_df()
-                        st.write("Sample Metadata:", rows)
-                    c.close()
-                except Exception as e:
-                    st.error(str(e))
-        else: st.info("No XML structure metadata available.")
+    with col_main:
+        if selected_tab == "XML Structure":
+            if error: st.error(error)
+            if structure:
+                st.subheader("Structure and Attributes")
+                html = format_structure_data_hierarchical(structure)
+                st.markdown(f'<div style="font-family: monospace; font-size: 0.9em; padding: 15px; background: #1e1e1e; border-radius: 8px; color: #d4d4d4;">{html}</div>', unsafe_allow_html=True)
 
-    elif selected_tab == "Sub-corpus Stats":
-        _render_subcorpus_stats(path, "full")
-            
-    elif selected_tab == "Top Frequencies":
-        st.subheader("Top Frequency Tokens")
-        df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
-        if not df.empty:
-            # Use restricted total for PMW calculation
-            total = display_stats.get('total_tokens', 1)
-            df['Rel. Freq (per M)'] = (df['frequency'] / total * 1_000_000).round(2)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.download_button("⬇ Download Top 100", data=df_to_excel_bytes(df), file_name=f"{name}_top_freq.xlsx")
-        else: st.info("No frequency data.")
+                with st.expander("Show Raw Python Data (for diagnosis)"):
+                     st.info("The data below is the Python dictionary successfully produced by the XML parser.")
+                     st.json(structure)
 
-    elif selected_tab == "Unique POS Tags":
-        st.subheader("Unique POS Tags (and Definitions)")
-        _render_pos_management_tab(path, xml_where, xml_params, "full")
+                with st.expander("Database Diagnostics"):
+                    import duckdb
+                    st.write(f"DB Path: `{path}`")
+                    try:
+                        c = duckdb.connect(path, read_only=True)
+                        info = c.execute("PRAGMA table_info(corpus)").fetch_df()
+                        st.write("Table Schema:", info)
 
-    elif selected_tab == "Word Cloud":
-        st.subheader("Word Cloud")
-        f_df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
-        if not f_df.empty:
-            fig = create_word_cloud(f_df, 'pos' in f_df.columns)
-            if fig:
-                if 'pos' in f_df.columns:
-                     st.markdown('<div style="font-size: 0.8em; margin-bottom: 5px;"><span style="color:#33CC33;">●</span> Noun | <span style="color:#3366FF;">●</span> Verb | <span style="color:#FF33B5;">●</span> Adj | <span style="color:#FFCC00;">●</span> Adv</div>', unsafe_allow_html=True)
-                st.pyplot(fig)
-        else: st.info("No frequency data.")
+                        # Columns check
+                        cols = info['name'].tolist()
+                        standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename'}
+                        meta = [c for c in cols if c not in standard]
+                        st.write("Detected Metadata Columns:", meta)
 
-    elif selected_tab == "Metadata Annotation":
-        _render_metadata_annotation_tab(path, "full")
+                        if meta:
+                            rows = c.execute(f"SELECT {', '.join(meta)} FROM corpus LIMIT 5").fetch_df()
+                            st.write("Sample Metadata:", rows)
+                        c.close()
+                    except Exception as e:
+                        st.error(str(e))
+            else: st.info("No XML structure metadata available.")
 
-    elif selected_tab == "🏷️ Sentiment & Topic Analysis":
-        _render_classification_tab(path, "full")
+        elif selected_tab == "Sub-corpus Stats":
+            _render_subcorpus_stats(path, "full")
 
-    elif selected_tab == "🏷️ Named Entity Recognition (NER)":
-        _render_ner_tab(path, "full")
+        elif selected_tab == "Top Frequencies":
+            st.subheader("Top Frequency Tokens")
+            df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
+            if not df.empty:
+                # Use restricted total for PMW calculation
+                total = display_stats.get('total_tokens', 1)
+                df['Rel. Freq (per M)'] = (df['frequency'] / total * 1_000_000).round(2)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.download_button("⬇ Download Top 100", data=df_to_excel_bytes(df), file_name=f"{name}_top_freq.xlsx")
+            else: st.info("No frequency data.")
 
-    elif selected_tab == "📖 Reading Ease":
-        _render_reading_ease_tab(path, "full")
+        elif selected_tab == "Unique POS Tags":
+            st.subheader("Unique POS Tags (and Definitions)")
+            _render_pos_management_tab(path, xml_where, xml_params, "full")
 
-    st.markdown("---")
-    if st.button("🧠 Interpret Corpus Overview (LLM)", key="llm_overview_btn"):
-        with st.spinner("AI is analyzing..."):
-            overview_data = {"stats": display_stats, "top10": df.head(10).to_dict(orient='records') if not df.empty else {}}
-            resp, err = interpret_results_llm(
-                target_word=name, 
-                analysis_type="Corpus Overview", 
-                data_description="Stats and Freq", 
-                data=str(overview_data),
-                ai_provider=get_state('ai_provider'),
-                gemini_api_key=get_state('gemini_api_key'),
-                ollama_url=get_state('ollama_url'),
-                ollama_model=get_state('ai_model')
-            )
-            if resp:
-                set_state('llm_res_overview', resp)
-            elif err:
-                st.error(err)
-            
-    llm_res = get_state('llm_res_overview')
-    if llm_res:
-        with st.expander("🤖 AI Assistant Interpretation", expanded=True):
-            st.markdown(llm_res)
+        elif selected_tab == "Word Cloud":
+            st.subheader("Word Cloud")
+            f_df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
+            if not f_df.empty:
+                fig = create_word_cloud(f_df, 'pos' in f_df.columns)
+                if fig:
+                    if 'pos' in f_df.columns:
+                         st.markdown('<div style="font-size: 0.8em; margin-bottom: 5px;"><span style="color:#33CC33;">●</span> Noun | <span style="color:#3366FF;">●</span> Verb | <span style="color:#FF33B5;">●</span> Adj | <span style="color:#FFCC00;">●</span> Adv</div>', unsafe_allow_html=True)
+                    st.pyplot(fig)
+            else: st.info("No frequency data.")
+
+        elif selected_tab == "Metadata Annotation":
+            _render_metadata_annotation_tab(path, "full")
+
+        elif selected_tab == "🏷️ Sentiment & Topic Analysis":
+            _render_classification_tab(path, "full")
+
+        elif selected_tab == "🏷️ Named Entity Recognition (NER)":
+            _render_ner_tab(path, "full")
+
+        elif selected_tab == "📖 Reading Ease":
+            _render_reading_ease_tab(path, "full")
+
+        st.markdown("---")
+        if st.button("🧠 Interpret Corpus Overview (LLM)", key="llm_overview_btn"):
+            with st.spinner("AI is analyzing..."):
+                overview_data = {"stats": display_stats, "top10": df.head(10).to_dict(orient='records') if not df.empty else {}}
+                resp, err = interpret_results_llm(
+                    target_word=name, 
+                    analysis_type="Corpus Overview", 
+                    data_description="Stats and Freq", 
+                    data=str(overview_data),
+                    ai_provider=get_state('ai_provider'),
+                    gemini_api_key=get_state('gemini_api_key'),
+                    ollama_url=get_state('ollama_url'),
+                    ollama_model=get_state('ai_model')
+                )
+                if resp:
+                    set_state('llm_res_overview', resp)
+                elif err:
+                    st.error(err)
+
+        llm_res = get_state('llm_res_overview')
+        if llm_res:
+            with st.expander("🤖 AI Assistant Interpretation", expanded=True):
+                st.markdown(llm_res)
+
 
 def _render_pos_management_tab(path, xml_where, xml_params, key_suffix):
     """
@@ -975,7 +981,20 @@ def render_built_in_corpora_selection_ui():
         st.warning("No built-in corpora found in the local 'corpora' directory.")
         return
         
-    for name, rel_path in built_in_corpora.items():
+    search_query = st.text_input("🔍 Search Corpora", value="", placeholder="Type to filter corpora by name, language, description...", key="builtin_corpora_search")
+    
+    filtered_corpora = built_in_corpora
+    if search_query:
+        filtered_corpora = {}
+        for name, path in built_in_corpora.items():
+            detail_text = BUILT_IN_CORPUS_DETAILS.get(name, "")
+            if (search_query.lower() in name.lower()) or (search_query.lower() in detail_text.lower()):
+                filtered_corpora[name] = path
+        if not filtered_corpora:
+            st.info("No matching corpora found.")
+            return
+            
+    for name, rel_path in filtered_corpora.items():
         with st.container(border=True):
             col_info, col_action = st.columns([4, 1])
             with col_info:
