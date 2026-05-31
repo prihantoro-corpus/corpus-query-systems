@@ -5,8 +5,8 @@ This module provides pattern-based clustering of collocates based on their
 positional relationship to the node word in concordance lines.
 
 Pattern Syntax:
-- <> : the node word
-- # : the collocate
+- <> : the collocate word placeholder (with optional filters: e.g. <_VB>, <are>, <[be]>, <are|is|am>, <_NN|_PP|_NNP>)
+- # : the node word placeholder
 - * : optional token (any word)
 - + : required token (any word)
 - direct_token : specific token (obligatory)
@@ -20,19 +20,21 @@ Pattern Syntax:
 import re
 import duckdb
 import pandas as pd
+import fnmatch
 from typing import List, Dict, Tuple, Optional
 
 
 def parse_pattern_definitions(pattern_text: str) -> Tuple[List[Dict], List[str]]:
     """
     Parse user input pattern definitions.
+    Supports pattern unions separated by '|' (outside brackets).
     
     Args:
         pattern_text: Multi-line string with format "label : pattern"
         
     Returns:
         Tuple of (parsed_patterns, errors)
-        - parsed_patterns: List of dicts with 'label', 'pattern_str', 'parsed_tokens'
+        - parsed_patterns: List of dicts with 'label', 'pattern_str', 'sub_patterns'
         - errors: List of error messages
     """
     patterns = []
@@ -68,21 +70,68 @@ def parse_pattern_definitions(pattern_text: str) -> Tuple[List[Dict], List[str]]
             errors.append(f"Line {line_num}: Empty pattern")
             continue
             
-        # Parse the pattern tokens
-        parsed_tokens, parse_errors = parse_pattern_tokens(pattern_str)
+        # Split pattern_str by union '|' outside of <...> brackets
+        sub_pattern_strs = split_patterns_by_union(pattern_str)
+        sub_patterns = []
         
-        if parse_errors:
-            for err in parse_errors:
-                errors.append(f"Line {line_num} ({label}): {err}")
-            continue
-            
-        patterns.append({
-            'label': label,
-            'pattern_str': pattern_str,
-            'parsed_tokens': parsed_tokens
-        })
+        for sub_pat in sub_pattern_strs:
+            parsed_tokens, parse_errors = parse_pattern_tokens(sub_pat)
+            if parse_errors:
+                for err in parse_errors:
+                    errors.append(f"Line {line_num} ({label}): {err}")
+            else:
+                sub_patterns.append(parsed_tokens)
+                
+        if sub_patterns:
+            patterns.append({
+                'label': label,
+                'pattern_str': pattern_str,
+                'sub_patterns': sub_patterns
+            })
     
     return patterns, errors
+
+
+def split_patterns_by_union(pattern_str: str) -> List[str]:
+    """
+    Split a pattern string by '|' only if it is outside of '<' and '>' brackets.
+    """
+    result = []
+    current = []
+    in_bracket = False
+    for char in pattern_str:
+        if char == '<':
+            in_bracket = True
+        elif char == '>':
+            in_bracket = False
+        
+        if char == '|' and not in_bracket:
+            result.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if current:
+        result.append("".join(current).strip())
+    return result
+
+
+def parse_collocate_constraints(inner: str) -> List[Dict]:
+    """
+    Parse constraints inside collocate brackets like <_VB>, <are>, <[be]>, <are|is|am>, <_NN|_PP|_NNP>.
+    """
+    parts = inner.split('|')
+    constraints = []
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        if p.startswith('_'):
+            constraints.append({'type': 'pos', 'value': p[1:]})
+        elif p.startswith('[') and p.endswith(']'):
+            constraints.append({'type': 'lemma', 'value': p[1:-1].lower()})
+        else:
+            constraints.append({'type': 'token', 'value': p.lower()})
+    return constraints
 
 
 def parse_pattern_tokens(pattern_str: str) -> Tuple[List[Dict], List[str]]:
@@ -91,7 +140,7 @@ def parse_pattern_tokens(pattern_str: str) -> Tuple[List[Dict], List[str]]:
     
     Returns:
         Tuple of (tokens, errors)
-        - tokens: List of dicts with 'type', 'value', 'optional', 'constraint_type', 'constraint_value'
+        - tokens: List of dicts with 'type', 'value', 'optional', 'constraint_type', 'constraint_value', 'constraints'
         - errors: List of error messages
     """
     tokens = []
@@ -109,19 +158,24 @@ def parse_pattern_tokens(pattern_str: str) -> Tuple[List[Dict], List[str]]:
             'value': None,
             'optional': False,
             'constraint_type': None,  # 'lemma', 'pos', or None
-            'constraint_value': None
+            'constraint_value': None,
+            'constraints': None
         }
         
-        # Check for node
-        if part == '<>':
+        # Check for node word placeholder '#'
+        if part == '#':
             token['type'] = 'node'
             node_count += 1
             tokens.append(token)
             continue
             
-        # Check for collocate
-        if part == '#':
+        # Check for collocate placeholders (starts with '<' and ends with '>')
+        if part.startswith('<') and part.endswith('>'):
+            inner = part[1:-1].strip()
+            # If it is empty <>, it matches any collocate
             token['type'] = 'collocate'
+            if inner:
+                token['constraints'] = parse_collocate_constraints(inner)
             collocate_count += 1
             tokens.append(token)
             continue
@@ -185,16 +239,50 @@ def parse_pattern_tokens(pattern_str: str) -> Tuple[List[Dict], List[str]]:
     
     # Validation
     if node_count == 0:
-        errors.append("Pattern must contain exactly one node symbol '<>'")
+        errors.append("Pattern must contain exactly one node symbol '#'")
     elif node_count > 1:
-        errors.append(f"Pattern contains {node_count} node symbols, but only one '<>' is allowed")
+        errors.append(f"Pattern contains {node_count} node symbols, but only one '#' is allowed")
         
     if collocate_count == 0:
-        errors.append("Pattern must contain exactly one collocate symbol '#'")
+        errors.append("Pattern must contain exactly one collocate symbol '<...>'")
     elif collocate_count > 1:
-        errors.append(f"Pattern contains {collocate_count} collocate symbols, but only one '#' is allowed")
+        errors.append(f"Pattern contains {collocate_count} collocate symbols, but only one '<...>' is allowed")
     
     return tokens, errors
+
+
+def _matches_collocate_constraints(t_dict: Dict, constraints: List[Dict]) -> bool:
+    """
+    Check if a concordance token matches the collocate filters.
+    """
+    if not constraints:
+        return True
+    for c in constraints:
+        if c['type'] == 'pos':
+            # Support wildcard in POS tag constraint
+            if '*' in c['value'] or '?' in c['value']:
+                if fnmatch.fnmatch(t_dict.get('pos', ''), c['value']):
+                    return True
+            else:
+                if t_dict.get('pos', '') == c['value']:
+                    return True
+        elif c['type'] == 'lemma':
+            # Support wildcard in lemma constraint
+            if '*' in c['value'] or '?' in c['value']:
+                if fnmatch.fnmatch(t_dict.get('lemma', '').lower(), c['value']):
+                    return True
+            else:
+                if t_dict.get('lemma', '').lower() == c['value']:
+                    return True
+        elif c['type'] == 'token':
+            # Support wildcard in token constraint
+            if '*' in c['value'] or '?' in c['value']:
+                if fnmatch.fnmatch(t_dict['token'].lower(), c['value']):
+                    return True
+            else:
+                if t_dict['token'].lower() == c['value']:
+                    return True
+    return False
 
 
 def match_pattern_in_concordance(
@@ -223,16 +311,26 @@ def match_pattern_in_concordance(
         # Regular token
         return l_token == l_val
 
-    # Find node positions
+    # Find node positions (matched by node placeholder '#')
     node_positions = [i for i, t in enumerate(concordance_tokens) if _matches(t, node_word)]
     
     if not node_positions:
         return False, None, None
+        
+    # Get collocate specification from pattern tokens
+    collocate_spec = next((t for t in pattern_tokens if t['type'] == 'collocate'), None)
     
     # Try each node position
     for node_pos in node_positions:
         # Find collocate positions
-        collocate_positions = [i for i, t in enumerate(concordance_tokens) if _matches(t, collocate_word)]
+        collocate_positions = []
+        for i, t in enumerate(concordance_tokens):
+            if _matches(t, collocate_word):
+                if collocate_spec and collocate_spec.get('constraints'):
+                    if _matches_collocate_constraints(t, collocate_spec['constraints']):
+                        collocate_positions.append(i)
+                else:
+                    collocate_positions.append(i)
         
         for coll_pos in collocate_positions:
             # Try to match pattern starting from node position
@@ -271,15 +369,7 @@ def _match_pattern_from_position(
     # 1. Validate BEFORE first anchor
     before_p = pattern_tokens[:first_p_idx]
     if before_p:
-        # We need to match before_p as a SUFFIX of the tokens preceding the first anchor
-        # To do this easily: reverse both before_p and reversed(concordance[:first_c_pos])
-        # then match as a prefix.
-        rev_before_p = []
-        for p in reversed(before_p):
-            # Swap wildcard types for reverse matching if needed? 
-            # Actually wildcard_optional and wildcard_required are symmetrical.
-            rev_before_p.append(p)
-            
+        rev_before_p = list(reversed(before_p))
         rev_conc_before = list(reversed(concordance_tokens[:first_c_pos]))
         if not _match_recursive(rev_before_p, rev_conc_before, 0, 0, require_full_match=False):
             return False
@@ -300,38 +390,20 @@ def _match_pattern_from_position(
     return True
 
 
-def _match_token_sequence(pattern_tokens: List[Dict], conc_tokens: List[Dict]) -> bool:
-    """
-    Match a sequence of pattern tokens against concordance tokens.
-    Handles wildcards, optional tokens, and constraints.
-    """
-    if not pattern_tokens:
-        # No pattern tokens means we expect no concordance tokens (immediate adjacency)
-        return len(conc_tokens) == 0
-    
-    # Use dynamic programming / backtracking to match
-    return _match_recursive(pattern_tokens, conc_tokens, 0, 0)
-
-
 def _match_recursive(pattern_tokens: List[Dict], conc_tokens: List[Dict], p_idx: int, c_idx: int, require_full_match: bool = True) -> bool:
     """
     Recursively match pattern tokens against concordance tokens.
     """
     # Base cases
     if p_idx >= len(pattern_tokens):
-        # All pattern tokens matched
         if require_full_match:
-            # check if all concordance tokens consumed
             return c_idx >= len(conc_tokens)
         else:
-            # Prefix matched, don't care about remaining concordance tokens
             return True
     
     p_token = pattern_tokens[p_idx]
     
-    # If we've consumed all concordance tokens
     if c_idx >= len(conc_tokens):
-        # Check if remaining pattern tokens are all optional
         remaining_optional = all(
             pt.get('optional', False) or pt['type'] == 'wildcard_optional'
             for pt in pattern_tokens[p_idx:]
@@ -340,32 +412,25 @@ def _match_recursive(pattern_tokens: List[Dict], conc_tokens: List[Dict], p_idx:
     
     c_token = conc_tokens[c_idx]
     
-    # Handle different pattern token types
     if p_token['type'] == 'wildcard_optional':
-        # Try matching with 0 tokens (skip this wildcard)
         if _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx, require_full_match):
             return True
-        # Try matching with 1 token (consume one concordance token)
         if _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx + 1, require_full_match):
             return True
         return False
     
     elif p_token['type'] == 'wildcard_required':
-        # Must consume exactly 1 token
         return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx + 1, require_full_match)
     
     elif p_token['type'] == 'token':
-        # Match specific token
         if c_token['token'].lower() == p_token['value']:
             return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx + 1, require_full_match)
         elif p_token.get('optional', False):
-            # Optional token not matched, try skipping it
             return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx, require_full_match)
         else:
             return False
     
     elif p_token['type'] == 'constraint':
-        # Match constraint (POS or lemma)
         matched = False
         if p_token['constraint_type'] == 'pos':
             matched = c_token.get('pos', '') == p_token['constraint_value']
@@ -375,13 +440,11 @@ def _match_recursive(pattern_tokens: List[Dict], conc_tokens: List[Dict], p_idx:
         if matched:
             return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx + 1, require_full_match)
         elif p_token.get('optional', False):
-            # Optional constraint not matched, try skipping
             return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx, require_full_match)
         else:
             return False
     
     return False
-
 
 
 def group_collocates_by_patterns(
@@ -392,13 +455,14 @@ def group_collocates_by_patterns(
     window: int,
     max_collocates: int = 50,
     xml_where_clause: str = "",
-    xml_params: List = []
+    xml_params: List = [],
+    show_all_examples: bool = False
 ) -> Dict[str, Dict]:
     """
     Group collocates by pattern matches using the "Concordance-First" approach.
     
     Returns:
-        Dict mapping pattern labels to a dict with 'df' (DataFrame) and 'examples' (Dict collocate -> matching_line)
+        Dict mapping pattern labels to a dict with 'df' (DataFrame) and 'examples' (Dict collocate -> list of matching_lines or matching_line)
     """
     if collocates_df.empty or not patterns:
         return {}
@@ -406,7 +470,6 @@ def group_collocates_by_patterns(
     # 1. Fetch a significant sample of the node's concordance
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
-        # Fetch up to 10,000 lines for comprehensive matching
         concordance_data = _fetch_node_concordance_sample(
             con, node_word, window, limit=10000, 
             xml_where_clause=xml_where_clause, xml_params=xml_params
@@ -424,33 +487,36 @@ def group_collocates_by_patterns(
     collocates_list = top_collocates['Collocate'].tolist()
     
     # 3. Initialize result tracking
-    # Mapping of label -> set of original indices
     pattern_matches = {p['label']: set() for p in patterns}
-    # Mapping of label -> dict (collocate -> matching_line)
     pattern_examples = {p['label']: {} for p in patterns}
     
     # 4. Scan each concordance line
     for conc_line in concordance_data:
-        # For each collocate in our top list
         for coll_idx, collocate in enumerate(collocates_list):
             original_idx = top_collocates.index[coll_idx]
             
-            # Check each pattern
             for pattern in patterns:
                 label = pattern['label']
-                # Skip if this collocate already matched this pattern
-                if original_idx in pattern_matches[label]:
+                if not show_all_examples and original_idx in pattern_matches[label]:
                     continue
                     
-                matched, n_idx, c_idx = match_pattern_in_concordance(
-                    pattern['parsed_tokens'],
-                    conc_line,
-                    node_word,
-                    collocate
-                )
-                if matched:
-                    pattern_matches[label].add(original_idx)
-                    pattern_examples[label][collocate] = (conc_line, n_idx, c_idx)
+                # Check all sub-patterns (unions) for the same label
+                for sub_tokens in pattern['sub_patterns']:
+                    matched, n_idx, c_idx = match_pattern_in_concordance(
+                        sub_tokens,
+                        conc_line,
+                        node_word,
+                        collocate
+                    )
+                    if matched:
+                        pattern_matches[label].add(original_idx)
+                        if show_all_examples:
+                            if collocate not in pattern_examples[label]:
+                                pattern_examples[label][collocate] = []
+                            pattern_examples[label][collocate].append((conc_line, n_idx, c_idx))
+                        else:
+                            pattern_examples[label][collocate] = (conc_line, n_idx, c_idx)
+                        break
     
     # 5. Convert to final structure
     result = {}
@@ -475,10 +541,8 @@ def _fetch_node_concordance_sample(
 ) -> List[List[Dict]]:
     """
     Fetch a sample of concordance lines for the node.
-    Handles [lemma] and _TAG syntax.
     """
     try:
-        # Determine search criteria
         where_clause = ""
         param = ""
         ln_query = node_query.lower()
@@ -519,4 +583,3 @@ def _fetch_node_concordance_sample(
     except Exception as e:
         print(f"Error in _fetch_node_concordance_sample: {e}")
         return []
-

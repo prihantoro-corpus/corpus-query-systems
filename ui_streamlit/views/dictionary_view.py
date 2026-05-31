@@ -34,93 +34,101 @@ def render_dictionary_view():
         st.warning("Please load a corpus first.")
         return
 
-    # 1. Search Bar
-    comp_mode = get_state('comparison_mode', False)
-    comp_path = get_state('comp_corpus_path')
-    comp_name = get_state('comp_corpus_name')
+    # Guidelines Layout using shared component
+    from ui_streamlit.components.guidelines import render_guidelines
+    col_main = render_guidelines("Dictionary")
 
-    if not comp_mode:
-        # Search Mode Toggle
-        search_mode = st.radio("Input Mode", ["Standard", "Natural Language (AI)"], horizontal=True, key="dict_search_mode")
-        
-        if search_mode == "Natural Language (AI)":
-             nl_query = st.text_input("Ask what you want to define", placeholder="e.g. What does 'artificial' mean?")
-             if st.button("Ask AI", type="primary"):
-                 with st.spinner("Parsing..."):
-                     params, err = parse_nl_query(
-                         nl_query, 
-                         "dictionary",
-                         ai_provider=get_state('ai_provider'),
-                         gemini_api_key=get_state('gemini_api_key'),
-                         ollama_url=get_state('ollama_url'),
-                         ollama_model=get_state('ai_model')
-                     )
-                 
-                 if params and params.get('word'):
-                     term = params.get('word')
-                     set_state('current_dict_term', term)
-                     update_history(term)
-                     st.rerun()
-                 else:
-                     st.error("Could not identify the word to define.")
-        
-        if search_mode == "Standard":
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                 search_term = st.text_input("Enter a word to analyze:", value=get_state('current_dict_term'), key="dict_search_input")
-            with col2:
-                 if st.button("Search", key="dict_search_btn"):
-                     set_state('current_dict_term', search_term)
-                     if search_term:
-                         update_history(search_term)
-                     st.rerun()
-        current_term = get_state('current_dict_term')
-    else:
-        st.markdown("##### Comparison Search")
-        c1, c2 = st.columns(2)
-        with c1:
-            term1 = st.text_input(f"Primary ({get_state('current_corpus_name', 'Corpus')})", value=get_state('current_dict_term'), key="dict_term_1")
-        with c2:
-            term2 = st.text_input(f"Comparison ({comp_name if comp_name else 'Secondary'})", value=get_state('current_dict_term_2', ''), key="dict_term_2")
-            
-        if st.button("Search Comparison", type="primary", key="dict_comp_btn"):
-             set_state('current_dict_term', term1)
-             set_state('current_dict_term_2', term2)
-             if term1: update_history(term1)
-             st.rerun()
-             
-        current_term = get_state('current_dict_term')
-        current_term_2 = get_state('current_dict_term_2')
-
-    
-    # comp_mode/path/name var definition moved up
+    with col_main:
 
 
-    # --- XML Restriction Filters ---
-    if not comp_mode:
-        xml_filters = render_xml_restriction_filters(corpus_path, "dictionary")
-        xml_where, xml_params = apply_xml_restrictions(xml_filters)
-        render_dictionary_result_column(corpus_path, get_state('current_corpus_name'), current_term, xml_where, xml_params)
-    else:
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            xml_filters_1 = render_xml_restriction_filters(corpus_path, "dictionary_c1")
-            xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
-        with col_f2:
-            xml_filters_2 = render_xml_restriction_filters(comp_path, "dictionary_c2")
-            xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
-            
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            st.subheader(f"Primary: {get_state('current_corpus_name', 'Corpus')}")
-            render_dictionary_result_column(corpus_path, get_state('current_corpus_name'), current_term, xml_where_1, xml_params_1, key_suffix="c1")
-        with col_c2:
-            st.subheader(f"Comparison: {comp_name}")
-            if not comp_path:
-                st.info("Load a comparison corpus in sidebar.")
-            else:
-                comp_stats = get_state('comp_corpus_stats')
-                render_dictionary_result_column(comp_path, comp_name, current_term_2, xml_where_2, xml_params_2, key_suffix="c2", override_stats=comp_stats)
+        # 1. Search Bar
+        comp_mode = get_state('comparison_mode', False)
+        comp_path = get_state('comp_corpus_path')
+        comp_name = get_state('comp_corpus_name')
+
+        if not comp_mode:
+            # Search Mode Toggle
+            search_mode = st.radio("Input Mode", ["Standard", "Natural Language (AI)"], horizontal=True, key="dict_search_mode")
+
+            if search_mode == "Natural Language (AI)":
+                 nl_query = st.text_input("Ask what you want to define", placeholder="e.g. What does 'artificial' mean?")
+                 if st.button("Ask AI", type="primary"):
+                     with st.spinner("Parsing..."):
+                         params, err = parse_nl_query(
+                             nl_query, 
+                             "dictionary",
+                             ai_provider=get_state('ai_provider'),
+                             gemini_api_key=get_state('gemini_api_key'),
+                             ollama_url=get_state('ollama_url'),
+                             ollama_model=get_state('ai_model')
+                         )
+
+                     if params and params.get('word'):
+                         term = params.get('word')
+                         set_state('current_dict_term', term)
+                         update_history(term)
+                         st.rerun()
+                     else:
+                         st.error("Could not identify the word to define.")
+
+            if search_mode == "Standard":
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                     search_term = st.text_input("Enter a word to analyze:", value=get_state('current_dict_term'), key="dict_search_input")
+                with col2:
+                     if st.button("Search", key="dict_search_btn"):
+                         set_state('current_dict_term', search_term)
+                         if search_term:
+                             update_history(search_term)
+                         st.rerun()
+            current_term = get_state('current_dict_term')
+        else:
+            st.markdown("##### Comparison Search")
+            c1, c2 = st.columns(2)
+            with c1:
+                term1 = st.text_input(f"Primary ({get_state('current_corpus_name', 'Corpus')})", value=get_state('current_dict_term'), key="dict_term_1")
+            with c2:
+                term2 = st.text_input(f"Comparison ({comp_name if comp_name else 'Secondary'})", value=get_state('current_dict_term_2', ''), key="dict_term_2")
+
+            if st.button("Search Comparison", type="primary", key="dict_comp_btn"):
+                 set_state('current_dict_term', term1)
+                 set_state('current_dict_term_2', term2)
+                 if term1: update_history(term1)
+                 st.rerun()
+
+            current_term = get_state('current_dict_term')
+            current_term_2 = get_state('current_dict_term_2')
+
+
+        # comp_mode/path/name var definition moved up
+
+
+        # --- XML Restriction Filters ---
+        if not comp_mode:
+            xml_filters = render_xml_restriction_filters(corpus_path, "dictionary")
+            xml_where, xml_params = apply_xml_restrictions(xml_filters)
+            render_dictionary_result_column(corpus_path, get_state('current_corpus_name'), current_term, xml_where, xml_params)
+        else:
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                xml_filters_1 = render_xml_restriction_filters(corpus_path, "dictionary_c1")
+                xml_where_1, xml_params_1 = apply_xml_restrictions(xml_filters_1)
+            with col_f2:
+                xml_filters_2 = render_xml_restriction_filters(comp_path, "dictionary_c2")
+                xml_where_2, xml_params_2 = apply_xml_restrictions(xml_filters_2)
+
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                st.subheader(f"Primary: {get_state('current_corpus_name', 'Corpus')}")
+                render_dictionary_result_column(corpus_path, get_state('current_corpus_name'), current_term, xml_where_1, xml_params_1, key_suffix="c1")
+            with col_c2:
+                st.subheader(f"Comparison: {comp_name}")
+                if not comp_path:
+                    st.info("Load a comparison corpus in sidebar.")
+                else:
+                    comp_stats = get_state('comp_corpus_stats')
+                    render_dictionary_result_column(comp_path, comp_name, current_term_2, xml_where_2, xml_params_2, key_suffix="c2", override_stats=comp_stats)
+
 
 def render_dictionary_result_column(path, corpus_name, current_term, xml_where, xml_params, key_suffix="", override_stats=None):
     if not current_term:
