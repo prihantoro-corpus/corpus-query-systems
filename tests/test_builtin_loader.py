@@ -33,7 +33,5 @@ else:
     
     # Test a query
     pn_tokens = con.execute("SELECT token FROM corpus WHERE in_PN = TRUE LIMIT 5").fetchall()
-    print(f"\nSample <PN> tokens: {[t[0] for t in pn_tokens]}")
-    
     con.close()
-    print("\n✓ All checks passed!")
+    print("\n[SUCCESS] All checks passed!")

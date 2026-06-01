@@ -6,42 +6,56 @@ import streamlit as st # Only for @st.cache_data? No, avoiding st dependency in 
 
 def apply_smart_filter(df, col_name, filter_str):
     """
-    Applies inclusive or exclusive filtering based on user input.
-    Format: 'word1, word2' (include only these) OR '-word1, -word2' (exclude these).
+    Applies inclusive and/or exclusive filtering based on user input.
+    Format: 'word1, word2' (include only these) AND/OR '-word1, -word2' (exclude these).
     Supports * and ? wildcards (e.g., '*al' for words ending in al).
+    Comparisons are case-insensitive.
     """
     if not filter_str or df.empty:
         return df
     
+    # Distribute minus sign outside parenthesis, e.g. -(JJ|NN) -> -JJ,-NN
+    import re
+    filter_str = re.sub(r'-\(([^)]+)\)', lambda m: ",".join(f"-{p.strip()}" if not p.strip().startswith('-') else p.strip() for p in re.split(r'[|,]', m.group(1)) if p.strip()), filter_str)
+    filter_str = re.sub(r'-\[([^\]]+)\]', lambda m: ",".join(f"-{p.strip()}" if not p.strip().startswith('-') else p.strip() for p in re.split(r'[|,]', m.group(1)) if p.strip()), filter_str)
+
     # Support union by replacing | with , and stripping ()
-    filter_str = filter_str.replace('(', '').replace(')', '').replace('|', ',')
+    filter_str = filter_str.replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace('|', ',')
     
     items = [i.strip() for i in filter_str.split(',') if i.strip()]
     if not items:
         return df
     
-    # Check if we are in exclusion mode (starts with '-')
-    # If any item starts with '-', we treat it as an exclusion list
-    is_exclude = any(i.startswith('-') for i in items)
-    clean_items = [i.lstrip('-') for i in items]
-    
-    has_wildcard = any('*' in i or '?' in i for i in clean_items)
-    
-    if has_wildcard:
-        import re
-        escaped_items = [re.escape(i).replace(r'\*', '.*').replace(r'\?', '.') for i in clean_items]
-        regex_pat = '^(?:' + '|'.join(escaped_items) + ')$'
-        matches = df[col_name].astype(str).str.contains(regex_pat, flags=re.IGNORECASE, regex=True)
+    pos_items = []
+    neg_items = []
+    for item in items:
+        if item.startswith('-'):
+            clean = item[1:].strip()
+            if clean:
+                neg_items.append(clean)
+        else:
+            clean = item.strip()
+            if clean:
+                pos_items.append(clean)
+                
+    # Helper to check matches for a list of items (mixed wildcard and plain)
+    def get_matches_mask(items_list):
+        has_wildcard = any('*' in i or '?' in i for i in items_list)
+        if has_wildcard:
+            escaped_items = [re.escape(i).replace(r'\*', '.*').replace(r'\?', '.') for i in items_list]
+            regex_pat = '^(?:' + '|'.join(escaped_items) + ')$'
+            return df[col_name].astype(str).str.contains(regex_pat, flags=re.IGNORECASE, regex=True)
+        else:
+            items_lower = [i.lower() for i in items_list]
+            return df[col_name].astype(str).str.lower().isin(items_lower)
+
+    if pos_items:
+        df = df[get_matches_mask(pos_items)]
         
-        if is_exclude:
-            return df[~matches]
-        else:
-            return df[matches]
-    else:
-        if is_exclude:
-            return df[~df[col_name].astype(str).isin(clean_items)]
-        else:
-            return df[df[col_name].astype(str).isin(clean_items)]
+    if neg_items:
+        df = df[~get_matches_mask(neg_items)]
+        
+    return df
 
 def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, mi_min_freq, max_collocates, is_raw_mode, 
                                  token_filter="", pos_filter="", lemma_filter="",

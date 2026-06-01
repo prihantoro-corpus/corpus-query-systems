@@ -12,91 +12,41 @@ def render_sidebar():
     Renders the sidebar for corpus selection and settings.
     Returns: The selected view name.
     """
-    # Active Corpus Display Banner in Sidebar
-    current_path = get_state('current_corpus_path')
-    active_corpus_name = get_state('current_corpus_name')
-    if current_path:
-        display_name = "USER CORPUS" if active_corpus_name == "Uploaded Batch" else active_corpus_name
-        
-        comp_path = get_state('comp_corpus_path')
-        comp_name = get_state('comp_corpus_name')
-        if get_state('comparison_mode') and comp_path:
-            display_comp = "USER CORPUS" if comp_name == "Uploaded Batch" else comp_name
-            st.sidebar.markdown(f"<div style='background-color:#1e293b; padding:10px; border-radius:8px; border:1px solid #00ADB5; margin-bottom:15px;'>📂 <span style='color:#00FFF5; font-weight:bold;'>Active:</span> <span style='color:white; font-weight:bold;'>{display_name}</span> vs <span style='color:white; font-weight:bold;'>{display_comp}</span></div>", unsafe_allow_html=True)
-        else:
-            st.sidebar.markdown(f"<div style='background-color:#1e293b; padding:10px; border-radius:8px; border:1px solid #00ADB5; margin-bottom:15px;'>📂 <span style='color:#00FFF5; font-weight:bold;'>Active:</span> <span style='color:white; font-weight:bold;'>{display_name}</span></div>", unsafe_allow_html=True)
-    else:
-        st.sidebar.markdown("<div style='background-color:#1e293b; padding:10px; border-radius:8px; border:1px solid #475569; margin-bottom:15px;'>📂 <span style='color:#94a3b8; font-weight:bold;'>Active:</span> <span style='color:#94a3b8; font-weight:bold;'>None Loaded</span></div>", unsafe_allow_html=True)
 
     # 1. Navigation (Tools) - MOVED TO TOP
     st.sidebar.title("Tools (v1.1 Stanza)")
     st.sidebar.caption("App Version: v300526")
+    
+    # Environment detection
+    import socket
+    import os
+    is_local = True
+    if os.getenv("STREAMLIT_SHARING_AUTHOR") or os.getenv("IS_SERVER"):
+        is_local = False
+    else:
+        try:
+            hostname = socket.gethostname().lower()
+            if any(h in hostname for h in ['render', 'heroku', 'aws', 'gcp', 'azure', 'kubernetes', 'k8s', 'container', 'server']):
+                is_local = False
+        except Exception:
+            pass
+            
+        try:
+            from streamlit import context
+            if hasattr(context, "headers"):
+                host = context.headers.get("host", "").lower()
+                if host and not any(h in host for h in ["localhost", "127.0.0.1", "::1"]):
+                    is_local = False
+        except ImportError:
+            pass
+
+    env_badge = "💻 Local Installation" if is_local else "🌐 Server Instance"
+    st.sidebar.markdown(f"<div style='font-size:1.0em; color:#FFFFFF; font-weight:500; margin-bottom:10px;'>{env_badge}</div>", unsafe_allow_html=True)
     view = st.sidebar.radio(
         "Go to", 
         ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
     )
     
-    st.sidebar.markdown("---")
-    
-    # 2. Corpus Selection
-    st.sidebar.title("Corpus Selection")
-    
-    # Corpus Type Selection
-    corpus_type = st.sidebar.radio(
-        "Corpus Type", 
-        ["Monolingual", "Parallel"],
-        index=0 if get_state('corpus_type') == "Monolingual" else 1
-    )
-    
-    if corpus_type != get_state('corpus_type'):
-        set_state('corpus_type', corpus_type)
-        reset_tool_states()
-        st.rerun()
-
-    # Comparison Mode Toggle
-    comparison_mode = st.sidebar.checkbox("Enable Comparison Mode", value=get_state('comparison_mode', False))
-    if comparison_mode != get_state('comparison_mode'):
-        set_state('comparison_mode', comparison_mode)
-        st.rerun()
-        
-    # Corpus Source
-    if 'sidebar_source_selectbox' not in st.session_state:
-        st.session_state['sidebar_source_selectbox'] = "Upload Files"
-
-    source_type = st.sidebar.radio(
-        "Source", 
-        ["Upload Files", "Built-in Corpora", "Online Corpus"],
-        key="sidebar_source_selectbox"
-    )
-    
-    # Update backward compatible state backend
-    set_state('source_type', source_type)
-    
-    if source_type == "Online Corpus":
-        online_mode = st.sidebar.radio("Builder Mode", ["YouTube", "Link Collection", "Keyword Search"])
-        set_state('online_builder_mode', online_mode)
-    
-    current_path = get_state('current_corpus_path')
-
-
-    # 3. Current Status Info
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Active Corpus")
-    if current_path:
-        display_name = "USER CORPUS" if get_state('current_corpus_name') == "Uploaded Batch" else get_state('current_corpus_name')
-        st.sidebar.success(f"Primary: **{display_name}**")
-        
-    comp_path = get_state('comp_corpus_path')
-    if get_state('comparison_mode') and comp_path:
-        display_comp = "USER CORPUS" if get_state('comp_corpus_name') == "Uploaded Batch" else get_state('comp_corpus_name')
-        st.sidebar.info(f"Comparison: **{display_comp}**")
-    elif get_state('comparison_mode'):
-        st.sidebar.warning("Load a 2nd corpus to compare.")
-    
-    if not current_path and not comp_path:
-        st.sidebar.warning("No Corpus Loaded")
-        
-    st.sidebar.markdown("---")
     
     # 4. AI Interpretation Settings
     st.sidebar.title("AI Interpretation")

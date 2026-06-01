@@ -79,12 +79,12 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
                             
                             if not unique_vals: continue
                         
-                            selected = st.multiselect(
-                                label=f"**{attr.capitalize()}**",
-                                options=unique_vals,
-                                default=[],
-                                key=f"xml_filter_ms_{attr}_{view_name}"
-                            )
+                            st.markdown(f"**{attr.capitalize()}**")
+                            selected = []
+                            with st.container(height=150):
+                                for idx, val in enumerate(unique_vals):
+                                    if st.checkbox(str(val), key=f"xml_filter_chk_{attr}_{val}_{idx}_{view_name}"):
+                                        selected.append(val)
                                     
                             if selected:
                                 selected_filters[attr] = {'type': 'list', 'values': selected}

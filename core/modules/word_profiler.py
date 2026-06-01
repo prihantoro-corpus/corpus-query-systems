@@ -1,13 +1,101 @@
 import duckdb
 import pandas as pd
 import os
+import re
+
+def natural_sort_key(s):
+    """Sort strings containing numbers naturally (e.g. 'Sublist 2' < 'Sublist 10')"""
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+
+def load_wordlist_from_file_object(file_obj, filename):
+    """
+    Loads a wordlist from an uploaded file object.
+    Supports .txt, .csv, and .xlsx/.xls.
+    Returns a dictionary: {word: category}
+    """
+    ext = os.path.splitext(filename)[1].lower()
+    wordlist = {}
+    
+    if ext == '.csv':
+        try:
+            # Try to read CSV
+            df = pd.read_csv(file_obj, header=None)
+            return parse_dataframe_to_wordlist(df)
+        except Exception:
+            return {}
+    elif ext in ['.xlsx', '.xls']:
+        try:
+            # Try to read Excel
+            df = pd.read_excel(file_obj, header=None)
+            return parse_dataframe_to_wordlist(df)
+        except Exception:
+            return {}
+    else: # Default text file (.txt)
+        try:
+            content = file_obj.read()
+            if isinstance(content, bytes):
+                content = content.decode('utf-8')
+            lines = [line.rstrip('\r\n') for line in content.split('\n') if line.strip()]
+            start_idx = 0
+            if lines:
+                first_line_parts = [p.strip().lower() for p in lines[0].split('\t')]
+                if any(h in first_line_parts[0] for h in ['word', 'token', 'lemma', 'collocate']) or \
+                   (len(first_line_parts) >= 2 and 'category' in first_line_parts[1]):
+                    start_idx = 1
+            for line in lines[start_idx:]:
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    word = parts[0].strip().lower()
+                    category = parts[1].strip()
+                    if word and word != 'nan':
+                        wordlist[word] = category
+                    if len(parts) >= 3:
+                        lemma = parts[2].strip().lower()
+                        if lemma and lemma != 'nan':
+                            wordlist[lemma] = category
+                else:
+                    word = line.strip().lower()
+                    if word and word != 'nan':
+                        wordlist[word] = 'Coverage'
+            return wordlist
+        except Exception:
+            return {}
+
+def parse_dataframe_to_wordlist(df):
+    wordlist = {}
+    if df.empty:
+        return wordlist
+    
+    # If first row contains header-like strings, drop it
+    first_row_str = df.iloc[0].astype(str).str.lower().tolist()
+    start_idx = 0
+    if any(header in first_row_str[0] for header in ['word', 'token', 'lemma', 'collocate']) or \
+       (len(first_row_str) >= 2 and 'category' in first_row_str[1]):
+        start_idx = 1
+        
+    num_cols = len(df.columns)
+    for idx in range(start_idx, len(df)):
+        row = df.iloc[idx]
+        if num_cols >= 2:
+            word = str(row[0]).strip().lower()
+            category = str(row[1]).strip()
+            if word and word != 'nan':
+                wordlist[word] = category
+            if num_cols >= 3:
+                lemma = str(row[2]).strip().lower()
+                if lemma and lemma != 'nan':
+                    wordlist[lemma] = category
+        else:
+            word = str(row[0]).strip().lower()
+            if word and word != 'nan':
+                wordlist[word] = 'Coverage'
+    return wordlist
 
 def load_wordlist(file_path_or_content, is_file=True):
     """
     Loads a wordlist from a file path or string content.
-    Supports plain (1 col) and categorized (2 cols).
+    Supports plain (1 col), categorized (2 cols), and three column (word, category, lemma).
     Returns a dictionary: {word: category}
-    For plain wordlists, category is 'Coverage'.
     """
     wordlist = {}
     content = ""
@@ -20,16 +108,28 @@ def load_wordlist(file_path_or_content, is_file=True):
     else:
         content = file_path_or_content
 
-    lines = [line.strip() for line in content.split('\n') if line.strip()]
-    for line in lines:
+    lines = [line.rstrip('\r\n') for line in content.split('\n') if line.strip()]
+    start_idx = 0
+    if lines:
+        first_line_parts = [p.strip().lower() for p in lines[0].split('\t')]
+        if any(h in first_line_parts[0] for h in ['word', 'token', 'lemma', 'collocate']) or \
+           (len(first_line_parts) >= 2 and 'category' in first_line_parts[1]):
+            start_idx = 1
+    for line in lines[start_idx:]:
         parts = line.split('\t')
         if len(parts) >= 2:
             word = parts[0].strip().lower()
             category = parts[1].strip()
-            wordlist[word] = category
+            if word and word != 'nan':
+                wordlist[word] = category
+            if len(parts) >= 3:
+                lemma = parts[2].strip().lower()
+                if lemma and lemma != 'nan':
+                    wordlist[lemma] = category
         else:
             word = line.strip().lower()
-            wordlist[word] = 'Coverage'
+            if word and word != 'nan':
+                wordlist[word] = 'Coverage'
             
     return wordlist
 
@@ -44,7 +144,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
     con = duckdb.connect(db_path, read_only=True)
     try:
         # Prepare the categories
-        categories = sorted(list(set(wordlist.values())))
+        categories = sorted(list(set(wordlist.values())), key=natural_sort_key)
         if 'Coverage' in categories and len(categories) == 1:
             is_plain = True
         else:
@@ -62,20 +162,29 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
             where_clause += xml_where_clause
 
         if group_col:
-            query = f"SELECT {group_col}, _token_low, count(*) as freq FROM corpus {where_clause} GROUP BY {group_col}, _token_low"
+            query = f"SELECT {group_col}, _token_low, lemma, count(*) as freq FROM corpus {where_clause} GROUP BY {group_col}, _token_low, lemma"
         else:
-            query = f"SELECT _token_low, count(*) as freq FROM corpus {where_clause} GROUP BY _token_low"
+            query = f"SELECT _token_low, lemma, count(*) as freq FROM corpus {where_clause} GROUP BY _token_low, lemma"
 
         df_tokens = con.execute(query, xml_params).fetch_df()
         
         if df_tokens.empty:
             return pd.DataFrame()
 
-        # Map tokens to categories
-        def get_category(token):
-            return wordlist.get(str(token).lower(), 'OOV')
+        # Map tokens to categories by checking both token and lemma
+        def get_category(row):
+            token_val = str(row['_token_low']).lower()
+            lemma_val = str(row['lemma']).lower() if 'lemma' in row and not pd.isna(row['lemma']) else ''
+            
+            # Check token first
+            if token_val in wordlist:
+                return wordlist[token_val]
+            # Check lemma second
+            if lemma_val in wordlist:
+                return wordlist[lemma_val]
+            return 'OOV'
 
-        df_tokens['Category'] = df_tokens['_token_low'].apply(get_category)
+        df_tokens['Category'] = df_tokens.apply(get_category, axis=1)
 
         # Aggregate by Segment and Category
         if group_col:

@@ -63,7 +63,7 @@ def render_collocation_view():
         comp_path = get_state('comp_corpus_path')
         comp_name = get_state('comp_corpus_name')
 
-        tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
+        tab_simple, tab_advanced, tab_multi_compare = st.tabs(["Simple", "Advanced", "Multi-Node Comparison"])
 
         with tab_simple:
             node_word_simple = st.text_input("Node Word", value="", key="coll_node_simple", help="Search word or phrase")
@@ -508,12 +508,74 @@ def render_collocation_view():
                 run_collocation_query(
                     'primary', corpus_path,
                     _dq['node'], _dq['win'], _dq['freq'], _dq['mx'],
-                    corpus_stats,
-                    xml_where, xml_params,
+                    corpus_stats, xml_where, xml_params,
                     _dq['token_filter'], _dq['pos_filter'], _dq['lemma_filter'],
                     '', 50,
                     stat_measure=get_state('coll_stat_measure', 'Log-Likelihood')
                 )
+
+        with tab_multi_compare:
+            st.markdown("### 🔍 Compare Collocates of Multiple Nodes")
+            st.write("Compare collocates from multiple node words in the active corpus to identify shared and distinct vocabulary environments.")
+            
+            # Input up to 5 node words
+            nodes_input = st.text_input(
+                "Enter Node Words (comma-separated, max 5)",
+                value=get_state('coll_multi_nodes_input', ''),
+                placeholder="e.g. coffee, tea, milk, water, juice",
+                key="coll_multi_nodes_text_input",
+                help="Type up to 5 node words separated by commas."
+            )
+            set_state('coll_multi_nodes_input', nodes_input)
+            
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                window_multi = st.slider("Span (Window)", 1, 10, 5, key="coll_window_multi")
+            with col_m2:
+                min_freq_multi = st.number_input("Min Co-occurrence", 1, 100, 3, key="coll_min_freq_multi")
+                
+            col_m3, col_m4 = st.columns(2)
+            with col_m3:
+                max_rows_multi = st.number_input("Max Collocates per Node", 10, 50000, 100, step=10, key="coll_max_multi")
+            with col_m4:
+                measures_list = ["Log-Likelihood", "Log-Dice", "Dice Coefficient", "Mutual Information"]
+                current_measure_multi = get_state('coll_stat_measure_multi', 'Log-Likelihood')
+                measure_idx_multi = measures_list.index(current_measure_multi) if current_measure_multi in measures_list else 0
+                st.radio("Association Measure", measures_list, index=measure_idx_multi, horizontal=True, key="coll_stat_measure_multi")
+                
+            # Filters
+            st.markdown("#### ⚙️ Filters (Optional)")
+            f_col_m1, f_col_m2, f_col_m3 = st.columns(3)
+            with f_col_m1:
+                token_filter_multi = st.text_input("Token Filter", placeholder="e.g. no, non", key="coll_token_filt_multi")
+            with f_col_m2:
+                pos_filter_multi = st.text_input("POS Filter", placeholder="e.g. JJ, NN", key="coll_pos_filt_multi")
+            with f_col_m3:
+                lemma_filter_multi = st.text_input("Lemma Filter", placeholder="e.g. see", key="coll_lemma_filt_multi")
+                
+            # Render XML Filters for Multi-Node Compare
+            xml_filters_multi = render_xml_restriction_filters(corpus_path, "collocation_multi", corpus_name=corpus_name)
+            xml_where_multi, xml_params_multi = apply_xml_restrictions(xml_filters_multi)
+            
+            # Action button
+            if st.button("Calculate Multi-Node Collocations", type="primary", key="btn_calculate_multi_node_collocations", use_container_width=True):
+                # Parse nodes
+                nodes = [n.strip() for n in nodes_input.split(',') if n.strip()]
+                if not nodes:
+                    st.warning("Please enter at least one node word.")
+                elif len(nodes) > 5:
+                    st.warning("Please enter a maximum of 5 node words.")
+                else:
+                    run_multi_node_collocation_query(
+                        corpus_path, nodes, window_multi, min_freq_multi, max_rows_multi,
+                        corpus_stats, xml_where_multi, xml_params_multi,
+                        token_filter_multi, pos_filter_multi, lemma_filter_multi,
+                        stat_measure=get_state('coll_stat_measure_multi', 'Log-Likelihood')
+                    )
+                    st.rerun()
+                    
+            # Render Multi-Node Results
+            render_multi_node_results()
 
         # 3. Display
         if not comp_mode:
@@ -1018,3 +1080,507 @@ def render_pattern_results(pattern_results, collocation_results, key_suffix=""):
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key=f"dl_pattern_{label}_{key_suffix}"
             )
+
+
+def run_multi_node_collocation_query(path, nodes, window, min_freq, max_rows, stats, xml_where, xml_params,
+                                     token_filter="", pos_filter="", lemma_filter="", stat_measure="Log-Likelihood"):
+    with st.spinner("Computing multi-node collocations..."):
+        all_results = {}
+        for node in nodes:
+            df, freq, node_mwu = cached_generate_collocation(
+                db_path=path,
+                word=node,
+                window=window,
+                min_freq=min_freq,
+                max_rows=max_rows,
+                is_raw=False,
+                corpus_stats=stats,
+                xml_where_clause=xml_where,
+                xml_params=xml_params,
+                token_filter=token_filter,
+                pos_filter=pos_filter,
+                lemma_filter=lemma_filter,
+                stat_measure=stat_measure
+            )
+            all_results[node] = {
+                'df': df,
+                'freq': freq,
+                'node_mwu': node_mwu
+            }
+            
+        st.session_state['last_multi_node_results'] = {
+            'nodes': nodes,
+            'results': all_results,
+            'stat_measure': stat_measure
+        }
+
+
+def render_multi_node_results():
+    multi_data = st.session_state.get('last_multi_node_results')
+    if not multi_data:
+        return
+        
+    nodes = multi_data['nodes']
+    results = multi_data['results']
+    stat_measure = multi_data['stat_measure']
+    
+    st.markdown("---")
+    st.subheader("📊 Multi-Node Collocation Analysis Results")
+    
+    # Gather all collocates from all dataframes
+    all_collocates = set()
+    collocate_to_nodes = {}
+    
+    measure_col_map = {
+        "Log-Likelihood": "LL",
+        "Log-Dice": "Log-Dice",
+        "Dice Coefficient": "Dice",
+        "Mutual Information": "MI"
+    }
+    y_col = measure_col_map.get(stat_measure, "LL")
+    
+    for node, data in results.items():
+        df = data['df']
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                coll = row['Collocate']
+                coll_lower = coll.lower()
+                all_collocates.add(coll_lower)
+                
+                score = row[y_col]
+                freq = row['Observed']
+                
+                if coll_lower not in collocate_to_nodes:
+                    collocate_to_nodes[coll_lower] = {
+                        'word_original': coll,
+                        'nodes': {}
+                    }
+                collocate_to_nodes[coll_lower]['nodes'][node] = {
+                    'score': score,
+                    'freq': freq
+                }
+                
+    if not all_collocates:
+        st.info("No collocates found for the specified node words with the current settings.")
+        return
+        
+    # Calculate overlap lists
+    shared_items = []
+    unique_items = {node: [] for node in nodes}
+    
+    for coll_lower, data in collocate_to_nodes.items():
+        associated_nodes = list(data['nodes'].keys())
+        overlap_degree = len(associated_nodes)
+        
+        row_dict = {
+            'Collocate': data['word_original'],
+            'Degree': f"{overlap_degree}/{len(nodes)}",
+            'degree_num': overlap_degree,
+            'Associated Nodes': ", ".join(associated_nodes)
+        }
+        
+        for node in nodes:
+            if node in data['nodes']:
+                row_dict[f"{node} Freq"] = data['nodes'][node]['freq']
+                row_dict[f"{node} Score"] = round(data['nodes'][node]['score'], 2)
+            else:
+                row_dict[f"{node} Freq"] = 0
+                row_dict[f"{node} Score"] = 0.0
+                
+        if overlap_degree > 1:
+            shared_items.append(row_dict)
+        else:
+            node = associated_nodes[0]
+            unique_items[node].append({
+                'Collocate': data['word_original'],
+                'Observed': data['nodes'][node]['freq'],
+                stat_measure: round(data['nodes'][node]['score'], 2)
+            })
+            
+    shared_df = pd.DataFrame(shared_items)
+    
+    # 1. Visualization Controls at top of results section
+    st.markdown("#### ⚙️ Chart Configuration & Sorting")
+    
+    # Get or initialize the sort state
+    sort_mode = st.session_state.get('multi_node_sort_mode', 'shared')
+    calc_method = st.session_state.get('multi_node_calc_method', 'Simple Aggregate')
+    prettify = st.session_state.get('multi_node_prettify', False)
+    
+    col_btn1, col_btn2, col_prettify = st.columns([1.5, 1.5, 1])
+    with col_btn1:
+        if st.button(
+            "🔢 Sort by Shared Nodes", 
+            key="btn_sort_shared", 
+            type="primary" if sort_mode == 'shared' else "secondary",
+            use_container_width=True
+        ):
+            st.session_state['multi_node_sort_mode'] = 'shared'
+            st.rerun()
+            
+    with col_btn2:
+        if st.button(
+            "⚡ Sort by Combined Strength", 
+            key="btn_sort_strength", 
+            type="primary" if sort_mode == 'strength' else "secondary",
+            use_container_width=True
+        ):
+            st.session_state['multi_node_sort_mode'] = 'strength'
+            st.rerun()
+            
+    # Method radio button
+    calc_method = st.radio(
+        "Combined Strength Calculation Method:",
+        ["Simple Aggregate", "Harmonic Mean", "Min-Max Normalization", "Z-Score Standardization"],
+        horizontal=True,
+        key="multi_node_calc_method"
+    )
+    
+    prettify = st.checkbox(
+        "✨ Prettify Scale",
+        value=prettify,
+        help="Applies a log scale to equalize the visual lengths of bars, making smaller association scores visible next to large ones.",
+        key="multi_node_prettify"
+    )
+    
+    # Calculate baseline stats for each node (for normalization/Z-score)
+    import math
+    node_stats = {}
+    for node in nodes:
+        df_node = results[node]['df']
+        if df_node is not None and not df_node.empty:
+            scores = df_node[y_col].astype(float).tolist()
+            mean_val = sum(scores) / len(scores) if scores else 0.0
+            variance = sum((x - mean_val) ** 2 for x in scores) / len(scores) if scores else 0.0
+            std_val = math.sqrt(variance) if variance > 0 else 1.0
+            min_val = min(scores) if scores else 0.0
+            max_val = max(scores) if scores else 1.0
+            node_stats[node] = {
+                'mean': mean_val,
+                'std': std_val,
+                'min': min_val,
+                'max': max_val
+            }
+        else:
+            node_stats[node] = {'mean': 0.0, 'std': 1.0, 'min': 0.0, 'max': 1.0}
+            
+    def get_calc_score(node, raw_score):
+        if raw_score <= 0:
+            return 0.0
+        stats = node_stats.get(node, {'mean': 0.0, 'std': 1.0, 'min': 0.0, 'max': 1.0})
+        
+        if calc_method == "Min-Max Normalization":
+            denom = stats['max'] - stats['min']
+            if denom == 0:
+                return 0.0
+            return max(0.0, (raw_score - stats['min']) / denom)
+            
+        elif calc_method == "Z-Score Standardization":
+            return max(0.0, (raw_score - stats['mean']) / stats['std'])
+            
+        return raw_score
+
+    if not shared_df.empty:
+        # Calculate Combined Score for each row dynamically
+        combined_scores = []
+        for _, row in shared_df.iterrows():
+            raw_scores = [float(row.get(f"{node} Score", 0.0)) for node in nodes]
+            
+            if calc_method == "Harmonic Mean":
+                active = [s for s in raw_scores if s > 0]
+                val = len(active) / sum(1.0 / s for s in active) if active else 0.0
+            elif calc_method == "Min-Max Normalization":
+                val = sum(get_calc_score(node, s) for node, s in zip(nodes, raw_scores))
+            elif calc_method == "Z-Score Standardization":
+                val = sum(get_calc_score(node, s) for node, s in zip(nodes, raw_scores))
+            else: # Simple Aggregate
+                val = sum(raw_scores)
+                
+            combined_scores.append(round(val, 2))
+            
+        shared_df['Combined Score'] = combined_scores
+        
+        # Apply sorting to shared_df
+        if sort_mode == 'shared':
+            shared_df = shared_df.sort_values(by=['degree_num', 'Combined Score'], ascending=[False, False]).reset_index(drop=True)
+        else:
+            shared_df = shared_df.sort_values(by=['Combined Score', 'degree_num'], ascending=[False, False]).reset_index(drop=True)
+        
+    tab_shared, tab_unique, tab_graph = st.tabs(["🔗 Shared Collocates", "💎 Unique Collocates", "📊 Visual Comparison"])
+    
+    with tab_shared:
+        st.markdown(f"Collocates appearing with more than one node word, sorted by **Overlap Degree**:")
+        if not shared_df.empty:
+            display_cols = ['Collocate', 'Degree', 'Associated Nodes']
+            for node in nodes:
+                display_cols.append(f"{node} Score")
+            display_cols.append('Combined Score')
+            
+            st.dataframe(shared_df[display_cols], use_container_width=True)
+            
+            from core.io_utils import df_to_excel_bytes
+            st.download_button(
+                label="Download Shared Collocates (Excel)",
+                data=df_to_excel_bytes(shared_df[display_cols]),
+                file_name="shared_multi_node_collocates.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_shared_multi_node"
+            )
+        else:
+            st.info("No shared collocates found among these node words.")
+            
+    with tab_unique:
+        st.markdown("Collocates exclusive to a single node word:")
+        unique_tabs = st.tabs([f"Only with '{node}'" for node in nodes])
+        for idx, node in enumerate(nodes):
+            with unique_tabs[idx]:
+                u_list = unique_items[node]
+                if u_list:
+                    u_df = pd.DataFrame(u_list)
+                    u_df = u_df.sort_values(by=[stat_measure], ascending=False).reset_index(drop=True)
+                    st.dataframe(u_df, use_container_width=True)
+                    
+                    from core.io_utils import df_to_excel_bytes
+                    st.download_button(
+                        label=f"Download Unique Collocates for {node}",
+                        data=df_to_excel_bytes(u_df),
+                        file_name=f"unique_collocates_{node}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"dl_unique_multi_node_{node}"
+                    )
+                else:
+                    st.info(f"No unique collocates found for '{node}'.")
+
+    with tab_graph:
+        render_multi_node_charts(nodes, shared_df, stat_measure, calc_method, prettify, get_calc_score)
+
+
+def render_multi_node_charts(nodes, shared_df, stat_measure, calc_method, prettify, get_calc_score_fn):
+    if shared_df.empty:
+        st.info("No shared collocates to visualize.")
+        return
+
+    import plotly.express as px
+    import math
+    
+    # Prepare data for individual collocates (Top 25 shared collocates)
+    top_n = 25
+    top_shared = shared_df.head(top_n)
+    
+    # Extract categories for y-axis ordering (Plotly orders bottom-to-top, so reverse the list)
+    collocate_order = top_shared['Collocate'].tolist()[::-1]
+    
+    heat_data = []
+    for _, row in top_shared.iterrows():
+        coll = row['Collocate']
+        for node in nodes:
+            raw_score = float(row.get(f"{node} Score", 0.0))
+            calc_score = get_calc_score_fn(node, raw_score)
+            
+            # Harmonic mean is computed collectively, so segment sizes are best kept as raw values
+            # otherwise display normalized segment score
+            if calc_method == "Harmonic Mean":
+                display_score = raw_score
+            else:
+                display_score = calc_score
+                
+            freq = row.get(f"{node} Freq", 0)
+            heat_data.append({
+                'Collocate': coll,
+                'Node Word': node,
+                'Score': raw_score,
+                'Calc Score': display_score,
+                'Frequency': int(freq)
+            })
+            
+    df_heat = pd.DataFrame(heat_data)
+    
+    # Apply scaling for visualization if Prettify is enabled
+    if prettify:
+        df_heat['Viz Score'] = df_heat['Calc Score'].apply(lambda x: math.log1p(max(0, x)))
+        x_col = 'Viz Score'
+        x_label = f"{calc_method} (Log Scaled)"
+    else:
+        df_heat['Viz Score'] = df_heat['Calc Score']
+        x_col = 'Viz Score'
+        x_label = calc_method
+        
+    # Prepare data for Overlap Distribution
+    overlap_counts = shared_df.groupby('Associated Nodes').size().reset_index(name='Collocate Count')
+    overlap_counts = overlap_counts.sort_values(by='Collocate Count', ascending=True)
+    
+    viz_tab1, viz_tab2, viz_tab3 = st.tabs([
+        "🔮 Bubble Matrix (Clean Grid)",
+        "📊 Stacked Bar Chart",
+        "🕸️ Overlap Size Overview"
+    ])
+    
+    with viz_tab1:
+        st.markdown(f"**Bubble Matrix**: Bubble size represents **Frequency** (co-occurrence count), and bubble color represents **{stat_measure}**.")
+        fig_bubble = px.scatter(
+            df_heat,
+            x='Node Word',
+            y='Collocate',
+            size='Frequency',
+            color='Score',
+            color_continuous_scale='Viridis',
+            labels={'Score': stat_measure, 'Frequency': 'Frequency'},
+            hover_data=['Collocate', 'Node Word', 'Score', 'Frequency'],
+            title=f"Shared Collocates Bubble Grid (Top {top_n})"
+        )
+        fig_bubble.update_layout(
+            height=max(450, 25 * len(top_shared) + 120),
+            xaxis_title="Node Word",
+            yaxis_title="Shared Collocate",
+            yaxis={'categoryorder': 'array', 'categoryarray': collocate_order},
+            margin=dict(l=150, r=20, t=50, b=50),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+        )
+        fig_bubble.update_yaxes(gridcolor='rgba(128,128,128,0.2)')
+        fig_bubble.update_xaxes(gridcolor='rgba(128,128,128,0.2)')
+        st.plotly_chart(fig_bubble, use_container_width=True)
+        
+    with viz_tab2:
+        st.markdown(f"**Stacked Bar Chart**: Displays the combined strength of each collocate. Segments represent individual node scores.")
+        fig_bar = px.bar(
+            df_heat,
+            x=x_col,
+            y='Collocate',
+            color='Node Word',
+            barmode='stack',
+            orientation='h',
+            labels={x_col: x_label, 'Collocate': 'Shared Collocate'},
+            hover_data={'Score': True, 'Viz Score': False, 'Frequency': True, 'Node Word': True, 'Collocate': True},
+            color_discrete_sequence=px.colors.qualitative.Plotly,
+            title=f"Combined Association Strength (Top {top_n})"
+        )
+        fig_bar.update_layout(
+            height=max(450, 25 * len(top_shared) + 100),
+            yaxis={'categoryorder': 'array', 'categoryarray': collocate_order},
+            margin=dict(l=150, r=20, t=50, b=50),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+        
+    with viz_tab3:
+        st.markdown("**Overlap Size Overview**: Node combinations mapped as horizontal bars containing their collocates (larger font sizes represent higher combined strength).")
+        
+        # Group collocates by their exact combination
+        combo_groups = {}
+        for _, row in shared_df.iterrows():
+            combo = row['Associated Nodes']
+            coll = row['Collocate']
+            score = row['Combined Score']
+            if combo not in combo_groups:
+                combo_groups[combo] = []
+            combo_groups[combo].append((coll, score))
+            
+        # Sort combinations by the number of collocates descending
+        sorted_combos = sorted(combo_groups.items(), key=lambda x: len(x[1]), reverse=True)
+        
+        if sorted_combos:
+            html_lines = [
+                """
+                <style>
+                .overlap-bar-container {
+                    margin-bottom: 25px;
+                    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                }
+                .overlap-label {
+                    font-weight: bold;
+                    font-size: 0.95rem;
+                    color: #e0e0e0;
+                    margin-bottom: 8px;
+                }
+                .overlap-bar {
+                    background: linear-gradient(90deg, rgba(0, 255, 245, 0.08) 0%, rgba(33, 150, 243, 0.03) 100%);
+                    border: 1px solid rgba(0, 255, 245, 0.2);
+                    border-radius: 12px;
+                    padding: 14px 18px;
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                .overlap-bar:hover {
+                    border-color: rgba(0, 255, 245, 0.5);
+                    background: linear-gradient(90deg, rgba(0, 255, 245, 0.12) 0%, rgba(33, 150, 243, 0.06) 100%);
+                    box-shadow: 0 6px 20px rgba(0, 255, 245, 0.1);
+                    transform: translateY(-1px);
+                }
+                .overlap-word {
+                    display: inline-block;
+                    margin: 6px 12px;
+                    font-weight: 600;
+                    cursor: help;
+                    transition: all 0.2s ease;
+                }
+                .overlap-word:hover {
+                    transform: scale(1.15);
+                    text-shadow: 0 0 8px rgba(0, 255, 245, 0.5);
+                }
+                </style>
+                """
+            ]
+            
+            max_count = max([len(words) for combo, words in sorted_combos]) if sorted_combos else 1
+            
+            for combo, words in sorted_combos:
+                # Sort words by score descending
+                words = sorted(words, key=lambda x: x[1], reverse=True)
+                count = len(words)
+                
+                # Proportional width of the bar (from 50% to 100% width)
+                width_pct = int(50 + 50 * (count / max_count))
+                
+                # Normalize font sizes for words in this specific combo
+                scores = [w[1] for w in words]
+                min_s = min(scores) if scores else 0
+                max_s = max(scores) if scores else 1
+                range_s = max_s - min_s if max_s != min_s else 1
+                
+                word_spans = []
+                for word, score in words:
+                    # Font size scaling between 12px and 28px
+                    font_size = 12 + 16 * ((score - min_s) / range_s)
+                    
+                    # Highlight colors based on score levels
+                    if score > min_s + 0.6 * range_s:
+                        color = "#00FFF5"  # High strength - Cyan
+                    elif score > min_s + 0.25 * range_s:
+                        color = "#64B5F6"  # Medium strength - Soft blue
+                    else:
+                        color = "#E0E0E0"  # Low strength - Off-white
+                        
+                    word_spans.append(
+                        f'<span class="overlap-word" style="font-size: {font_size:.1f}px; color: {color}" title="Combined Score: {score:.1f}">{word}</span>'
+                    )
+                
+                spans_html = "".join(word_spans)
+                html_lines.append(f"""
+                <div class="overlap-bar-container" style="width: {width_pct}%;">
+                    <div class="overlap-label">🔗 {combo} ({count} words)</div>
+                    <div class="overlap-bar">
+                        {spans_html}
+                    </div>
+                </div>
+                """)
+                
+            st.markdown("\n".join(html_lines), unsafe_allow_html=True)
+        else:
+            st.info("No overlap groups detected.")
+
+    # Excel download button for visual comparison data
+    st.markdown("---")
+    st.markdown("##### ⬇️ Download Visual Comparison Chart Data")
+    from core.io_utils import df_to_excel_bytes
+    dl_cols = ['Collocate', 'Degree', 'Associated Nodes'] + [f"{node} Score" for node in nodes] + ['Combined Score']
+    st.download_button(
+        label="Download Chart Data (Excel)",
+        data=df_to_excel_bytes(top_shared[dl_cols]),
+        file_name="multi_node_visual_comparison_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="dl_multi_node_chart_data"
+    )

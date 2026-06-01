@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
 from ui_streamlit.utils import notify_timing
@@ -19,8 +20,10 @@ from core.modules.classification import (
     BERTOPIC_AVAILABLE
 )
 import core.modules.readability as rd
+import core.modules.lexical_complexity as lc
 import importlib
 importlib.reload(rd)
+importlib.reload(lc)
 
 get_sentence_stats = rd.get_sentence_stats
 compute_readability_metrics = rd.compute_readability_metrics
@@ -115,8 +118,6 @@ def render_custom_button_tabs(tabs_list, key_suffix=""):
                     set_state(state_key, tab_name)
                     st.rerun()
                     
-    # Render spacing below buttons
-    st.write("")
     return get_state(state_key, tabs_list[0])
 
 def render_overview():
@@ -136,9 +137,7 @@ def render_overview():
             elif source_type == "Built-in Corpora":
                 render_built_in_corpora_selection_ui()
             else:
-                st.markdown("### 📤 Upload Your Own Files")
-                st.write("You can upload XML, TXT, CSV, or XLSX files from the sidebar to process them.")
-                st.info("Check the sidebar on the left to select and process your files.")
+                render_upload_ui()
                 
                 with st.expander("ℹ️ Supported Formats"):
                     st.markdown("""
@@ -156,6 +155,9 @@ def render_overview():
         elif source_type == "Built-in Corpora":
             with st.expander("📚 Available Built-in Corpora (Load New)", expanded=False):
                 render_built_in_corpora_selection_ui()
+        elif source_type == "Upload Files":
+            with st.expander("📤 Upload Corpus Files (Load New)", expanded=False):
+                render_upload_ui()
             
         stats = get_state('corpus_stats')
         name = get_state('current_corpus_name')
@@ -176,9 +178,7 @@ def render_overview():
             elif source_type == "Built-in Corpora":
                 render_built_in_corpora_selection_ui()
             else:
-                st.markdown("### 📤 Upload Your Own Files")
-                st.write("You can upload two different corpora from the sidebar and compare them side-by-side.")
-                st.info("Check the sidebar to load your Primary and Comparison corpora.")
+                render_upload_ui()
             
             return
 
@@ -189,7 +189,9 @@ def render_overview():
         elif source_type == "Built-in Corpora":
             with st.expander("📚 Available Built-in Corpora (Load New)", expanded=False):
                 render_built_in_corpora_selection_ui()
-            
+        elif source_type == "Upload Files":
+            with st.expander("📤 Upload Corpus Files (Load New)", expanded=False):
+                render_upload_ui()
         col_a, col_b = st.columns(2)
         
         with col_a:
@@ -241,9 +243,7 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
 
 
     # Show classification for ALL languages now (via Translation)
-    show_classification = True
-    
-    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "🏷️ Named Entities", "📖 Reading Ease"]
+    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "🏷️ Named Entities", "📖 Reading Ease", "📖 Lexical Complexity"]
     
     selected_tab = render_custom_button_tabs(tabs_list, key_suffix)
     
@@ -288,6 +288,9 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     elif selected_tab == "📖 Reading Ease":
         _render_reading_ease_tab(path, key_suffix)
 
+    elif selected_tab == "📖 Lexical Complexity":
+        _render_lexical_complexity_tab(path, key_suffix)
+
 def render_full_overview(name, path, stats, structure, error):
     # --- XML Restriction Filters ---
     xml_filters = render_xml_restriction_filters(path, "overview_full")
@@ -313,7 +316,7 @@ def render_full_overview(name, path, stats, structure, error):
     current_lang = ov.get_corpus_language(path)
     show_classification = True
     
-    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "🏷️ Named Entity Recognition (NER)", "📖 Reading Ease"]
+    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "🏷️ Named Entity Recognition (NER)", "📖 Reading Ease", "📖 Lexical Complexity"]
 
     selected_tab = render_custom_button_tabs(tabs_list, "full")
     
@@ -395,6 +398,9 @@ def render_full_overview(name, path, stats, structure, error):
 
         elif selected_tab == "📖 Reading Ease":
             _render_reading_ease_tab(path, "full")
+
+        elif selected_tab == "📖 Lexical Complexity":
+            _render_lexical_complexity_tab(path, "full")
 
         st.markdown("---")
         if st.button("🧠 Interpret Corpus Overview (LLM)", key="llm_overview_btn"):
@@ -968,6 +974,108 @@ def auto_process_online_files(files):
             set_state('target_lang', lang_code)
             st.success("Online corpus loaded successfully!")
             st.rerun()
+
+def render_upload_ui():
+    from core.preprocessing.corpus_loader import load_monolingual_corpus_files
+    from core.config import STANZA_LANG_MAP
+    
+    st.subheader("📤 Upload Corpus Files")
+    st.write("Select XML, TXT, CSV, or XLSX files from your device to load them:")
+    
+    uploaded_files = st.file_uploader(
+        "Choose files", 
+        accept_multiple_files=True,
+        type=['xml', 'txt', 'csv', 'xlsx'],
+        key="main_corpus_file_uploader"
+    )
+    
+    # Language and Format Selection
+    lang_col, fmt_col = st.columns(2)
+    with lang_col:
+        st.markdown("**Language**")
+        # Prepare language list. Add 'OTHER' at the end.
+        lang_options = list(STANZA_LANG_MAP.keys()) + ["OTHER"]
+        selected_lang_label = st.radio(
+            "Language Select", 
+            lang_options, 
+            index=0,
+            horizontal=True,
+            key="upload_language_select",
+            label_visibility="collapsed"
+        )
+        
+        # Map label to code for processing
+        if selected_lang_label == "OTHER":
+            lang_code = "OTHER"
+        else:
+            lang_code = STANZA_LANG_MAP[selected_lang_label]
+            
+    with fmt_col:
+        st.markdown("**Format**")
+        fmt = st.radio(
+            "Format Select", 
+            ["Raw (Natural text)", "Tagged (Vertical)"], 
+            index=0,
+            horizontal=True,
+            key="upload_format_select",
+            label_visibility="collapsed"
+        )
+    
+    if uploaded_files:
+        st.write("") # spacing
+        if st.button("Process Uploaded Files", type="primary", use_container_width=True):
+            # Force reload logic to pick up hotfixes
+            import sys
+            import importlib
+            try:
+                for mod in ['core.preprocessing.tagging', 'core.preprocessing.xml_parser', 'core.preprocessing.corpus_loader']:
+                    if mod in sys.modules:
+                        importlib.reload(sys.modules[mod])
+                st.toast("Processing modules updated! 🔄")
+            except Exception as e:
+                print(f"Reload Error: {e}")
+
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            def update_progress(val, text):
+                progress_bar.progress(val)
+                status_text.caption(text)
+
+            with st.spinner("Processing Corpus..."):
+                result = notify_timing("Corpus loaded")(load_monolingual_corpus_files)(
+                    uploaded_files, 
+                    explicit_lang_code=lang_code,
+                    selected_format=fmt,
+                    progress_callback=update_progress
+                )
+                
+                if result.get('error'):
+                    st.error(result['error'])
+                else:
+                    if result.get('warning'):
+                        st.warning(result['warning'])
+                        
+                    if not get_state('comparison_mode'):
+                        set_state('current_corpus_path', result['db_path'])
+                        set_state('corpus_stats', result['stats'])
+                        set_state('current_corpus_name', "Uploaded Batch")
+                        set_state('xml_structure_data', result.get('structure'))
+                        set_state('target_lang', lang_code)
+                    else:
+                        if not get_state('current_corpus_path'):
+                            set_state('current_corpus_path', result['db_path'])
+                            set_state('corpus_stats', result['stats'])
+                            set_state('current_corpus_name', "Primary")
+                            set_state('xml_structure_data', result.get('structure'))
+                        else:
+                            set_state('comp_corpus_path', result['db_path'])
+                            set_state('comp_corpus_stats', result['stats'])
+                            set_state('comp_corpus_name', "Comparison")
+                            set_state('comp_xml_structure_data', result.get('structure'))
+                    
+                    st.success("Corpus Loaded Successfully!")
+                    st.rerun()
 
 def render_built_in_corpora_selection_ui():
     from core.config import get_available_corpora, BUILT_IN_CORPUS_DETAILS
@@ -1834,5 +1942,463 @@ def _render_ner_tab(db_path, key_suffix=""):
                     st.error("Failed to write XML annotations to the database.")
     elif df_flat is not None:
         st.info("No entities were detected in the corpus matching the selected criteria.")
+
+
+def _render_lexical_complexity_tab(db_path, key_suffix=""):
+    st.subheader("📖 Lexical Complexity Analysis")
+    
+    # Scan for available wordlists in the corpus language folder
+    lang_name = ov.get_corpus_language(db_path)
+    lang_clean = lang_name.strip().lower()
+    
+    wl_dir = os.path.join("wordlist", lang_clean)
+    if not os.path.isdir(wl_dir):
+        wl_dir = os.path.join("..", "wordlist", lang_clean)
+        
+    available_wordlists = {}
+    if os.path.isdir(wl_dir):
+        for f in os.listdir(wl_dir):
+            if f.endswith(".txt") or f.endswith(".csv"):
+                # Clean name for display
+                clean_name = f.replace("_wordlist.txt", "").replace("_stats.csv", "").replace("_", " ").title()
+                available_wordlists[clean_name] = os.path.join(wl_dir, f)
+                
+    selected_wl_path = None
+    if available_wordlists:
+        selected_wl_name = st.radio(
+            "📚 **Select Lexical Sophistication Reference Wordlist:**",
+            options=list(available_wordlists.keys()),
+            horizontal=True,
+            key=f"wl_complexity_select_{key_suffix}"
+        )
+        selected_wl_path = available_wordlists[selected_wl_name]
+    else:
+        st.info(f"No reference wordlists found in '{os.path.join('wordlist', lang_clean)}' for sophistication analysis.")
+
+    # Scan for sub-corpus XML attributes
+    from core.preprocessing.xml_parser import get_xml_attribute_columns
+    
+    conn = duckdb.connect(db_path, read_only=True)
+    attr_cols = get_xml_attribute_columns(conn)
+    conn.close()
+    
+    # Filter filename out of XML attributes
+    if attr_cols and "filename" in attr_cols:
+        attr_cols.remove("filename")
+        
+    st.markdown("### 📊 Analysis Level & Grouping")
+    grouping_basis = st.radio(
+        "Group comparative analysis by:",
+        options=["File-by-file", "By Sub-corpus"],
+        index=0,
+        horizontal=True,
+        key=f"complexity_grouping_basis_{key_suffix}"
+    )
+        
+    group_col = "filename"
+    if grouping_basis == "By Sub-corpus":
+        if attr_cols:
+            selected_attr = st.radio(
+                "Select XML attribute to group sub-corpora:",
+                options=attr_cols,
+                horizontal=True,
+                key=f"complexity_group_attr_{key_suffix}"
+            )
+            group_col = selected_attr
+        else:
+            st.warning("No sub-corpus attributes (XML tags) found in the database. Defaulting to File-by-file grouping.")
+
+    with st.spinner("Analyzing lexical complexity metrics..."):
+        results = lc.calculate_corpus_lexical_complexity(db_path, selected_wl_path, group_by_column=group_col)
+        
+    if not results:
+        st.info("No text data found in the corpus.")
+        return
+        
+    lang = results.get("language", "English")
+    overall = results.get("overall", {})
+    files = results.get("files", {})
+    
+    # Render two side-by-side columns/boxes
+    box1, box2 = st.columns(2)
+    
+    with box1:
+        st.markdown('<div style="padding: 15px; border: 1px solid #3b3f46; border-radius: 8px; background: #1a1c23; margin-bottom: 20px;">'
+                    '<h4 style="margin: 0; color: #4f8bf9;">⚙️ Generic Lexical Complexity</h4>'
+                    '<p style="font-size: 0.9em; color: #888; margin: 5px 0 0 0;">Language-agnostic measures calculated using lemma type and token distributions (no POS tagging required).</p>'
+                    '</div>', unsafe_allow_html=True)
+        
+        gen_overall = overall.get("generic", {})
+        if gen_overall:
+            def get_ttr_label(v):
+                if v < 0.40: return "Low Variation"
+                if v <= 0.70: return "Average Variation"
+                return "High Variation"
+
+            def get_rttr_label(v):
+                if v < 4.5: return "Low Variation"
+                if v <= 7.0: return "Average Variation"
+                return "High Variation"
+
+            def get_cttr_label(v):
+                if v < 3.0: return "Low Variation"
+                if v <= 5.0: return "Average Variation"
+                return "High Variation"
+
+            def get_logttr_label(v):
+                if v < 0.80: return "Low Variation"
+                if v <= 0.90: return "Average Variation"
+                return "High Variation"
+
+            def get_uber_label(v):
+                if v < 20.0: return "Low Variation"
+                if v <= 35.0: return "Average Variation"
+                return "High Variation"
+
+            def get_mtld_label(v):
+                if v < 50.0: return "Low / Repetitive"
+                if v <= 80.0: return "Medium / Intermediate"
+                if v <= 110.0: return "High / Academic"
+                return "Very High Variation"
+
+            def get_sttr_label(v):
+                if v < 0.65: return "Low Variation"
+                if v <= 0.78: return "Average Variation"
+                return "High Variation"
+
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                st.metric("Tokens (N)", f"{gen_overall.get('N', 0):,}", help="Total number of word tokens (running words) in the corpus.")
+                st.caption("Total Word Count")
+            with m2:
+                st.metric("Types (V)", f"{gen_overall.get('V', 0):,}", help="Total number of unique word lemmas (types) in the corpus.")
+                st.caption("Unique Word Count")
+            with m3:
+                val = gen_overall.get('TTR', 0.0)
+                st.metric("TTR", f"{val:.4f}", help="Type-Token Ratio (V/N). Measures vocabulary variation. Highly sensitive to text length (longer texts have lower TTR).")
+                st.caption(get_ttr_label(val))
+            
+            m4, m5, m6 = st.columns(3)
+            with m4:
+                val = gen_overall.get('RTTR', 0.0)
+                st.metric("Guiraud (RTTR)", f"{val:.4f}", help="Root Type-Token Ratio (V / sqrt(N)). Controls for text length better than TTR.")
+                st.caption(get_rttr_label(val))
+            with m5:
+                val = gen_overall.get('CTTR', 0.0)
+                st.metric("Carroll (CTTR)", f"{val:.4f}", help="Corrected Type-Token Ratio (V / sqrt(2*N)). Adjusts for sample size.")
+                st.caption(get_cttr_label(val))
+            with m6:
+                val = gen_overall.get('LogTTR', 0.0)
+                st.metric("Herdan (LogTTR)", f"{val:.4f}", help="Logarithmic Type-Token Ratio (log(V) / log(N)). Reduces effect of sample size.")
+                st.caption(get_logttr_label(val))
+            
+            m7, m8, m9 = st.columns(3)
+            with m7:
+                val = gen_overall.get('Uber', 0.0)
+                st.metric("Uber Index", f"{val:.4f}", help="Uber Index (log(N)^2 / (log(N) - log(V))). A highly stable measure across different text lengths.")
+                st.caption(get_uber_label(val))
+            with m8:
+                val = gen_overall.get('MTLD', 0.0)
+                st.metric("MTLD", f"{val:.4f}", help="Measure of Textual Lexical Diversity. Calculates the mean length of sequential word runs that maintain a target TTR. Highly robust to text length.")
+                st.caption(get_mtld_label(val))
+            with m9:
+                val = gen_overall.get('STTR_50', 0.0)
+                st.metric("STTR / MSTTR (50)", f"{val:.4f}", help="Mean Segmental Type-Token Ratio calculated across non-overlapping segments of 50 words.")
+                st.caption(get_sttr_label(val))
+
+            m10, m11 = st.columns(2)
+            with m10:
+                val = gen_overall.get('STTR_100', 0.0)
+                st.metric("STTR / MSTTR (100)", f"{val:.4f}", help="Mean Segmental Type-Token Ratio calculated across non-overlapping segments of 100 words. Ideal benchmark standard.")
+                st.caption(get_sttr_label(val))
+            with m11:
+                val = gen_overall.get('STTR_200', 0.0)
+                st.metric("STTR / MSTTR (200)", f"{val:.4f}", help="Mean Segmental Type-Token Ratio calculated across non-overlapping segments of 200 words.")
+                st.caption(get_sttr_label(val))
+            
+    with box2:
+        st.markdown('<div style="padding: 15px; border: 1px solid #3b3f46; border-radius: 8px; background: #1a1c23; margin-bottom: 20px;">'
+                    '<h4 style="margin: 0; color: #e06c75;"><a href="https://sites.psu.edu/xxl13/lca/" target="_blank" style="color: #e06c75; text-decoration: none;">🏷️ Lu\'s LCA</a></h4>'
+                    '<p style="font-size: 0.9em; color: #888; margin: 5px 0 0 0;">POS-tag and language dependent metrics. Computes Lexical Density, Class Variations, and Sophistication.</p>'
+                    '</div>', unsafe_allow_html=True)
+        
+        # User warning
+        st.warning("⚠️ **Linguistic Interpretation Warning:** Specific metrics rely on the accuracy of the corpus language settings, POS tagging, lemmatization, and POS category mappings. Please check again these conditions before making conclusions.")
+        
+        spec_overall = overall.get("specific", {})
+        if not spec_overall:
+            st.info("Specific POS complexity metrics are not available for this corpus (check that POS tags are populated and defined).")
+        else:
+            def get_ld_label(v):
+                if v < 0.45: return "Sparse / Spoken Style"
+                if v <= 0.52: return "Standard Density"
+                return "Dense / Written Prose"
+
+            def get_lv_label(v):
+                if v < 0.60: return "Low Variation"
+                if v <= 0.80: return "Average Variation"
+                return "High Variation"
+
+            def get_nv_label(v):
+                if v < 0.15: return "Low Noun Diversity"
+                if v <= 0.25: return "Average Noun Diversity"
+                return "High Noun Diversity"
+
+            def get_vv1_label(v):
+                if v < 0.50: return "Low Verb Diversity"
+                if v <= 0.75: return "Average Verb Diversity"
+                return "High Verb Diversity"
+
+            def get_vv2_label(v):
+                if v < 0.10: return "Low Verb Diversity"
+                if v <= 0.20: return "Average Verb Diversity"
+                return "High Verb Diversity"
+
+            def get_cvv1_label(v):
+                if v < 2.0: return "Low Verb Diversity"
+                if v <= 3.5: return "Average Verb Diversity"
+                return "High Verb Diversity"
+
+            def get_adjv_label(v):
+                if v < 0.05: return "Low Adj Diversity"
+                if v <= 0.12: return "Average Adj Diversity"
+                return "High Adj Diversity"
+
+            def get_advv_label(v):
+                if v < 0.02: return "Low Adv Diversity"
+                if v <= 0.08: return "Average Adv Diversity"
+                return "High Adv Diversity"
+
+            def get_modv_label(v):
+                if v < 0.08: return "Low Mod Diversity"
+                if v <= 0.20: return "Average Mod Diversity"
+                return "High Mod Diversity"
+
+            def get_ls_label(v):
+                if v < 0.15: return "Low Sophistication"
+                if v <= 0.35: return "Average Sophistication"
+                return "High Sophistication"
+
+            def get_vs_label(v):
+                if v < 0.10: return "Low Verb Sophistication"
+                if v <= 0.30: return "Average Verb Sophistication"
+                return "High Verb Sophistication"
+
+            def get_cvs1_label(v):
+                if v < 1.0: return "Low Verb Sophistication"
+                if v <= 2.2: return "Average Verb Sophistication"
+                return "High Verb Sophistication"
+
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                val = spec_overall.get('LD', 0.0)
+                st.metric("Lexical Density (LD)", f"{val:.4f}", help="Ratio of lexical words (nouns, verbs, adjectives, adverbs) to total words. Measures information density.")
+                st.caption(get_ld_label(val))
+            with m2:
+                val = spec_overall.get('LV', 0.0)
+                st.metric("Lexical Variation (LV)", f"{val:.4f}", help="Ratio of unique lexical words to total lexical words. Measures content word vocabulary range.")
+                st.caption(get_lv_label(val))
+            with m3:
+                val = spec_overall.get('NV', 0.0)
+                st.metric("Noun Variation (NV)", f"{val:.4f}", help="Ratio of unique nouns to total lexical words. Measures noun diversity.")
+                st.caption(get_nv_label(val))
+            
+            m4, m5, m6 = st.columns(3)
+            with m4:
+                val = spec_overall.get('VV1', 0.0)
+                st.metric("Verb Variation (VV1)", f"{val:.4f}", help="Ratio of unique verbs to total verbs. Measures verb vocabulary variation.")
+                st.caption(get_vv1_label(val))
+            with m5:
+                val = spec_overall.get('VV2', 0.0)
+                st.metric("Verb Variation (VV2)", f"{val:.4f}", help="Ratio of unique verbs to total lexical words. Verb diversity scaled to corpus size.")
+                st.caption(get_vv2_label(val))
+            with m6:
+                val = spec_overall.get('CVV1', 0.0)
+                st.metric("Corr. Verb Var (CVV1)", f"{val:.4f}", help="Corrected Verb Variation (unique verbs / sqrt(2 * total verbs)). Controls for text length.")
+                st.caption(get_cvv1_label(val))
+            
+            m7, m8, m9 = st.columns(3)
+            with m7:
+                val = spec_overall.get('AdjV', 0.0)
+                st.metric("Adj Variation (AdjV)", f"{val:.4f}", help="Ratio of adjectives to total lexical words. Measures adjective diversity.")
+                st.caption(get_adjv_label(val))
+            with m8:
+                val = spec_overall.get('AdvV', 0.0)
+                st.metric("Adv Variation (AdvV)", f"{val:.4f}", help="Ratio of adverbs to total lexical words. Measures adverb diversity.")
+                st.caption(get_advv_label(val))
+            with m9:
+                val = spec_overall.get('Modifier Var (ModV)', 0.0)
+                st.metric("Modifier Var (ModV)", f"{val:.4f}", help="Ratio of modifiers (adjectives + adverbs) to total lexical words. Measures modifier density.")
+                st.caption(get_modv_label(val))
+            
+            if "LS1" in spec_overall:
+                st.markdown("**Sophistication Metrics (NGSL Reference)**")
+                m10, m11, m12 = st.columns(3)
+                with m10:
+                    val = spec_overall.get('LS1', 0.0)
+                    st.metric("Lexical Soph. (LS1)", f"{val:.4f}", help="Ratio of sophisticated word tokens (not in top frequency bands of the selected reference wordlist) to total lexical words.")
+                    st.caption(get_ls_label(val))
+                with m11:
+                    val = spec_overall.get('LS2', 0.0)
+                    st.metric("Lexical Soph. (LS2)", f"{val:.4f}", help="Ratio of sophisticated word types to total lexical word types.")
+                    st.caption(get_ls_label(val))
+                with m12:
+                    val = spec_overall.get('VS1', 0.0)
+                    st.metric("Verb Soph. (VS1)", f"{val:.4f}", help="Ratio of sophisticated verb tokens to total verb tokens.")
+                    st.caption(get_vs_label(val))
+                
+                m13, m14 = st.columns([1, 2])
+                with m13:
+                    val = spec_overall.get('VS2', 0.0)
+                    st.metric("Verb Soph. (VS2)", f"{val:.4f}", help="Ratio of sophisticated verb types to total verb types.")
+                    st.caption(get_vs_label(val))
+                with m14:
+                    val = spec_overall.get('CVS1', 0.0)
+                    st.metric("Corr. Verb Soph. (CVS1)", f"{val:.4f}", help="Corrected Verb Sophistication (sophisticated verb types / sqrt(2 * total verbs)). Controls for length.")
+                    st.caption(get_cvs1_label(val))
+
+    st.markdown("---")
+    if group_col == "filename":
+        st.markdown("### 📄 File-by-file Comparative Analysis")
+        group_col_name = "Filename"
+    else:
+        st.markdown(f"### 🧱 Sub-corpus Comparative Analysis (grouped by '{group_col}')")
+        group_col_name = f"Sub-corpus ({group_col})"
+    
+    # Prepare comparative dataframe
+    file_rows = []
+    for fname, f_metrics in files.items():
+        row = {group_col_name: fname}
+        
+        # Generic
+        f_gen = f_metrics.get("generic", {})
+        row.update({
+            "Tokens (N)": f_gen.get("N", 0),
+            "Types (V)": f_gen.get("V", 0),
+            "TTR": f_gen.get("TTR", 0.0),
+            "MTLD": f_gen.get("MTLD", 0.0),
+            "STTR (50)": f_gen.get("STTR_50", 0.0),
+            "STTR (100)": f_gen.get("STTR_100", 0.0),
+            "STTR (200)": f_gen.get("STTR_200", 0.0),
+            "Guiraud (RTTR)": f_gen.get("RTTR", 0.0),
+            "Carroll (CTTR)": f_gen.get("CTTR", 0.0),
+            "Herdan (LogTTR)": f_gen.get("LogTTR", 0.0),
+            "Uber Index": f_gen.get("Uber", 0.0),
+        })
+        
+        # Specific
+        f_spec = f_metrics.get("specific", {})
+        if f_spec:
+            row.update({
+                "Lexical Density (LD)": f_spec.get("LD", 0.0),
+                "Lexical Variation (LV)": f_spec.get("LV", 0.0),
+                "Noun Variation (NV)": f_spec.get("NV", 0.0),
+                "Verb Variation (VV1)": f_spec.get("VV1", 0.0),
+                "Verb Variation (VV2)": f_spec.get("VV2", 0.0),
+                "Adj Variation (AdjV)": f_spec.get("AdjV", 0.0),
+                "Adv Variation (AdvV)": f_spec.get("AdvV", 0.0),
+                "Modifier Var (ModV)": f_spec.get("ModV", 0.0),
+            })
+            if "LS1" in f_spec:
+                row.update({
+                    "Lexical Soph. (LS1)": f_spec.get("LS1", 0.0),
+                    "Lexical Soph. (LS2)": f_spec.get("LS2", 0.0),
+                    "Verb Soph. (VS1)": f_spec.get("VS1", 0.0),
+                    "Verb Soph. (VS2)": f_spec.get("VS2", 0.0),
+                    "Corr. Verb Soph. (CVS1)": f_spec.get("CVS1", 0.0),
+                })
+        file_rows.append(row)
+        
+    df_files = pd.DataFrame(file_rows)
+    st.dataframe(df_files, use_container_width=True, hide_index=True)
+    
+    st.download_button(
+        "⬇ Download Lexical Complexity (Excel)",
+        data=df_to_excel_bytes(df_files),
+        file_name=f"lexical_complexity_{group_col}_{key_suffix}.xlsx"
+    )
+
+    st.markdown("---")
+    with st.expander("📚 Metric Definitions & Academic References"):
+        st.markdown(
+            "### Metric Formulas & Definitions\n"
+            "Here $N$ is the total count of tokens, and $V$ is the total count of unique lemmas (types).\n\n"
+            "#### ⚙️ Generic Lexical Complexity Formulas\n"
+            "- **Type-Token Ratio (TTR)**:  \n"
+            "  $$TTR = \\frac{V}{N}$$\n"
+            "- **Guiraud's Root TTR (RTTR)**:  \n"
+            "  $$RTTR = \\frac{V}{\\sqrt{N}}$$\n"
+            "- **Carroll's Corrected TTR (CTTR)**:  \n"
+            "  $$CTTR = \\frac{V}{\\sqrt{2N}}$$\n"
+            "- **Herdan's LogTTR (LogTTR)**:  \n"
+            "  $$LogTTR = \\frac{\\log(V)}{\\log(N)}$$\n"
+            "- **Uber Index**:  \n"
+            "  $$Uber = \\frac{\\log(N)^2}{\\log(N) - \\log(V)}$$\n"
+            "- **MTLD (Measure of Textual Lexical Diversity)**:  \n"
+            "  Calculates the average length of text segments (runs) that maintain a Type-Token Ratio above a threshold (typically $0.72$), computed in both forward and backward directions.\n"
+            "- **MSTTR (Mean Segmental TTR)**:  \n"
+            "  $$\\text{MSTTR}(W) = \\frac{1}{K} \\sum_{i=1}^{K} \\text{TTR}_i$$\n"
+            "  where the text is divided into $K$ non-overlapping segments of fixed size $W$ (e.g., $50, 100, 200$).\n\n"
+            "#### 🏷️ Lu's LCA (POS-Specific) Formulas\n"
+            "Let $N_{lex}$ and $V_{lex}$ denote the total tokens and unique types of lexical (content) words: nouns, verbs, adjectives, and adverbs.\n\n"
+            "- **Lexical Density (LD)**:  \n"
+            "  $$LD = \\frac{N_{lex}}{N}$$\n"
+            "- **Lexical Variation (LV)**:  \n"
+            "  $$LV = \\frac{V_{lex}}{N_{lex}}$$\n"
+            "- **Noun Variation (NV)**:  \n"
+            "  $$NV = \\frac{V_{noun}}{N_{lex}}$$\n"
+            "- **Verb Variation (VV1, VV2, CVV1)**:  \n"
+            "  $$VV1 = \\frac{V_{verb}}{N_{verb}}, \\quad VV2 = \\frac{V_{verb}}{N_{lex}}, \\quad CVV1 = \\frac{V_{verb}}{\\sqrt{2N_{verb}}}$$\n"
+            "- **Adjective Variation (AdjV)**:  \n"
+            "  $$AdjV = \\frac{V_{adj}}{N_{lex}}$$\n"
+            "- **Adverb Variation (AdvV)**:  \n"
+            "  $$AdvV = \\frac{V_{adv}}{N_{lex}}$$\n"
+            "- **Modifier Variation (ModV)**:  \n"
+            "  $$ModV = \\frac{V_{adj} + V_{adv}}{N_{lex}}$$\n"
+            "- **Lexical Sophistication (LS1, LS2)**:  \n"
+            "  Let $N_{soph}$ and $V_{soph}$ represent lexical tokens and types that are not found within the high-frequency bands of the selected reference wordlist:\n"
+            "  $$LS1 = \\frac{N_{soph}}{N_{lex}}, \\quad LS2 = \\frac{V_{soph}}{V_{lex}}$$\n"
+            "- **Verb Sophistication (VS1, VS2, CVS1)**:  \n"
+            "  $$VS1 = \\frac{N_{v, soph}}{N_{verb}}, \\quad VS2 = \\frac{V_{v, soph}}{V_{verb}}, \\quad CVS1 = \\frac{V_{v, soph}}{\\sqrt{2N_{verb}}}$$\n\n"
+            "#### 📊 Interpretation Ranges & Benchmark Ratings\n"
+            "These empirical rating thresholds are used for the labels displayed beneath each metric:\n\n"
+            "* **Type-Token Ratio (TTR)**: Low ($<0.40$), Average ($0.40 - 0.70$), High ($>0.70$)\n"
+            "* **Guiraud (RTTR)**: Low ($<4.5$), Average ($4.5 - 7.0$), High ($>7.0$)\n"
+            "* **Carroll (CTTR)**: Low ($<3.0$), Average ($3.0 - 5.0$), High ($>5.0$)\n"
+            "* **Herdan (LogTTR)**: Low ($<0.80$), Average ($0.80 - 0.90$), High ($>0.90$)\n"
+            "* **Uber Index**: Low ($<20.0$), Average ($20.0 - 35.0$), High ($>35.0$)\n"
+            "* **MTLD**: Low / Repetitive ($<50.0$), Medium / Intermediate ($50.0 - 80.0$), High / Academic ($80.0 - 110.0$), Very High ($>110.0$)\n"
+            "* **MSTTR (50, 100, 200)**: Low ($<0.65$), Average ($0.65 - 0.78$), High ($>0.78$)\n"
+            "* **Lexical Density (LD)**: Sparse / Spoken ($<0.45$), Standard ($0.45 - 0.52$), Dense / Written ($>0.52$)\n"
+            "* **Lexical Variation (LV)**: Low ($<0.60$), Average ($0.60 - 0.80$), High ($>0.80$)\n"
+            "* **Noun Variation (NV)**: Low ($<0.15$), Average ($0.15 - 0.25$), High ($>0.25$)\n"
+            "* **Verb Variation (VV1)**: Low ($<0.50$), Average ($0.50 - 0.75$), High ($>0.75$)\n"
+            "* **Verb Variation (VV2)**: Low ($<0.10$), Average ($0.10 - 0.20$), High ($>0.20$)\n"
+            "* **Corrected Verb Variation (CVV1)**: Low ($<2.0$), Average ($2.0 - 3.5$), High ($>3.5$)\n"
+            "* **Adjective Variation (AdjV)**: Low ($<0.05$), Average ($0.05 - 0.12$), High ($>0.12$)\n"
+            "* **Adverb Variation (AdvV)**: Low ($<0.02$), Average ($0.02 - 0.08$), High ($>0.08$)\n"
+            "* **Modifier Variation (ModV)**: Low ($<0.08$), Average ($0.08 - 0.20$), High ($>0.20$)\n"
+            "* **Lexical Sophistication (LS1, LS2)**: Low ($<0.15$), Average ($0.15 - 0.35$), High ($>0.35$)\n"
+            "* **Verb Sophistication (VS1, VS2)**: Low ($<0.10$), Average ($0.10 - 0.30$), High ($>0.30$)\n"
+            "* **Corrected Verb Sophistication (CVS1)**: Low ($<1.0$), Average ($1.0 - 2.2$), High ($>2.2$)\n\n"
+            "### Academic Reference Guidelines & Benchmark Studies\n"
+            "The standard indices and interpretation labels used in this module are based on the following established "
+            "studies in second language acquisition (SLA), learner corpus linguistics, and vocabulary profiling:\n\n"
+            "- **Lexical Complexity Analyzer (LCA)**:\n"
+            "  * Lu, X. (2010). Automatic analysis of lexical complexity in second language writing. *International Journal of Corpus Linguistics*, 15(4), 474-496. [Lu's LCA Website](https://sites.psu.edu/xxl13/lca/)\n"
+            "- **Measure of Textual Lexical Diversity (MTLD)**:\n"
+            "  * McCarthy, P. M., & Jarvis, S. (2010). MTLD, D, and HD-D: A validation study of sophisticated approaches to lexical diversity assessment. *Behavior Research Methods*, 42(2), 381-392.\n"
+            "- **Type-Token Ratio & Standard Variations (RTTR, CTTR, Herdan, Uber)**:\n"
+            "  * Carroll, J. B. (1964). *Language and thought*. Englewood Cliffs, NJ: Prentice-Hall. (Carroll's CTTR index)\n"
+            "  * Guiraud, P. (1954). *Les caractères statistiques du vocabulaire*. Paris: Presses Universitaires de France. (Guiraud's RTTR index)\n"
+            "  * Herdan, G. (1960). *Type-token mathematics*. The Hague: Mouton. (Herdan's LogTTR C-index)\n"
+            "  * Dugast, D. (1979). *Vocabulaire et stylistique*. Paris: Slatkine. (Uber Index derivation)\n"
+            "- **Lexical Sophistication & Vocabulary Profiling**:\n"
+            "  * Laufer, B., & Nation, P. (1995). Vocabulary size and use: Lexical richness in L2 written production. *Applied Linguistics*, 16(3), 307-322. (Lexical Frequency Profile concept)\n"
+            "- **Lexical Density & Register Variation**:\n"
+            "  * Biber, D., Johansson, S., Leech, G., Conrad, S., & Finegan, E. (1999). *Longman Grammar of Spoken and Written English*. Longman. (Density benchmarks in written vs. spoken registers)\n"
+        )
+
+
 
 

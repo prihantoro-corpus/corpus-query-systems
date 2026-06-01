@@ -42,5 +42,16 @@ class TestWordProfiler(unittest.TestCase):
         df = run_word_profiler_analysis(None, {})
         self.assertTrue(df.empty)
 
+    def test_load_wordlist_lemma_only(self):
+        # 3 column layout where first column is empty, second is Level/Category, third is lemma
+        content = "\tLevel 8\tthe\n\tLevel 7\tbe\n\tLevel 8\tand"
+        wl = load_wordlist(content, is_file=False)
+        self.assertNotIn('', wl)
+        self.assertNotIn('nan', wl)
+        self.assertEqual(wl['the'], 'Level 8')
+        self.assertEqual(wl['be'], 'Level 7')
+        self.assertEqual(wl['and'], 'Level 8')
+        self.assertEqual(len(wl), 3)
+
 if __name__ == '__main__':
     unittest.main()

@@ -146,10 +146,19 @@ GUIDELINES = {
           * **Dice Coefficient**: Evaluates overlap ratio.
         * **Context Window**: Determine the span of words surrounding the node word to search (e.g., 5 words to the left/right).
         * **Show all collocates in concordance**: Check this box to retrieve and display **all** matching concordance lines for each collocate instead of a single sample instance.
-          * ⚠️ *Warning: This will query and show all occurrences in the concordance and may take significant time to load.*
         
         #### 2. Advanced Filters & XML Restrictions
-        * Apply positional filters (Tokens/Lemmas/POS) and XML restrictions to analyze collocations in specific sub-corpora.
+        * Apply positional filters (Tokens, Lemmas, and POS) and XML restrictions to analyze collocations in specific sub-corpora.
+        * **Case-Insensitive Positive & Negative Filters**:
+          * Prefix a term with a minus sign (`-`) to exclude it. For example:
+            * Token Filter: `-the` excludes "the".
+            * POS Filter: `-JJ` excludes adjectives.
+            * Lemma Filter: `-buy` excludes the lemma "buy".
+          * Comparisons are completely case-insensitive (e.g., `-jj` works identically to `-JJ`).
+        * **Union Syntax & Negation**:
+          * Wrap choices in parentheses and separate them with a pipe character, e.g. `(JJ|NN)` matches adjectives or nouns. This applies to token, lemma, and POS filters.
+          * Supports negation inside parentheses, e.g. `(-JJ|-NN|-RB)` to exclude adjectives, nouns, and adverbs.
+          * Supports negation outside parentheses, e.g. `-(JJ|NN|RB)` or `-(buy|sell)` which dynamically distributes the exclusion to all elements inside.
         
         #### 3. Collocation Patterns (Optional)
         Cluster collocates dynamically using grammar patterns defined line-by-line (`label : pattern`).
@@ -160,15 +169,26 @@ GUIDELINES = {
           * `+` : Required token (exactly 1 word).
           * `_TAG` : POS tag constraint (e.g. `_VB`).
           * `[lemma]` : Lemma constraint (e.g. `[be]`).
-        * **Bracketed Collocate Filters (<...>)**:
-          * Filter the collocate placeholder `<...>` using POS, lemma, or literal tokens with OR (`|`) semantics inside.
-          * Example: `<_VB>` (verbs), `<are|is|am>` (tokens), `<[be]>` (lemma `be`), `<_NN|_PP|_NNP>` (nouns or pronouns).
-        * **Pattern Unions (`|`)**:
-          * Specify multiple structural options/patterns on a single label line using the outer union symbol `|`.
-          * Example: `agent of passive : # *ed by <_NN|_PP|_NNP> | # *ed by the <_NN|_PP|_NNP>` (retrieves both *"killed by Jack"* and *"killed by the enemy"*).
         
-        #### 4. Interactive Visualization
-        * **Charts & Networks**: Dynamically view collocation scores plotted on graphs. Use the PyVis Network Graph to explore associative paths visually.
+        #### 4. Multi-Node Collocation Comparison
+        Compare the collocates of up to 5 node words inside the active corpus to identify shared and distinct vocabulary environments.
+        
+        * **Shared Collocates**: Shows collocates appearing with more than one node word, sorted by Overlap Degree.
+        * **Unique Collocates**: Separate lists containing collocates exclusive to only one specific node word.
+        * **Combined Strength Formulas**: Choose how the overall association strength is calculated across multiple nodes:
+          * **Simple Aggregate**: The raw sum of scores across node words:
+            $$\\text{Combined Score} = \\sum_{i=1}^{N} \\text{Score}_i$$
+          * **Harmonic Mean**: A strict consensus metric that penalizes uneven association strengths (requires high scores across all nodes to rank high):
+            $$\\text{Combined Score} = \\frac{N_{\\text{active}}}{\\sum \\frac{1}{\\text{Score}_i}}$$
+          * **Min-Max Normalization**: Scales individual node collocate scores to a $[0, 1]$ range before combining, eliminating scale differences:
+            $$\\text{Normalized Score} = \\frac{\\text{Score} - \\text{Score}_{\\text{min}}}{\\text{Score}_{\\text{max}} - \\text{Score}_{\\text{min}}}$$
+          * **Z-Score Standardization**: Scores collocates by standard deviations ($\\sigma$) from each node's mean score ($\\mu$), highlighting relative importance:
+            $$\\text{Z-Score} = \\frac{\\text{Score} - \\mu}{\\sigma}$$
+        
+        #### 5. Interactive Visualizations
+        * **Bubble Matrix (Clean Grid)**: Plotted on a clean grid (Node Words vs. Collocates) where circle size represents **Frequency** and circle color represents **Association Score**.
+        * **Stacked Bar Chart**: Displays combined strength as a single horizontal bar where segments are color-coded by node word.
+        * **Overlap Size Overview**: Custom HTML horizontal bars mapping shared combinations. Collocate words are displayed directly inside each bar, with their font sizes dynamically scaled based on their combined association strength.
     """,
     "Dictionary": """
         ### 📖 Dictionary User Guide
@@ -185,14 +205,51 @@ GUIDELINES = {
     "Word Profiler": """
         ### 📖 Word Profiler User Guide
         
-        The Word Profiler builds a multi-dimensional lexical profile for a target word:
+        The Word Profiler analyzes your corpus coverage using pre-defined wordlists (e.g. vocab bands, academic vocabulary lists).
         
-        #### 1. Lexical Diagnostics
-        * Displays the word's absolute frequency, relative frequency (PMW), and distribution rank.
-        * Plots part-of-speech distributions for homographs (e.g., *light* as a noun, verb, or adjective).
+        #### 1. Supported Wordlist Formats
+        Wordlists can be uploaded or loaded from the following file formats:
+        * **Plain Text (`.txt`)**: Tab-separated or single-word per line.
+        * **CSV (`.csv`)**: Commas or tabs separated, containing 1 or 2 columns.
+        * **Excel (`.xlsx` / `.xls`)**: Spreadsheet sheets containing 1 or 2 columns.
         
-        #### 2. Co-occurrence & Context
-        * Lists top collocates grouped by position (immediately left or right) and displays sample concordance contexts.
+        ##### Layout Formats:
+        * **Plain Wordlist (Single Column)**:
+          * A list where each row contains a single word.
+          * All matched words are aggregated under a default category labeled **"Coverage"**.
+          * *Example:*
+            ```text
+            coffee
+            tea
+            milk
+            ```
+        * **Categorized Wordlist (Two Columns)**:
+          * Row structures where Column 1 contains the word and Column 2 contains the category label.
+          * Tab-separated for `.txt`, comma-separated for `.csv`, or cells in columns A and B for Excel.
+          * Useful for evaluating coverage across custom categories (e.g. GSL/AWL lists, vocabulary bands, or semantic domains).
+          * *Example:*
+            ```text
+            apple,Fruits
+            coffee,Beverages
+            milk,Beverages
+            ```
+        * **Three-Column Wordlist (Word, Label, Lemma)**:
+          * Row structures where Column 1 contains the literal word, Column 2 contains the category label, and Column 3 contains the base lemma.
+          * Tab-separated for `.txt`, comma-separated for `.csv`, or columns A, B, and C for Excel.
+          * Both the literal word (Col 1) and its lemma (Col 3) are mapped to the category. This ensures that corpus occurrences match correctly whether they appear as the inflected word or the base lemma (e.g. matching "ran" via its lemma "run").
+          * *Example:*
+            ```text
+            apples,Fruits,apple
+            drinking,Beverages,drink
+            ```
+        * *Note*: If the first row contains labels like *word*, *token*, *lemma*, *collocate*, or *category*, it will be automatically identified and treated as a header row (skipped during analysis). Any words in your corpus not matching the loaded wordlist will automatically be categorized under **OOV** (Out of Vocabulary).
+        
+        #### 2. Configuration Settings
+        * **Analysis Basis**: Evaluate vocabulary coverage across:
+          * **Whole Corpus**: Calculate total corpus coverage metrics.
+          * **By Filename**: Compare coverage levels between different files.
+          * **By Metadata**: Segment and compare coverage based on document attributes (e.g. publication year, genre).
+        * **Filtering**: Restrict analysis to specific document cohorts using XML filters.
     """,
     "Keyword": """
         ### 📖 Keyword Analysis Guide
