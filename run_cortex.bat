@@ -67,6 +67,16 @@ exit /b 1
 echo CORTEX directory located: !CORTEX_DIR!
 cd /d "!CORTEX_DIR!"
 
+:: Create Desktop Shortcut if it doesn't exist
+set "SHORTCUT_PATH=%USERPROFILE%\Desktop\CORTEX.lnk"
+if not exist "%SHORTCUT_PATH%" (
+    echo Creating Desktop Shortcut...
+    powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%USERPROFILE%\Desktop\CORTEX.lnk'); $s.TargetPath = '%~f0'; $s.WorkingDirectory = '%~dp0'; $s.Save()"
+    if exist "%SHORTCUT_PATH%" (
+        echo Shortcut created successfully on Desktop!
+    )
+)
+
 :: Check Python installation
 echo Checking for Python...
 where python >nul 2>nul
