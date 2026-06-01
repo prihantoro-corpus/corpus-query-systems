@@ -71,7 +71,9 @@ cd /d "!CORTEX_DIR!"
 set "SHORTCUT_PATH=%USERPROFILE%\Desktop\CORTEX.lnk"
 if not exist "%SHORTCUT_PATH%" (
     echo Creating Desktop Shortcut...
-    powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%USERPROFILE%\Desktop\CORTEX.lnk'); $s.TargetPath = '%~f0'; $s.WorkingDirectory = '%~dp0'; $s.Save()"
+    set "BATCH_PATH=%~f0"
+    set "BATCH_DIR=%~dp0"
+    powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut($env:SHORTCUT_PATH); $s.TargetPath = $env:BATCH_PATH; $s.WorkingDirectory = $env:BATCH_DIR; $s.Save()"
     if exist "%SHORTCUT_PATH%" (
         echo Shortcut created successfully on Desktop!
     )
