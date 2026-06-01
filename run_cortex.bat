@@ -111,8 +111,8 @@ if exist ".git" (
 
 :: Install/update dependencies (reuses existing global installations quickly)
 echo Checking and installing/updating dependencies...
-!PYTHON_CMD! -m pip install --upgrade pip
-!PYTHON_CMD! -m pip install -r requirements.txt
+:: !PYTHON_CMD! -m pip install --upgrade pip
+:: !PYTHON_CMD! -m pip install -r requirements.txt
 
 :: Run the streamlit app
 echo Launching CORTEX...

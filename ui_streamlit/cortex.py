@@ -14,11 +14,13 @@ import importlib
 import core.config
 import ui_streamlit.state_manager
 import ui_streamlit.components.sidebar
+import ui_streamlit.components.corpus_selection
 import ui_streamlit.views.overview_view
 
 importlib.reload(core.config)
 importlib.reload(ui_streamlit.state_manager)
 importlib.reload(ui_streamlit.components.sidebar)
+importlib.reload(ui_streamlit.components.corpus_selection)
 importlib.reload(ui_streamlit.views.overview_view)
 
 # Debug Imports
@@ -123,18 +125,25 @@ st.markdown(f"""
         -webkit-text-fill-color: #FFFFFF !important;
     }}
     
-    /* Dropdown Menus */
-    ul[data-testid="stSelectboxVirtualDropdown"] {{
-        background-color: {SECONDARY_BACKGROUND} !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
-    }}
+    /* Dropdown Menus (st.selectbox & st.multiselect option popups) */
+    [data-testid="stSelectboxVirtualDropdown"],
+    [data-testid="stSelectboxVirtualDropdown"] ul,
+    [data-testid="stSelectboxVirtualDropdown"] div,
+    [data-testid="stSelectboxVirtualDropdown"] span,
+    [data-testid="stSelectboxVirtualDropdown"] li,
     li[role="option"] {{
-        background-color: {SECONDARY_BACKGROUND} !important;
+        background-color: #1e293b !important;
         color: #FFFFFF !important;
+        border-color: rgba(255, 255, 255, 0.2) !important;
     }}
-    li[role="option"]:hover {{
+    [data-testid="stSelectboxVirtualDropdown"] li:hover,
+    [data-testid="stSelectboxVirtualDropdown"] li:hover span,
+    [data-testid="stSelectboxVirtualDropdown"] li:hover div,
+    li[role="option"]:hover,
+    li[role="option"]:hover span,
+    li[role="option"]:hover div {{
         background-color: {PRIMARY_COLOR} !important;
-        color: white !important;
+        color: #FFFFFF !important;
     }}
     
     /* Multiselect Styling */
@@ -264,6 +273,10 @@ def main():
     st.markdown("## CORTEX: Advanced Corpus Query System <span style='font-size: 0.5em; color: rgba(255,255,255,0.5); font-weight: normal; vertical-align: middle; margin-left: 10px;'>v300526</span>", unsafe_allow_html=True)
     
     st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+    
+    # Render main screen corpus selection banner/settings
+    from ui_streamlit.components.corpus_selection import render_corpus_selection_main
+    render_corpus_selection_main()
     
     # Render Sidebar and get current view
     current_view = render_sidebar()

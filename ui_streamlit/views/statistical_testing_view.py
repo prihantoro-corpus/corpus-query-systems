@@ -108,12 +108,13 @@ def render_statistical_testing_view():
                     if segment_count > 100:
                         st.warning(f"⚠️ **{segment_count} segments** is high for visualization. Consider filtering.")
                 else:
-                    selected_segments = st.multiselect(
-                        "Select segments to analyze",
-                        options=unique_vals,
-                        default=unique_vals[:5] if len(unique_vals) >= 5 else unique_vals,
-                        key="shared_manual_select"
-                    )
+                    st.write("**Select segments to analyze**")
+                    selected_segments = []
+                    with st.container(height=150):
+                        for idx, val in enumerate(unique_vals):
+                            is_default = idx < 5 if len(unique_vals) >= 5 else True
+                            if st.checkbox(str(val), value=is_default, key=f"stat_segment_chk_{val}_{idx}"):
+                                selected_segments.append(val)
                     if not selected_segments:
                         slice_error = "Please select at least 2 segments."
                         slice_ready = False
@@ -394,13 +395,14 @@ def render_statistical_testing_view():
                     ngram_options = {1: "1-gram (Word)", 2: "2-gram (Bigram)", 3: "3-gram (Trigram)"}
                     ngram_help = "Cluster based on words, bigrams, or trigrams. You can select multiple to combine features (e.g., Words + Bigrams)."
 
-                    ngram_selected = st.multiselect(
-                        "Features to Include",
-                        options=[1, 2, 3],
-                        format_func=lambda x: ngram_options[x],
-                        default=[1],
-                        help=ngram_help
-                    )
+                    st.write("**Features to Include**")
+                    ngram_selected = []
+                    if st.checkbox("1-gram (Word)", value=True, key="chk_ngram_1", help=ngram_help):
+                        ngram_selected.append(1)
+                    if st.checkbox("2-gram (Bigram)", value=False, key="chk_ngram_2", help=ngram_help):
+                        ngram_selected.append(2)
+                    if st.checkbox("3-gram (Trigram)", value=False, key="chk_ngram_3", help=ngram_help):
+                        ngram_selected.append(3)
 
                     if not ngram_selected:
                         ngram_selected = [1] # Fallback
@@ -530,13 +532,14 @@ def render_statistical_testing_view():
                 ca_top_n = st.slider("Number of Top Features", 10, 100, 30, key="ca_top_n", 
                                    help="CA works best with 20-50 high-frequency words.")
 
-                ca_ngrams = st.multiselect(
-                    "N-gram Features",
-                    options=[1, 2, 3],
-                    format_func=lambda x: {1: "Words", 2: "Bigrams", 3: "Trigrams"}[x],
-                    default=[1],
-                    key="ca_ngrams"
-                )
+                st.write("**N-gram Features**")
+                ca_ngrams = []
+                if st.checkbox("Words", value=True, key="chk_ca_ngram_1"):
+                    ca_ngrams.append(1)
+                if st.checkbox("Bigrams", value=False, key="chk_ca_ngram_2"):
+                    ca_ngrams.append(2)
+                if st.checkbox("Trigrams", value=False, key="chk_ca_ngram_3"):
+                    ca_ngrams.append(3)
                 if not ca_ngrams: ca_ngrams = [1]
 
                 ca_ready = False
@@ -727,12 +730,13 @@ def render_statistical_testing_view():
                     all_ids = [r[0] for r in con.execute(f"SELECT DISTINCT {aa_grouping_key} FROM corpus ORDER BY {aa_grouping_key}").fetchall()]
                     con.close()
 
-                    known_texts = st.multiselect(
-                        "Known Texts",
-                        options=all_ids,
-                        default=all_ids[:min(5, len(all_ids))],
-                        key="aa_known_files_multi"
-                    )
+                    st.write("**Known Texts**")
+                    known_texts = []
+                    with st.container(height=150):
+                        for idx, val in enumerate(all_ids):
+                            is_default = idx < min(5, len(all_ids))
+                            if st.checkbox(str(val), value=is_default, key=f"aa_known_txt_chk_{val}_{idx}"):
+                                known_texts.append(val)
                     st.session_state['aa_known_texts'] = known_texts
 
                     # Show author mapping
@@ -752,11 +756,12 @@ def render_statistical_testing_view():
                     st.caption("Select files to attribute")
 
                     available_questioned = [f for f in all_ids if f not in known_texts]
-                    questioned_texts = st.multiselect(
-                        "Questioned Texts",
-                        options=available_questioned,
-                        key="aa_questioned_files_multi"
-                    )
+                    st.write("**Questioned Texts**")
+                    questioned_texts = []
+                    with st.container(height=150):
+                        for idx, val in enumerate(available_questioned):
+                            if st.checkbox(str(val), key=f"aa_quest_txt_chk_{val}_{idx}"):
+                                questioned_texts.append(val)
                     st.session_state['aa_questioned_texts'] = questioned_texts
 
                 else:  # By XML Metadata
@@ -770,12 +775,12 @@ def render_statistical_testing_view():
                     ).fetchall()]
                     con.close()
 
-                    known_authors = st.multiselect(
-                        f"Known Authors ({author_col})",
-                        options=all_authors,
-                        key="aa_known_authors",
-                        help="Select author values that identify Known texts"
-                    )
+                    st.write(f"**Known Authors ({author_col})**")
+                    known_authors = []
+                    with st.container(height=150):
+                        for idx, val in enumerate(all_authors):
+                            if st.checkbox(str(val), key=f"aa_known_auth_chk_{val}_{idx}"):
+                                known_authors.append(val)
 
                     # Preview Known texts
                     if known_authors:
@@ -799,12 +804,12 @@ def render_statistical_testing_view():
                     # Filter out already-selected known authors
                     available_questioned_authors = [a for a in all_authors if a not in known_authors]
 
-                    questioned_authors = st.multiselect(
-                        f"Questioned Authors ({author_col})",
-                        options=available_questioned_authors,
-                        key="aa_questioned_authors",
-                        help="Select author values that identify Questioned texts"
-                    )
+                    st.write(f"**Questioned Authors ({author_col})**")
+                    questioned_authors = []
+                    with st.container(height=150):
+                        for idx, val in enumerate(available_questioned_authors):
+                            if st.checkbox(str(val), key=f"aa_quest_auth_chk_{val}_{idx}"):
+                                questioned_authors.append(val)
 
                     # Preview Questioned texts
                     if questioned_authors:
@@ -1223,12 +1228,13 @@ def render_statistical_testing_view():
                     con.close()
 
                 # Group selection
-                groups = st.multiselect(
-                    f"Select groups to compare (from '{grouping_attr}')",
-                    options=unique_vals,
-                    default=unique_vals[:2] if len(unique_vals) >= 2 else unique_vals,
-                    key="stats_groups"
-                )
+                st.write(f"**Select groups to compare (from '{grouping_attr}')**")
+                groups = []
+                with st.container(height=150):
+                    for idx, val in enumerate(unique_vals):
+                        is_default = idx < 2 if len(unique_vals) >= 2 else True
+                        if st.checkbox(str(val), value=is_default, key=f"stat_compare_group_chk_{val}_{idx}"):
+                            groups.append(val)
 
                 if len(groups) != 2:
                     st.warning("⚠️ Phase 1 MVP supports only 2-group comparisons. Please select exactly 2 groups.")

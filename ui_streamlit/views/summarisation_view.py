@@ -50,7 +50,12 @@ def render_summarisation_view():
                 if fields:
                     field = st.radio("Select Metadata Field", fields, horizontal=True)
                     values = get_metadata_values(db_path, field)
-                    selected_values = st.multiselect("Select Value(s)", values, default=[values[0]] if values else [])
+                    st.write("**Select Value(s)**")
+                    selected_values = []
+                    for idx, val in enumerate(values):
+                        is_default = (val == values[0]) if values else False
+                        if st.checkbox(str(val), value=is_default, key=f"sum_val_chk_{val}_{idx}"):
+                            selected_values.append(val)
                 else:
                     st.info("No metadata fields found in this corpus.")
 
@@ -60,7 +65,12 @@ def render_summarisation_view():
                 if filename_fields:
                     field = st.radio("Select File Field", filename_fields, horizontal=True)
                     values = get_metadata_values(db_path, field)
-                    selected_values = st.multiselect("Select File(s)", values, default=[values[0]] if values else [])
+                    st.write("**Select File(s)**")
+                    selected_values = []
+                    for idx, val in enumerate(values):
+                        is_default = (val == values[0]) if values else False
+                        if st.checkbox(str(val), value=is_default, key=f"sum_file_chk_{val}_{idx}"):
+                            selected_values.append(val)
                 else:
                     st.warning("Could not automatically identify a 'File Name' field. Please use 'By Metadata' and select the appropriate field.")
             else:
