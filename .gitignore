@@ -12,6 +12,7 @@ lib/
 # Database
 *.duckdb
 *.duckdb.wal
+*.db
 
 # Stanza Resources
 stanza_resources/

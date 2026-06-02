@@ -12,7 +12,12 @@ KNOWN_CORPORA_MAP = {
     "EN-BPPT (XML Tagged)": "english/EN-BPPT-tagged.xml",
     "Brown 50% Only (XML EN TAGGED)": "english/BrownCorpus.xml",
     "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.xml",
-    "BAWE sample (English)": "english/BAWE.XML",
+    "BAWE sample (English)": "english/BAWE.db",
+}
+
+# Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
+DOWNLOADABLE_ASSETS_MAP = {
+    "english/BAWE.db": "https://github.com/prihantoro-corpus/cortex/releases/download/v1.0.0-data/BAWE.db"
 }
 
 # Alias for backward compatibility
@@ -41,7 +46,7 @@ def get_available_corpora():
         count = 0
         for root, dirs, files in os.walk(CORPORA_DIR):
             for file_name in files:
-                if file_name.lower().endswith(('.xml', '.txt', '.csv', '.xlsx')):
+                if file_name.lower().endswith(('.xml', '.txt', '.csv', '.xlsx', '.db', '.duckdb')):
                     full_path = os.path.join(root, file_name)
                     
                     # Get relative path from CORPORA_DIR
@@ -64,6 +69,12 @@ def get_available_corpora():
                              available[rel_path_normalized] = rel_path
                     count += 1
         f.write(f"Total corpora found: {count}\n")
+
+        # Also add downloadable corpora that are not present locally
+        for display_name, rel_path in KNOWN_CORPORA_MAP.items():
+            if display_name not in available:
+                if rel_path in DOWNLOADABLE_ASSETS_MAP:
+                    available[display_name] = rel_path
 
     return available
 
