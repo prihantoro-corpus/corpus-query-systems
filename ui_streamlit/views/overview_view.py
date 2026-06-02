@@ -238,6 +238,21 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     m2.metric("Types", f"{display_stats.get('unique_types', 0):,}")
     m3.metric("TTR", f"{display_stats.get('ttr', 0):.4f}")
 
+    # Show database download button for user-uploaded/built corpora
+    source_type = get_state('source_type')
+    if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
+        st.write("") # spacing
+        with open(path, "rb") as db_file:
+            st.download_button(
+                label="📥 Download Pre-compiled Database (.db)",
+                data=db_file,
+                file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
+                mime="application/octet-stream",
+                help="Download this corpus as a pre-compiled DuckDB database. In the future, you can upload this .db file directly for instant loading and to save memory!",
+                use_container_width=True,
+                key=f"dl_btn_{key_suffix}"
+            )
+
     # Language Settings removed: choosing is now automatic or sidebar-driven
     # _render_language_confirmation(path, key_suffix)
 
@@ -307,6 +322,21 @@ def render_full_overview(name, path, stats, structure, error):
     col2.metric("Unique Types", f"{display_stats.get('unique_types', 0):,}")
     col3.metric("Type/Token Ratio (TTR)", f"{display_stats.get('ttr', 0):.4f}")
     
+    # Show database download button for user-uploaded/built corpora
+    source_type = get_state('source_type')
+    if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
+        st.write("") # spacing
+        with open(path, "rb") as db_file:
+            st.download_button(
+                label="📥 Download Pre-compiled Database (.db)",
+                data=db_file,
+                file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
+                mime="application/octet-stream",
+                help="Download this corpus as a pre-compiled DuckDB database. In the future, you can upload this .db file directly for instant loading and to save memory!",
+                use_container_width=True,
+                key="dl_btn_full"
+            )
+
     # Language Confirmation removed
     # _render_language_confirmation(path, "full")
         
