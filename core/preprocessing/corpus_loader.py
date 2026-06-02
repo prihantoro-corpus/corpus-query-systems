@@ -236,6 +236,11 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     from core.modules.overview import set_corpus_language
     set_corpus_language(db_path, final_lang_code)
     
+    # Save XML structure to Metadata if present
+    if combined_structure:
+        from core.modules.overview import set_xml_structure
+        set_xml_structure(db_path, combined_structure)
+    
     # Auto-load local tagset definitions if available
     # Iterate through input files to find a matching tagset (taking the first match)
     for fs in file_sources:
@@ -459,6 +464,7 @@ FOLDER_TO_LANG_MAP = {
 @profile_func
 def load_built_in_corpus(name, url, progress_callback=None):
     """Downloads or loads one or more built-in corpora."""
+    from core.config import DOWNLOADABLE_ASSETS_MAP
     # Support both single and multiple corpora
     if isinstance(name, str):
         names = [name]
@@ -474,6 +480,14 @@ def load_built_in_corpus(name, url, progress_callback=None):
         for idx, (corpus_name, corpus_url) in enumerate(zip(names, urls)):
             filename = corpus_url
             local_path = os.path.join(CORPORA_DIR, filename)
+            
+            # If file doesn't exist locally but is in our downloadable assets, download it first
+            if not os.path.exists(local_path) and filename in DOWNLOADABLE_ASSETS_MAP:
+                download_url = DOWNLOADABLE_ASSETS_MAP[filename]
+                if progress_callback:
+                    progress_callback(0.05, f"Downloading database for {corpus_name}...")
+                download_file(download_url, local_path, progress_callback)
+                
             use_local = os.path.exists(local_path)
             
             # Detect language from folder name in the path
@@ -487,6 +501,73 @@ def load_built_in_corpus(name, url, progress_callback=None):
             if use_local:
                 if progress_callback:
                     progress_callback(0.05 + (idx/len(names))*0.2, f"Loading local {corpus_name}...")
+                
+                # Special fast-path for pre-built DuckDB database files (.db, .duckdb)
+                if filename.lower().endswith(('.db', '.duckdb')):
+                    if progress_callback:
+                        progress_callback(0.8, f"Configuring database {corpus_name}...")
+                    
+                    import uuid
+                    import shutil
+                    import tempfile
+                    import json
+                    
+                    unique_filename = f"corpus_{uuid.uuid4().hex}.duckdb"
+                    temp_db_path = os.path.join(tempfile.gettempdir(), unique_filename)
+                    shutil.copy(local_path, temp_db_path)
+                    
+                    # Read metadata directly from the pre-built database
+                    con = duckdb.connect(temp_db_path, read_only=True)
+                    try:
+                        # 1. Get language
+                        tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+                        lang = detected_lang
+                        if 'corpus_metadata' in tables:
+                            res_lang = con.execute("SELECT value FROM corpus_metadata WHERE key='language'").fetchone()
+                            if res_lang:
+                                lang = res_lang[0]
+                                
+                        # 2. Get XML structure (if stored)
+                        structure = {}
+                        if 'corpus_metadata' in tables:
+                            res_struct = con.execute("SELECT value FROM corpus_metadata WHERE key='xml_structure'").fetchone()
+                            if res_struct:
+                                try:
+                                    serializable_struct = json.loads(res_struct[0])
+                                    for tag in serializable_struct:
+                                        structure[tag] = {}
+                                        for attr in serializable_struct[tag]:
+                                            structure[tag][attr] = set(serializable_struct[tag][attr])
+                                except Exception as e:
+                                    print(f"Error restoring xml_structure: {e}")
+                                    
+                        # 3. Get Stats
+                        total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+                        token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
+                        token_counts = {row[0]: row[1] for row in token_freqs}
+                        stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
+                        
+                    except Exception as e:
+                        con.close()
+                        return {'error': f"Failed to read database metadata: {e}"}
+                    
+                    con.close()
+                    
+                    # Auto-load tagset definitions if available
+                    _load_local_tagset(temp_db_path, filename)
+                    
+                    if progress_callback:
+                        progress_callback(1.0, f"Successfully loaded {corpus_name}!")
+                        
+                    return {
+                        'db_path': temp_db_path,
+                        'stats': stats,
+                        'structure': structure,
+                        'lang_code': lang,
+                        'error': None
+                    }
+                
+                # Standard parsing path for XML/text/CSV
                 with open(local_path, 'rb') as f:
                     file_bytes = f.read()
                     fs = io.BytesIO(file_bytes)
@@ -563,3 +644,22 @@ def _load_local_tagset(db_path, corpus_filename):
                 print(f"Loaded {len(definitions)} POS definitions from {tagset_path}")
     except Exception as e:
         print(f"Failed to load tagset from {tagset_path}: {e}")
+
+def download_file(url, local_path, progress_callback=None):
+    """Downloads a file from a URL to local_path with progress updates."""
+    import requests
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+    total_size = int(response.headers.get('content-length', 0))
+    block_size = 1024 * 1024  # 1MB
+    
+    downloaded = 0
+    with open(local_path, 'wb') as f:
+        for data in response.iter_content(block_size):
+            downloaded += len(data)
+            f.write(data)
+            if total_size > 0 and progress_callback:
+                percent = downloaded / total_size
+                progress_callback(0.05 + percent * 0.7, f"Downloading: {downloaded / 1024 / 1024:.1f}MB / {total_size / 1024 / 1024:.1f}MB")
+

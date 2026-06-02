@@ -1,5 +1,6 @@
 import duckdb
 import pandas as pd
+import json
 
 def get_corpus_files(db_path):
     """Fetches unique filenames from the corpus."""
@@ -185,6 +186,52 @@ def set_corpus_language(db_path, language):
         return False
     finally:
         con.close()
+
+def set_xml_structure(db_path, structure):
+    """Saves the XML structure dictionary (converting sets to lists) to database metadata."""
+    if not db_path or not structure: return False
+    # Convert set values to lists for JSON serialization
+    serializable = {}
+    for tag, attrs in structure.items():
+        serializable[tag] = {}
+        for attr, vals in attrs.items():
+            serializable[tag][attr] = list(vals)
+            
+    con = duckdb.connect(db_path)
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
+        con.execute("INSERT INTO corpus_metadata VALUES ('xml_structure', ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [json.dumps(serializable)])
+        return True
+    except Exception as e:
+        print(f"Error setting xml_structure: {e}")
+        return False
+    finally:
+        con.close()
+
+def get_xml_structure(db_path):
+    """Retrieves the XML structure from database metadata and restores sets."""
+    if not db_path: return None
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+        if 'corpus_metadata' not in tables:
+            return None
+        res = con.execute("SELECT value FROM corpus_metadata WHERE key='xml_structure'").fetchone()
+        if not res: return None
+        
+        data = json.loads(res[0])
+        # Convert lists back to sets
+        restored = {}
+        for tag, attrs in data.items():
+            restored[tag] = {}
+            for attr, vals in attrs.items():
+                restored[tag][attr] = set(vals)
+        return restored
+    except:
+        return None
+    finally:
+        con.close()
+
 
 def apply_metadata_to_files(db_path, metadata_df):
     """
