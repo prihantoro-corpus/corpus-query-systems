@@ -13,17 +13,23 @@ if architecture_root not in sys.path:
 import importlib
 import core.config
 import core.ai_service
+import core.modules.concordance
 import ui_streamlit.state_manager
+import ui_streamlit.caching
 import ui_streamlit.components.sidebar
 import ui_streamlit.components.corpus_selection
 import ui_streamlit.views.overview_view
+import ui_streamlit.views.concordance_view
 
 importlib.reload(core.config)
 importlib.reload(core.ai_service)
+importlib.reload(core.modules.concordance)
 importlib.reload(ui_streamlit.state_manager)
+importlib.reload(ui_streamlit.caching)
 importlib.reload(ui_streamlit.components.sidebar)
 importlib.reload(ui_streamlit.components.corpus_selection)
 importlib.reload(ui_streamlit.views.overview_view)
+importlib.reload(ui_streamlit.views.concordance_view)
 
 # Debug Imports
 try:
