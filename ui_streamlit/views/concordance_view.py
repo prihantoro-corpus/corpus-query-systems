@@ -55,6 +55,7 @@ def render_concordance_view():
                     set_state('kwic_show_meta', False)
                     set_state('kwic_show_pos', False)
                     set_state('kwic_show_lemma', False)
+                    set_state('kwic_hide_symbols', False)
                     run_concordance_query(
                         identifier='primary',
                         path=corpus_path,
@@ -96,17 +97,20 @@ def render_concordance_view():
                             coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
                         with c_adv2:
                             sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
-                            c_sh1, c_sh2, c_sh3 = st.columns(3)
+                            c_sh1, c_sh2, c_sh3, c_sh4 = st.columns(4)
                             with c_sh1:
                                 show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
                             with c_sh2:
                                 show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_rule")
                             with c_sh3:
                                 show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_rule")
+                            with c_sh4:
+                                hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_rule")
 
                             set_state('kwic_show_pos', show_pos)
                             set_state('kwic_show_lemma', show_lemma)
                             set_state('kwic_show_meta', show_meta)
+                            set_state('kwic_hide_symbols', hide_symbols)
 
 
                             wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
@@ -234,17 +238,20 @@ def render_concordance_view():
                             coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
                         with c_adv2:
                             sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
-                            c_sh1, c_sh2, c_sh3 = st.columns(3)
+                            c_sh1, c_sh2, c_sh3, c_sh4 = st.columns(4)
                             with c_sh1:
                                 show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
                             with c_sh2:
                                 show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_cb")
                             with c_sh3:
                                 show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', True), key="kwic_show_meta_cb")
+                            with c_sh4:
+                                hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_cb")
 
                             set_state('kwic_show_pos', show_pos)
                             set_state('kwic_show_lemma', show_lemma)
                             set_state('kwic_show_meta', show_meta)
+                            set_state('kwic_hide_symbols', hide_symbols)
 
 
                             wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
@@ -282,19 +289,43 @@ def render_concordance_view():
                         search_term_1 = search_term # Use the main input
                         search_term_2 = None
 
-                    # Auto-reactive update on filter changes
+                    # Auto-reactive update on filter or display changes
                     if not comp_mode:
                         current_results = st.session_state.get('last_kwic_results_primary')
-                        if current_results and (current_results.get('xml_where') != xml_where or current_results.get('xml_params') != xml_params):
-                            run_concordance_query('primary', corpus_path, corpus_name, current_results['search_term'], window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
+                        if current_results:
+                            last_hide_symbols = current_results.get('hide_symbols', False)
+                            last_show_pos = current_results.get('show_pos', False)
+                            last_show_lemma = current_results.get('show_lemma', False)
+                            if (current_results.get('xml_where') != xml_where or 
+                                current_results.get('xml_params') != xml_params or
+                                last_hide_symbols != hide_symbols or
+                                last_show_pos != show_pos or
+                                last_show_lemma != show_lemma):
+                                run_concordance_query('primary', corpus_path, corpus_name, current_results['search_term'], window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
                     else:
                         current_results_1 = st.session_state.get('last_kwic_results_primary')
-                        if current_results_1 and (current_results_1.get('xml_where') != xml_where_1 or current_results_1.get('xml_params') != xml_params_1):
-                            run_concordance_query('primary', corpus_path, corpus_name, current_results_1['search_term'], window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
+                        if current_results_1:
+                            last_hide_symbols = current_results_1.get('hide_symbols', False)
+                            last_show_pos = current_results_1.get('show_pos', False)
+                            last_show_lemma = current_results_1.get('show_lemma', False)
+                            if (current_results_1.get('xml_where') != xml_where_1 or 
+                                current_results_1.get('xml_params') != xml_params_1 or
+                                last_hide_symbols != hide_symbols or
+                                last_show_pos != show_pos or
+                                last_show_lemma != show_lemma):
+                                run_concordance_query('primary', corpus_path, corpus_name, current_results_1['search_term'], window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
 
                         current_results_2 = st.session_state.get('last_kwic_results_secondary')
-                        if current_results_2 and comp_path and (current_results_2.get('xml_where') != xml_where_2 or current_results_2.get('xml_params') != xml_params_2):
-                            run_concordance_query('secondary', comp_path, comp_name, current_results_2['search_term'], window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
+                        if current_results_2 and comp_path:
+                            last_hide_symbols = current_results_2.get('hide_symbols', False)
+                            last_show_pos = current_results_2.get('show_pos', False)
+                            last_show_lemma = current_results_2.get('show_lemma', False)
+                            if (current_results_2.get('xml_where') != xml_where_2 or 
+                                current_results_2.get('xml_params') != xml_params_2 or
+                                last_hide_symbols != hide_symbols or
+                                last_show_pos != show_pos or
+                                last_show_lemma != show_lemma):
+                                run_concordance_query('secondary', comp_path, comp_name, current_results_2['search_term'], window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
 
                     if not comp_mode:
                         has_results = bool(st.session_state.get('last_kwic_results_primary'))
@@ -604,6 +635,7 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
         st.warning(f"Please enter a Node Word(s) to search for in {name}.")
         return
         
+    hide_symbols = get_state('kwic_hide_symbols', False)
     with st.spinner(f"Searching {name}..."):
         kwic_rows, total, raw_q, lit_freq, sent_ids, breakdown_df = cached_generate_kwic(
             db_path=path,
@@ -617,7 +649,8 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             xml_where_clause=xml_where,
             xml_params=tuple(xml_params) if xml_params else (),
             show_pos=show_pos,
-            show_lemma=show_lemma
+            show_lemma=show_lemma,
+            hide_symbols=hide_symbols
         )
         st.session_state[f'last_kwic_results_{identifier}'] = {
             'rows': kwic_rows,
@@ -628,7 +661,10 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             'xml_where': xml_where,
             'xml_params': xml_params,
             'path': path,
-            'source': source
+            'source': source,
+            'show_pos': show_pos,
+            'show_lemma': show_lemma,
+            'hide_symbols': hide_symbols
         }
 
 def render_concordance_column(results, search_term, key_suffix=""):

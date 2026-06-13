@@ -31,6 +31,8 @@ def init_session_state():
     # 3. Tool State: Concordance
     if 'kwic_search_term' not in st.session_state:
         st.session_state['kwic_search_term'] = ""
+    if 'kwic_hide_symbols' not in st.session_state:
+        st.session_state['kwic_hide_symbols'] = False
     if 'kwic_results' not in st.session_state:
         st.session_state['kwic_results'] = None
         
