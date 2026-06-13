@@ -15,7 +15,7 @@ def render_sidebar():
 
     # 1. Navigation (Tools) - MOVED TO TOP
     st.sidebar.title("Tools (v1.1 Stanza)")
-    st.sidebar.caption("App Version: v300526")
+    st.sidebar.caption("App Version: v130626")
     
     # Environment detection
     import socket

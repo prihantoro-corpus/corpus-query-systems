@@ -2,7 +2,7 @@
 SETLOCAL EnableDelayedExpansion
 
 echo ===================================================
-echo CORTEX Launcher and Bootstrapper (v290526)
+echo CORTEX Launcher and Bootstrapper (v130626)
 echo ===================================================
 
 :: Detect if we are inside the CORTEX directory
