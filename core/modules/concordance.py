@@ -5,7 +5,7 @@ from collections import Counter
 from core.statistics.frequency import pmw_to_zipf, zipf_to_band
 import math
 
-def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpus_name, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=100, do_random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False, xml_where_clause="", xml_params=[]):
+def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpus_name, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=100, do_random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False, xml_where_clause="", xml_params=[], hide_symbols=False):
     """
     Generalized function to generate KWIC lines using DuckDB SQL queries.
     """
@@ -269,6 +269,18 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         
         df_matches = con.execute(final_query, full_params).fetch_df()
         
+        # Apply symbol filtering if requested
+        if hide_symbols and not df_matches.empty:
+            def has_symbol_token(match_token_str):
+                if not match_token_str:
+                    return False
+                tokens = str(match_token_str).split()
+                for t in tokens:
+                    if t and not any(c.isalnum() for c in t):
+                        return True
+                return False
+            df_matches = df_matches[~df_matches['match_token'].apply(has_symbol_token)].reset_index(drop=True)
+            
         with open("debug_query.log", "a", encoding="utf-8") as f_debug:
             f_debug.write(f"Matches count: {len(df_matches)}\n--- QUERY END ---\n\n")
         
