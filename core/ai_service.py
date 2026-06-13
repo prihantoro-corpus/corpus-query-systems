@@ -1,16 +1,83 @@
 import requests
 import time
 import json
+import sys
+
+def _resolve_ai_settings(ai_provider=None, gemini_api_key=None, gemini_model=None, ollama_url=None, ollama_model=None):
+    # Retrieve from Streamlit session state if running in streamlit context
+    import sys
+    st_state = {}
+    if 'streamlit' in sys.modules:
+        import streamlit as st
+        try:
+            st_state = st.session_state
+        except Exception:
+            pass
+            
+    resolved_provider = ai_provider or st_state.get('ai_provider') or "Ollama"
+    resolved_gemini_key = gemini_api_key or st_state.get('gemini_api_key') or ""
+    resolved_gemini_model = gemini_model or st_state.get('gemini_model') or "gemini-2.5-flash"
+    resolved_ollama_url = ollama_url or st_state.get('ollama_url') or "http://127.0.0.1:11434/api/generate"
+    resolved_ollama_model = ollama_model or st_state.get('ai_model') or "phi3:latest"
+    
+    return {
+        "ai_provider": resolved_provider,
+        "gemini_api_key": resolved_gemini_key,
+        "gemini_model": resolved_gemini_model,
+        "ollama_url": resolved_ollama_url,
+        "ollama_model": resolved_ollama_model
+    }
+
+def test_gemini_connection(api_key, model=None):
+    """
+    Tests the connection to Gemini API by sending a simple prompt.
+    Returns: (bool, message)
+    """
+    if not api_key:
+        return False, "API Key is required."
+    
+    settings = _resolve_ai_settings(gemini_api_key=api_key, gemini_model=model)
+    gemini_model = settings["gemini_model"]
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{
+            "parts": [{"text": "Hello"}]
+        }]
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=15)
+        if response.status_code == 200:
+            res_json = response.json()
+            if 'error' in res_json:
+                return False, f"Gemini Error: {res_json['error'].get('message', 'Unknown error')}"
+            if 'candidates' in res_json and len(res_json['candidates']) > 0:
+                return True, f"Successfully connected! Model '{gemini_model}' is ready."
+            return False, "Unexpected response format from Gemini."
+        else:
+            try:
+                res_json = response.json()
+                if 'error' in res_json:
+                    return False, f"API Error (Status {response.status_code}): {res_json['error'].get('message')}"
+            except Exception:
+                pass
+            return False, f"Connection failed with status code {response.status_code}."
+    except requests.exceptions.RequestException as e:
+        return False, f"Request Failed: {e}"
+    except Exception as e:
+        return False, f"Unexpected Error: {e}"
 
 def interpret_results_llm(target_word, analysis_type, data_description, data, 
-                          ai_provider="Ollama", gemini_api_key=None,
-                          ollama_url="http://127.0.0.1:11434/api/generate", 
-                          ollama_model="phi3:latest"):
+                          ai_provider=None, gemini_api_key=None,
+                          ollama_url=None, ollama_model=None, gemini_model=None):
     """
     Router function to interpret results using either Ollama or Google Gemini.
     """
-    if ai_provider == "Gemini" and gemini_api_key:
-        return interpret_results_gemini(target_word, analysis_type, data_description, data, gemini_api_key)
+    settings = _resolve_ai_settings(ai_provider, gemini_api_key, gemini_model, ollama_url, ollama_model)
+    
+    if settings["ai_provider"] == "Gemini" and settings["gemini_api_key"]:
+        return interpret_results_gemini(target_word, analysis_type, data_description, data, settings["gemini_api_key"], settings["gemini_model"])
     
     # 1. Prepare Content for AI
     if hasattr(data, 'to_string'):
@@ -29,11 +96,9 @@ def interpret_results_llm(target_word, analysis_type, data_description, data,
     Output: Concise, scholarly markdown summary of semantic patterns and usage.
     """
     
-
-
     try:
         payload = {
-            "model": ollama_model,
+            "model": settings["ollama_model"],
             "prompt": prompt,
             "stream": False
         }
@@ -48,7 +113,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data,
         max_retries = 3
         last_error = None
         
-        print(f"[INFO] Starting Ollama Interpretation for '{target_word}' using {ollama_model}...")
+        print(f"[INFO] Starting Ollama Interpretation for '{target_word}' using {settings['ollama_model']}...")
 
         for attempt in range(max_retries):
             try:
@@ -56,7 +121,7 @@ def interpret_results_llm(target_word, analysis_type, data_description, data,
                 
                 # Timeout: (connect, read)
                 # Fail fast if server down (5s), but give model time to think (90s)
-                response = requests.post(ollama_url, json=payload, headers=headers, timeout=(5, 180))
+                response = requests.post(settings["ollama_url"], json=payload, headers=headers, timeout=(5, 180))
                 response.raise_for_status()
                 
                 res_json = response.json()
@@ -94,14 +159,17 @@ def interpret_results_llm(target_word, analysis_type, data_description, data,
     except Exception as e:
         return None, f"Unexpected Error: {e}"
 
-def interpret_results_gemini(target_word, analysis_type, data_description, data, api_key):
+def interpret_results_gemini(target_word, analysis_type, data_description, data, api_key, model=None):
     """
     Integrates with Google Gemini API via REST.
     """
     if not api_key:
         return None, "Gemini API Key missing."
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    settings = _resolve_ai_settings(gemini_api_key=api_key, gemini_model=model)
+    gemini_model = settings["gemini_model"]
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
     
     # Prepare Data
     if hasattr(data, 'to_string'):
@@ -143,12 +211,14 @@ def interpret_results_gemini(target_word, analysis_type, data_description, data,
     except Exception as e:
         return None, f"Gemini Connection Error: {e}"
 
-def get_ai_response(prompt, ai_provider="Ollama", ollama_model="phi3:latest", api_key=None, ollama_url="http://127.0.0.1:11434/api/generate"):
+def get_ai_response(prompt, ai_provider=None, ollama_model=None, api_key=None, ollama_url=None, gemini_model=None):
     """
     Generic function to get a response from an AI provider for a given prompt.
     """
-    if ai_provider == "Gemini" and api_key:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    settings = _resolve_ai_settings(ai_provider, api_key, gemini_model, ollama_url, ollama_model)
+    
+    if settings["ai_provider"] == "Gemini" and settings["gemini_api_key"]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings['gemini_model']}:generateContent?key={settings['gemini_api_key']}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         try:
             response = requests.post(url, json=payload, timeout=60)
@@ -159,8 +229,8 @@ def get_ai_response(prompt, ai_provider="Ollama", ollama_model="phi3:latest", ap
     else:
         # Ollama
         try:
-            payload = {"model": ollama_model, "prompt": prompt, "stream": False}
-            response = requests.post(ollama_url, json=payload, timeout=180)
+            payload = {"model": settings["ollama_model"], "prompt": prompt, "stream": False}
+            response = requests.post(settings["ollama_url"], json=payload, timeout=180)
             res_json = response.json()
             return res_json.get('response') or res_json.get('content'), None
         except Exception as e: return None, f"Ollama Error: {e}"
@@ -201,12 +271,14 @@ def get_available_models(ollama_url):
     return []
 
 def chat_with_llm(user_message, context, chat_history=[], 
-                  ai_provider="Ollama", gemini_api_key=None,
-                  ollama_url="http://127.0.0.1:11434/api/generate", 
-                  ollama_model="phi3:latest"):
+                  ai_provider=None, gemini_api_key=None,
+                  ollama_url=None, ollama_model=None,
+                  gemini_model=None):
     """
     Sends a chat message to the selected AI provider.
     """
+    settings = _resolve_ai_settings(ai_provider, gemini_api_key, gemini_model, ollama_url, ollama_model)
+    
     history_text = "\n".join([f"User: {h['user']}\nAI: {h['ai']}" for h in chat_history])
     
     prompt = f"""
@@ -218,8 +290,8 @@ def chat_with_llm(user_message, context, chat_history=[],
     User: {user_message}
     AI (Instructions: Answer in natural language only.):"""
 
-    if ai_provider == "Gemini" and gemini_api_key:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+    if settings["ai_provider"] == "Gemini" and settings["gemini_api_key"]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings['gemini_model']}:generateContent?key={settings['gemini_api_key']}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         try:
             response = requests.post(url, json=payload, timeout=60)
@@ -230,13 +302,13 @@ def chat_with_llm(user_message, context, chat_history=[],
     else:
         # Ollama Chat
         try:
-            payload = {"model": ollama_model, "prompt": prompt, "stream": False}
-            response = requests.post(ollama_url, json=payload, timeout=180)
+            payload = {"model": settings["ollama_model"], "prompt": prompt, "stream": False}
+            response = requests.post(settings["ollama_url"], json=payload, timeout=180)
             res_json = response.json()
             return res_json.get('response') or res_json.get('content'), None
         except Exception as e: return None, f"Ollama Error: {e}"
 
-def app_guide_chat(user_query, chat_history=[], api_key=None):
+def app_guide_chat(user_query, chat_history=[], api_key=None, gemini_model=None):
     """
     Specialized chat for app usage assistance.
     """
@@ -258,8 +330,9 @@ def app_guide_chat(user_query, chat_history=[], api_key=None):
     
     Instructions: Help the user use the app. Be concise.
     """
-    
-    return chat_with_llm(user_query, system_context, chat_history, ai_provider="Gemini" if api_key else "Ollama", gemini_api_key=api_key)
+    settings = _resolve_ai_settings(gemini_api_key=api_key, gemini_model=gemini_model)
+    return chat_with_llm(user_query, system_context, chat_history, ai_provider="Gemini" if settings["gemini_api_key"] else "Ollama", gemini_api_key=settings["gemini_api_key"], gemini_model=settings["gemini_model"])
+
 
 def generate_pos_mappings_from_definitions(pos_definitions):
     """
@@ -549,11 +622,12 @@ def parse_nl_query_rules_only(user_query, module_selection="concordance", revers
 
 
 
-def parse_nl_query(user_query, module_selection, ai_provider="Ollama", gemini_api_key=None,
-                  ollama_url="http://127.0.0.1:11434/api/generate", 
-                  ollama_model="phi3:latest",
+def parse_nl_query(user_query, module_selection, ai_provider=None, gemini_api_key=None,
+                  ollama_url=None, 
+                  ollama_model=None,
                   pos_definitions=None,
-                  language="English"):
+                  language="English",
+                  gemini_model=None):
     """
     Parses a natural language query into specific parameters for the selected module.
     pos_definitions: Optional dict {tag: definition} to help AI understand corpus-specific tags.
@@ -593,7 +667,7 @@ def parse_nl_query(user_query, module_selection, ai_provider="Ollama", gemini_ap
         "dictionary": """
         {
              "word": "string (target word to look up)"
-        }
+         }
         """,
         "distribution": """
         {
@@ -653,7 +727,7 @@ def parse_nl_query(user_query, module_selection, ai_provider="Ollama", gemini_ap
         - IF NO TAGS ARE REQUESTED, DO NOT ADD THEM. "Find house" -> "house".
         - DEFAULT WINDOW IS 5. Do not use 50.
         - NO placeholders like "string" or "SEARCH_PATTERN".
-
+ 
     ### EXAMPLES (Do not copy these, use them as a guide) ###
     Input: "happy _NN"
     Output: {{ "query": "happy _NN", "window": 5, "pos_filter": "", "sort_order": "Node" }}
@@ -675,8 +749,10 @@ def parse_nl_query(user_query, module_selection, ai_provider="Ollama", gemini_ap
     Output:
     """
 
-    if ai_provider == "Gemini" and gemini_api_key:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+    settings = _resolve_ai_settings(ai_provider, gemini_api_key, gemini_model, ollama_url, ollama_model)
+
+    if settings["ai_provider"] == "Gemini" and settings["gemini_api_key"]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings['gemini_model']}:generateContent?key={settings['gemini_api_key']}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         try:
             response = requests.post(url, json=payload, timeout=60)
@@ -690,10 +766,10 @@ def parse_nl_query(user_query, module_selection, ai_provider="Ollama", gemini_ap
     else:
         # Ollama
         try:
-            payload = {"model": ollama_model, "prompt": prompt, "stream": False, "format": "json"} 
+            payload = {"model": settings["ollama_model"], "prompt": prompt, "stream": False, "format": "json"} 
             # Note: "format": "json" is supported by recent Ollama versions/models, valid for phi3 usually or it just helps
             
-            response = requests.post(ollama_url, json=payload, timeout=60)
+            response = requests.post(settings["ollama_url"], json=payload, timeout=60)
             res_json = response.json()
             raw_text = res_json.get('response') or res_json.get('content')
             
@@ -704,13 +780,16 @@ def parse_nl_query(user_query, module_selection, ai_provider="Ollama", gemini_ap
             
         except Exception as e: return None, f"Ollama Error: {e}"
 
-def guess_pos_definitions(tags_list, ai_provider="Ollama", gemini_api_key=None,
-                          ollama_url="http://127.0.0.1:11434/api/generate",
-                          ollama_model="phi3:latest"):
+def guess_pos_definitions(tags_list, ai_provider=None, gemini_api_key=None,
+                          ollama_url=None,
+                          ollama_model=None,
+                          gemini_model=None):
     """
     Uses AI to guess definitions for a list of POS tags.
     Returns: (dict {tag: definition}, error)
     """
+    settings = _resolve_ai_settings(ai_provider, gemini_api_key, gemini_model, ollama_url, ollama_model)
+    
     tags_str = ", ".join(tags_list)
     prompt = f"""
     Role: Computational Linguist.
@@ -724,8 +803,8 @@ def guess_pos_definitions(tags_list, ai_provider="Ollama", gemini_api_key=None,
     - Return ONLY valid JSON: {{ "TAG": "Definition", ... }}
     """
     
-    if ai_provider == "Gemini" and gemini_api_key:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+    if settings["ai_provider"] == "Gemini" and settings["gemini_api_key"]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings['gemini_model']}:generateContent?key={settings['gemini_api_key']}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         try:
             response = requests.post(url, json=payload, timeout=60)
@@ -739,8 +818,8 @@ def guess_pos_definitions(tags_list, ai_provider="Ollama", gemini_api_key=None,
     else:
         # Ollama
         try:
-            payload = {"model": ollama_model, "prompt": prompt, "stream": False, "format": "json"}
-            response = requests.post(ollama_url, json=payload, timeout=90)
+            payload = {"model": settings["ollama_model"], "prompt": prompt, "stream": False, "format": "json"}
+            response = requests.post(settings["ollama_url"], json=payload, timeout=90)
             res_json = response.json()
             raw_text = res_json.get('response') or res_json.get('content')
             if not raw_text: return None, "Empty response from AI."
