@@ -55,6 +55,10 @@ def init_session_state():
         st.session_state['ai_provider'] = "Ollama"
     if 'gemini_api_key' not in st.session_state:
         st.session_state['gemini_api_key'] = ""
+    if 'gemini_model' not in st.session_state:
+        st.session_state['gemini_model'] = "gemini-2.5-flash"
+    if 'gemini_connected' not in st.session_state:
+        st.session_state['gemini_connected'] = False
     if 'ollama_url' not in st.session_state:
         st.session_state['ollama_url'] = "http://127.0.0.1:11434/api/generate"
     if 'ai_model' not in st.session_state:

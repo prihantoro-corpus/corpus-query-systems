@@ -59,8 +59,65 @@ def render_sidebar():
 
     if ai_provider == "Gemini":
         gemini_key = st.sidebar.text_input("Gemini API Key", value=get_state('gemini_api_key', ''), type="password", key="sidebar_gemini_key")
-        set_state('gemini_api_key', gemini_key)
-        st.sidebar.caption("Google Gemini 1.5 Flash (Cloud fallback)")
+        
+        # Model Selection
+        gemini_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "Custom Model"]
+        current_g_model = get_state('gemini_model', 'gemini-2.5-flash')
+        
+        # Determine index
+        if current_g_model in gemini_models:
+            model_index = gemini_models.index(current_g_model)
+        else:
+            model_index = gemini_models.index("Custom Model")
+            
+        selected_model_option = st.sidebar.selectbox("Gemini Model", gemini_models, index=model_index, key="sidebar_gemini_model_select")
+        
+        if selected_model_option == "Custom Model":
+            custom_model = st.sidebar.text_input("Enter Model Name", value=current_g_model if current_g_model not in gemini_models[:-1] else "gemini-2.5-flash", key="sidebar_gemini_custom_model")
+            final_model = custom_model
+        else:
+            final_model = selected_model_option
+            
+        # Reset connected status if key or model changes
+        if gemini_key != get_state('gemini_api_key', '') or final_model != get_state('gemini_model', ''):
+            set_state('gemini_connected', False)
+            set_state('gemini_api_key', gemini_key)
+            set_state('gemini_model', final_model)
+            
+        # Status Display
+        if get_state('gemini_connected', False):
+            st.sidebar.markdown(f"<div style='font-size:0.9em; color:#4CAF50; font-weight:bold; margin-bottom:10px;'>🟢 Connected: {get_state('gemini_model')}</div>", unsafe_allow_html=True)
+        else:
+            st.sidebar.markdown("<div style='font-size:0.9em; color:#FF9800; font-weight:bold; margin-bottom:10px;'>🔴 Not Connected</div>", unsafe_allow_html=True)
+
+        col1, col2 = st.sidebar.columns(2)
+        if col1.button("Connect to API", key="gemini_connect_btn", use_container_width=True):
+            if not gemini_key:
+                st.sidebar.error("Please enter an API Key.")
+            else:
+                with st.spinner("Connecting..."):
+                    from core.ai_service import test_gemini_connection
+                    success, msg = test_gemini_connection(gemini_key, final_model)
+                    if success:
+                        set_state('gemini_connected', True)
+                        set_state('gemini_api_key', gemini_key)
+                        set_state('gemini_model', final_model)
+                        st.sidebar.success("Connected successfully!")
+                    else:
+                        set_state('gemini_connected', False)
+                        st.sidebar.error(f"Connection failed: {msg}")
+                            
+        if col2.button("Test Connection", key="gemini_test_btn", use_container_width=True):
+            if not gemini_key:
+                st.sidebar.error("Please enter an API Key first.")
+            else:
+                with st.spinner("Testing..."):
+                    from core.ai_service import test_gemini_connection
+                    success, msg = test_gemini_connection(gemini_key, final_model)
+                    if success:
+                        st.sidebar.success(msg)
+                    else:
+                        st.sidebar.error(msg)
     else:
         # Connection Check Button (Always Visible)
         if st.sidebar.button("Check Local AI Status"):

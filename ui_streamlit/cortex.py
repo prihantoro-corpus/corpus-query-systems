@@ -12,12 +12,14 @@ if architecture_root not in sys.path:
 # Streamlit handles module reloading natively in development mode.
 import importlib
 import core.config
+import core.ai_service
 import ui_streamlit.state_manager
 import ui_streamlit.components.sidebar
 import ui_streamlit.components.corpus_selection
 import ui_streamlit.views.overview_view
 
 importlib.reload(core.config)
+importlib.reload(core.ai_service)
 importlib.reload(ui_streamlit.state_manager)
 importlib.reload(ui_streamlit.components.sidebar)
 importlib.reload(ui_streamlit.components.corpus_selection)
