@@ -23,6 +23,24 @@ class TestLexicalComplexity(unittest.TestCase):
         # Case 3: Japanese BCCWJ Kanji keywords
         self.assertEqual(classify_pos_tag("名詞-普通名詞-一般", "", "Japanese"), "N")
         self.assertEqual(classify_pos_tag("動詞-一般", "", "Japanese"), "V")
+        
+        # Case 4: UPOS fallbacks
+        self.assertEqual(classify_pos_tag("NOUN", "", "English"), "N")
+        self.assertEqual(classify_pos_tag("PROPN", "", "English"), "N")
+        self.assertEqual(classify_pos_tag("PRON", "", "English"), "N")
+        self.assertEqual(classify_pos_tag("VERB", "", "English"), "V")
+        self.assertEqual(classify_pos_tag("AUX", "", "English"), "V")
+        self.assertEqual(classify_pos_tag("ADJ", "", "English"), "Adj")
+        self.assertEqual(classify_pos_tag("ADV", "", "English"), "Adv")
+
+        # Case 5: Indonesian BPPT fallbacks
+        self.assertEqual(classify_pos_tag("NSD", "", "Indonesian"), "N")
+        self.assertEqual(classify_pos_tag("NSM", "", "Indonesian"), "N")
+        self.assertEqual(classify_pos_tag("PRP", "", "Indonesian"), "N")
+        self.assertEqual(classify_pos_tag("VBT", "", "Indonesian"), "V")
+        self.assertEqual(classify_pos_tag("VSD", "", "Indonesian"), "V")
+        self.assertEqual(classify_pos_tag("MD", "", "Indonesian"), "V")
+        self.assertEqual(classify_pos_tag("NEG", "", "Indonesian"), "Adv")
 
     def test_calculate_generic_complexity(self):
         lemmas = ["the", "dog", "barks", "at", "the", "cat", ".", "123"]
@@ -88,6 +106,35 @@ class TestLexicalComplexity(unittest.TestCase):
             res_genre = calculate_corpus_lexical_complexity(temp_db_path, group_by_column="genre")
             self.assertIn("news", res_genre["files"])
             self.assertIn("fiction", res_genre["files"])
+            
+        finally:
+            if os.path.exists(temp_db_path):
+                os.remove(temp_db_path)
+
+    def test_get_pos_definitions_fallback(self):
+        import tempfile
+        import os
+        import duckdb
+        from core.modules.overview import get_pos_definitions
+        
+        temp_db_fd, temp_db_path = tempfile.mkstemp(suffix=".db")
+        os.close(temp_db_fd)
+        if os.path.exists(temp_db_path):
+            os.remove(temp_db_path)
+            
+        try:
+            # When db exists but has no pos_definitions table
+            conn = duckdb.connect(temp_db_path)
+            # Create a corpus table with some UPOS tags to trigger UPOS inference fallback
+            conn.execute("CREATE TABLE corpus (id INTEGER, filename VARCHAR, token VARCHAR, lemma VARCHAR, pos VARCHAR)")
+            conn.execute("INSERT INTO corpus VALUES (1, 'doc1.txt', 'The', 'the', 'DET')")
+            conn.execute("INSERT INTO corpus VALUES (2, 'doc1.txt', 'cat', 'cat', 'NOUN')")
+            conn.close()
+            
+            # Since pos_definitions table doesn't exist, it should infer UPOS and return standard definitions
+            defs = get_pos_definitions(temp_db_path)
+            self.assertIn("NOUN", defs)
+            self.assertEqual(defs["NOUN"], "noun (words denoting people, places, things, or concepts)")
             
         finally:
             if os.path.exists(temp_db_path):
