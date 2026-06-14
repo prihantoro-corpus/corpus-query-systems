@@ -1103,6 +1103,8 @@ def render_statistical_testing_view():
 
                 if search_mode == "Natural Language (AI)":
                     nl_query = st.text_area("Describe your statistical query", height=70, placeholder="e.g. Compare usage of 'make' followed by a noun between groups", key="stats_nl_query_ai")
+                    from ui_streamlit.components.pos_help import render_pos_help_button
+                    render_pos_help_button(corpus_path, "stats_ai")
 
                     col_ai1, col_ai2 = st.columns([1, 3])
                     with col_ai1:
@@ -1137,6 +1139,8 @@ def render_statistical_testing_view():
 
                 elif search_mode == "Natural Language (Rule)":
                     nl_query = st.text_input("Enter natural language rule", placeholder="e.g. adjective followed by noun", key="stats_nl_query_rule")
+                    from ui_streamlit.components.pos_help import render_pos_help_button
+                    render_pos_help_button(corpus_path, "stats_rule")
                     if nl_query:
                         pos_defs = get_pos_definitions(corpus_path) or {}
                         reverse_pos_map = {v.lower(): k for k, v in pos_defs.items() if v}
@@ -1157,6 +1161,8 @@ def render_statistical_testing_view():
                         help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN*), [lemma] for lemma, token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <EVAL sentiment=\"positive\">)",
                         key="stats_query_input"
                     )
+                    from ui_streamlit.components.pos_help import render_pos_help_button
+                    render_pos_help_button(corpus_path, "stats_standard")
                     set_state('stats_query', query)
 
                 # Query syntax help

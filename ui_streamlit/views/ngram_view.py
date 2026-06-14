@@ -65,6 +65,8 @@ def render_ngram_view():
                 if search_mode == "Natural Language (AI)":
                     st.markdown("### 🧠 Natural Language Search")
                     nl_query = st.text_area("Describe what n-grams you want", height=70, placeholder="e.g. Show me trigrams containing 'data' appearing at least 5 times")
+                    from ui_streamlit.components.pos_help import render_pos_help_button
+                    render_pos_help_button(corpus_path, "ngram_ai")
 
                     col_ai1, col_ai2 = st.columns([1, 4])
                     with col_ai1:
@@ -126,6 +128,9 @@ def render_ngram_view():
                              skip_punc = st.checkbox("Skip Punctuation", value=True, key="ngram_skip_punc_rule")
                          with col_basis:
                              global_basis = st.radio("Output Basis", ["Token", "Lemma", "POS Tag"], index=0, horizontal=True, key="ngram_basis_rule")
+                         
+                         from ui_streamlit.components.pos_help import render_pos_help_button
+                         render_pos_help_button(corpus_path, "ngram_rule")
 
                     if st.button("Generate N-Grams (Rule-Based)", type="primary"):
                         if not nl_query:
@@ -170,6 +175,8 @@ def render_ngram_view():
 
                         st.markdown("##### Positional Filters & Basis")
                         st.caption("Lower filters match the selected basis. Use `*`, `%`, `_` as wildcards. Use `_TAG` for POS tags, `[lemma]` to override, or `-term` to exclude.")
+                        from ui_streamlit.components.pos_help import render_pos_help_button
+                        render_pos_help_button(corpus_path, "ngram_standard")
 
                 # --- XML Restriction Filters ---
                 comp_mode = get_state('comparison_mode', False)

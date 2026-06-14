@@ -103,7 +103,7 @@ def render_collocation_view():
                 with col_ai1:
                     analyze_btn = st.button("Analyze & Search", type="primary")
                 with col_ai2:
-                    show_example_meta = st.checkbox("Show Metadata in Examples", value=get_state('coll_show_example_meta', True), key="coll_show_example_meta_ai")
+                    show_example_meta = st.checkbox("Show Metadata in Examples", value=get_state('coll_show_example_meta', False), key="coll_show_example_meta_ai")
                     set_state('coll_show_example_meta', show_example_meta)
 
                 if analyze_btn:
@@ -175,7 +175,7 @@ def render_collocation_view():
                          current_measure_rule = get_state('coll_stat_measure_rule', 'Log-Likelihood')
                          measure_idx_rule = measures_list.index(current_measure_rule) if current_measure_rule in measures_list else 0
                          st.radio("Association Measure", measures_list, index=measure_idx_rule, horizontal=True, key="coll_stat_measure_rule")
-                         show_example_meta = st.checkbox("Show Metadata in Examples", value=get_state('coll_show_example_meta', True), key="coll_show_example_meta_rule")
+                         show_example_meta = st.checkbox("Show Metadata in Examples", value=get_state('coll_show_example_meta', False), key="coll_show_example_meta_rule")
                          set_state('coll_show_example_meta', show_example_meta)
                          show_all_in_conc = st.checkbox(
                              "Show all collocates in concordance",
@@ -191,6 +191,8 @@ def render_collocation_view():
                         token_filter_input = st.text_input("Token Filter (NL)", placeholder="e.g. not 'the'", key="coll_token_filt_rule", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
                     with f_col2:
                         pos_filter_input = st.text_input("POS Filter (NL)", placeholder="e.g. noun, verb", key="coll_pos_filt_rule", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
+                        from ui_streamlit.components.pos_help import render_pos_help_button
+                        render_pos_help_button(corpus_path, "collocation_rule")
                     with f_col3:
                         lemma_filter_input = st.text_input("Lemma Filter (NL)", placeholder="e.g. be, have", key="coll_lemma_filt_rule", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
 
@@ -227,7 +229,7 @@ def render_collocation_view():
                          current_measure = get_state('coll_stat_measure', 'Log-Likelihood')
                          measure_idx = measures_list.index(current_measure) if current_measure in measures_list else 0
                          st.radio("Association Measure", measures_list, index=measure_idx, horizontal=True, key="coll_stat_measure")
-                         show_example_meta = st.checkbox("Show Metadata in Examples", value=get_state('coll_show_example_meta', True), key="coll_show_example_meta_std")
+                         show_example_meta = st.checkbox("Show Metadata in Examples", value=get_state('coll_show_example_meta', False), key="coll_show_example_meta_std")
                          set_state('coll_show_example_meta', show_example_meta)
                          show_all_in_conc = st.checkbox(
                              "Show all collocates in concordance",
@@ -243,6 +245,8 @@ def render_collocation_view():
                         token_filter = st.text_input("Token Filter", placeholder="e.g. no, non OR -no, -non", key="coll_token_filt", help="*al : Matches any collocate token ending in \"al\" (e.g., denial, rebuttal).\n-col* : Excludes all collocate tokens starting with \"col\".\nb?t : Matches any 3-letter token starting with \"b\" and ending with \"t\" (but, bat, bit).\n(word1|word2|*ing) : Union, matches word1, word2, or any token ending in ing.")
                     with f_col2:
                         pos_filter = st.text_input("POS Filter", placeholder="e.g. JJ, NN OR -JJ, -NN", key="coll_pos_filt", help="*VB* : Matches any POS tag containing \"VB\" (e.g., VBN, VBD).\n-NN* : Excludes all POS tags starting with \"NN\".\nN? : Matches any 2-letter POS tag starting with \"N\".\n(JJ|RB|*VB) : Union, matches JJ, RB, or any tag ending in VB.")
+                        from ui_streamlit.components.pos_help import render_pos_help_button
+                        render_pos_help_button(corpus_path, "collocation_standard")
                     with f_col3:
                         lemma_filter = st.text_input("Lemma Filter", placeholder="e.g. see OR -see", key="coll_lemma_filt", help="*ate : Matches any lemma ending in \"ate\" (e.g., negotiate, calculate).\n-pre* : Excludes all lemmas starting with \"pre\".\ns?t : Matches any 3-letter lemma starting with \"s\" and ending with \"t\" (e.g., sit, sat).\n(run|walk|*ing) : Union, matches run, walk, or any lemma ending in ing.")
 
@@ -550,6 +554,8 @@ def render_collocation_view():
                 token_filter_multi = st.text_input("Token Filter", placeholder="e.g. no, non", key="coll_token_filt_multi")
             with f_col_m2:
                 pos_filter_multi = st.text_input("POS Filter", placeholder="e.g. JJ, NN", key="coll_pos_filt_multi")
+                from ui_streamlit.components.pos_help import render_pos_help_button
+                render_pos_help_button(corpus_path, "collocation_multi")
             with f_col_m3:
                 lemma_filter_multi = st.text_input("Lemma Filter", placeholder="e.g. see", key="coll_lemma_filt_multi")
                 
@@ -900,7 +906,7 @@ def render_collocation_results_column(results, key_suffix=""):
 
               if kwic_table_data:
                   is_simple = (results.get('source') == 'simple')
-                  show_meta = False if is_simple else get_state('coll_show_example_meta', True)
+                  show_meta = False if is_simple else get_state('coll_show_example_meta', False)
                   render_kwic_table(kwic_table_data, is_parallel=is_parallel, target_lang=get_state('tgt_lang_code', 'Target'), show_meta=show_meta)
               else:
                   st.info("No examples found.")

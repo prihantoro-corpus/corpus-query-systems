@@ -14,12 +14,14 @@ def render_sidebar():
     """
 
     # 1. Navigation (Tools) - MOVED TO TOP
-    st.sidebar.title("Tools (v1.1 Stanza)")
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "cortex_logo.png")
+    if os.path.exists(logo_path):
+        st.sidebar.image(logo_path, width=150)
+    st.sidebar.title("CORTEX")
     st.sidebar.caption("App Version: v130626")
     
     # Environment detection
     import socket
-    import os
     is_local = True
     if os.getenv("STREAMLIT_SHARING_AUTHOR") or os.getenv("IS_SERVER"):
         is_local = False
@@ -43,7 +45,7 @@ def render_sidebar():
     env_badge = "💻 Local Installation" if is_local else "🌐 Server Instance"
     st.sidebar.markdown(f"<div style='font-size:1.0em; color:#FFFFFF; font-weight:500; margin-bottom:10px;'>{env_badge}</div>", unsafe_allow_html=True)
     view = st.sidebar.radio(
-        "Go to", 
+        "Modules", 
         ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
     )
     

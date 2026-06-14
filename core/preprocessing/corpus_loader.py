@@ -207,8 +207,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         con = duckdb.connect(db_path)
         df_src = pd.DataFrame(all_df_data)
         
-        for col in ['token', 'pos', 'lemma', 'sent_id', 'filename']:
-            if col not in df_src.columns: df_src[col] = "##" if col in ['pos', 'lemma'] else 0
+        for col in ['token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type']:
+            if col not in df_src.columns:
+                df_src[col] = "" if col in ['pos', 'lemma', 'ent_type'] else 0
             
         df_src["_token_low"] = df_src["token"].str.lower()
         con.execute("CREATE TABLE corpus AS SELECT * FROM df_src")

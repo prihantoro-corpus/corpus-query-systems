@@ -78,7 +78,8 @@ def tag_text_with_spacy(text, lang_code):
                     'token': token.text,
                     'pos': token.pos_,  # Returns Universal Part of Speech tags (UPOS)
                     'lemma': token.lemma_ if token.lemma_ else token.text,
-                    'sent_id': sent_id
+                    'sent_id': sent_id,
+                    'ent_type': token.ent_type_ if token.ent_type_ else ""
                 })
         return results, None
     except Exception as e:
@@ -99,25 +100,32 @@ def split_sentences_custom(text):
 def get_stanza_pipeline(lang_code):
     """
     Get or create a Stanza pipeline for the specified language.
-    Downloads the model if not present.
+    Attempts local loading first to remain completely offline, falling back to download if missing.
     """
     global _STANZA_PIPELINES
     
     if lang_code in _STANZA_PIPELINES:
         return _STANZA_PIPELINES[lang_code]
     
+    # 1. Attempt to load offline directly
     try:
-        print(f"Initializing Stanza pipeline for '{lang_code}'...")
-        stanza.download(lang_code, verbose=True)
+        print(f"Initializing Stanza pipeline offline for '{lang_code}'...")
+        try:
+            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,mwt,pos,lemma', download_method=None)
+        except Exception:
+            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,pos,lemma', download_method=None)
+        _STANZA_PIPELINES[lang_code] = nlp
+        return nlp
+    except Exception as local_err:
+        print(f"Local Stanza load failed for '{lang_code}' ({local_err}). Attempting download...")
         
-        # MWT is not supported by all languages (e.g., English, Indonesian, Chinese)
-        # We try with MWT, and if it fails, we try without it.
+    # 2. Fallback to download if local load fails
+    try:
+        stanza.download(lang_code, verbose=True)
         try:
             nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,mwt,pos,lemma')
         except Exception:
-            print(f"MWT processor not supported for {lang_code}. Retrying without MWT...")
             nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,pos,lemma')
-            
         _STANZA_PIPELINES[lang_code] = nlp
         return nlp
     except Exception as e:
@@ -154,7 +162,8 @@ def tag_text_with_stanza(text, lang_code):
                     'token': word.text,
                     'pos': word.upos, 
                     'lemma': word.lemma if word.lemma else word.text,
-                    'sent_id': sent_id
+                    'sent_id': sent_id,
+                    'ent_type': ""
                 })
         return results, None
     except Exception as e:
@@ -189,7 +198,8 @@ def tag_text_simple_fallback(text):
                 'token': token,
                 'pos': 'TAG', 
                 'lemma': token,
-                'sent_id': sent_id
+                'sent_id': sent_id,
+                'ent_type': ""
             })
             
     return results, None
