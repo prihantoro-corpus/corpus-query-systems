@@ -321,7 +321,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
                             current_stanza_sent = rec['sent_id']
                             current_sent_text_parts = []
                         
-                        row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": sequential_id_counter}
+                        row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": sequential_id_counter, "ent_type": rec.get('ent_type', '')}
                         row.update(base_root_attrs)
                         df_data.append(row)
                         current_sent_text_parts.append(rec['token'])
@@ -335,7 +335,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
             tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
             if tokens:
                for token in tokens:
-                    row = {"token": token, "pos": "TAG", "lemma": token, "sent_id": 1}
+                    row = {"token": token, "pos": "TAG", "lemma": token, "sent_id": 1, "ent_type": ""}
                     row.update(base_root_attrs)
                     df_data.append(row)
                sent_map[1] = raw_sentence_text
@@ -390,7 +390,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
                 if not token: continue
                 pos = w_elem.get('pos') or w_elem.get('type') or "TAG"
                 lemma = w_elem.get('lemma') or token
-                row = {"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id}
+                row = {"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id, "ent_type": ""}
                 if combined_row_attrs: row.update(combined_row_attrs)
                 df_data.append(row)
                 raw_tokens.append(token)
@@ -419,7 +419,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
                     token = parts[0]
                     pos = parts[1] if len(parts) > 1 else "TAG"
                     lemma = parts[2] if len(parts) > 2 else token
-                    row = {"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id}
+                    row = {"token": token, "pos": pos, "lemma": lemma, "sent_id": sent_id, "ent_type": ""}
                     if combined_row_attrs: row.update(combined_row_attrs)
                     df_data.append(row)
                     raw_tokens.append(token)
@@ -444,7 +444,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
                                 current_stanza_sent = rec['sent_id']
                                 current_sent_text_parts = []
                             
-                            row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": sequential_id_counter}
+                            row = {"token": rec['token'], "pos": rec['pos'], "lemma": rec['lemma'], "sent_id": sequential_id_counter, "ent_type": rec.get('ent_type', '')}
                             if combined_row_attrs: row.update(combined_row_attrs)
                             df_data.append(row)
                             current_sent_text_parts.append(rec['token'])
@@ -456,7 +456,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
                 cleaned_text = re.sub(r'([^\w\s])', r' \1 ', raw_text_to_tokenize) 
                 tokens = [t.strip() for t in cleaned_text.split() if t.strip()] 
                 for token in tokens:
-                    row = {"token": token, "pos": "TAG", "lemma": token, "sent_id": sent_id}
+                    row = {"token": token, "pos": "TAG", "lemma": token, "sent_id": sent_id, "ent_type": ""}
                     if combined_row_attrs: row.update(combined_row_attrs)
                     df_data.append(row)
         

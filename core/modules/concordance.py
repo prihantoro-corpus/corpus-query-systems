@@ -5,7 +5,7 @@ from collections import Counter
 from core.statistics.frequency import pmw_to_zipf, zipf_to_band
 import math
 
-def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpus_name, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=100, do_random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False, xml_where_clause="", xml_params=[], hide_symbols=False):
+def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpus_name, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=100, do_random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False, xml_where_clause="", xml_params=[], hide_symbols=False, focus_sentence=False):
     """
     Generalized function to generate KWIC lines using DuckDB SQL queries.
     """
@@ -231,11 +231,15 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 coll_sql = " AND ".join(coll_filter_parts)
                 node_exclusion = f"(c_coll.id < c0.id OR c_coll.id >= c0.id + {primary_target_len})"
                 
+                # If focus_sentence is True, only search within the same sentence
+                sent_restriction = "AND c_coll.sent_id = c0.sent_id" if focus_sentence else ""
+                
                 # Using explicit comparison instead of BETWEEN for potential speed/stability
                 exists_clause = f"""
                 EXISTS (
                     SELECT 1 FROM corpus c_coll 
                     WHERE c_coll.id >= (c0.id - ?) AND c_coll.id <= (c0.id + ? + {primary_target_len} - 1)
+                    {sent_restriction}
                     AND {node_exclusion}
                     AND {coll_sql}
                 )
@@ -438,7 +442,11 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                         if val is not None and str(val).strip() != "":
                             metadata[mc] = val
             
-            formatted_line = []
+            # Get the node token's sent_id
+            node_sent_id = chunk_sent_ids[node_start_idx] if node_start_idx < len(chunk_sent_ids) else None
+            
+            left_part = []
+            right_part = []
             collocate_to_display = ""
             node_orig_tokens = []
             
@@ -449,6 +457,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 
                 # Check if this token is part of the match span
                 is_node = (node_start_idx <= k < node_start_idx + current_match_span_len)
+                
+                # If focus_sentence is True, only preserve tokens within the same sentence
+                if focus_sentence and not is_node and node_sent_id is not None and chunk_sent_ids[k] != node_sent_id:
+                    continue
                 
                 is_coll_match = False
                 if is_pattern_search_active and not is_node:
@@ -476,11 +488,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 
                 if is_node:
                     node_orig_tokens.append(final_html)
+                elif k < node_start_idx:
+                    left_part.append(final_html)
                 else:
-                    formatted_line.append(final_html)
-            
-            left_part = formatted_line[:node_start_idx]
-            right_part = formatted_line[node_start_idx:] 
+                    right_part.append(final_html) 
             
             kwic_rows.append({
                 "match_id": int(match_id),

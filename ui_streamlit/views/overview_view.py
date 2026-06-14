@@ -467,12 +467,19 @@ def _render_pos_management_tab(path, xml_where, xml_params, key_suffix):
         # Load definitions
         current_defs = ov.get_pos_definitions(path)
         
-        # Prepare DataFrame
-        data_rows = []
-        for t in tags:
-            data_rows.append({"Tag": t, "Definition": current_defs.get(t, "")})
-        df_tags = pd.DataFrame(data_rows)
+        # Import pos_help functions
+        from ui_streamlit.components.pos_help import (
+            infer_tagger_and_tagset, 
+            get_pos_tag_examples, 
+            explain_pos_tag_via_spacy,
+            UPOS_INFO, 
+            PTB_INFO
+        )
         
+        tagger, tagset = infer_tagger_and_tagset(path)
+        
+        # Tagger explanation
+        st.markdown(f"🤖 **Pipeline Tagger:** `{tagger}` | 🏷️ **Tagset Scheme:** `{tagset}`")
         st.info("Edit POS definitions. Use AI to guess, upload a file, or edit the table below.")
         
         # --- ACTION BUTTONS ---
@@ -536,17 +543,50 @@ def _render_pos_management_tab(path, xml_where, xml_params, key_suffix):
                     st.rerun()
 
         # --- EDITOR ---
+        tagset_lower = tagset.lower()
+        if "upos" in tagset_lower or "universal" in tagset_lower:
+            standard_info = UPOS_INFO
+        elif "penn" in tagset_lower or "ptb" in tagset_lower:
+            standard_info = PTB_INFO
+        else:
+            standard_info = {}
+
         temp_defs = get_state(f'temp_pos_defs_{path}')
-        if temp_defs:
-            data_rows = [{"Tag": t, "Definition": temp_defs.get(t, "")} for t in tags]
-            df_tags = pd.DataFrame(data_rows)
+        defs_to_use = temp_defs if temp_defs is not None else current_defs
+        
+        data_rows = []
+        for t in tags:
+            defn = defs_to_use.get(t, "")
+            if not defn:
+                if t in standard_info:
+                    defn = f"{standard_info[t]['defn']} ({standard_info[t]['desc']})"
+                else:
+                    spacy_defn = explain_pos_tag_via_spacy(t)
+                    if spacy_defn:
+                        defn = spacy_defn
+                # Update defs_to_use
+                if defn:
+                    defs_to_use[t] = defn
+                
+            examples = get_pos_tag_examples(path, t)
+            data_rows.append({
+                "Tag": t,
+                "Definition": defn,
+                "Examples (from corpus)": examples if examples else "None"
+            })
+        df_tags = pd.DataFrame(data_rows)
         
         edited_df = st.data_editor(
             df_tags, 
             key=f"pos_editor_{key_suffix}", 
             hide_index=True, 
             use_container_width=True,
-            disabled=["Tag"]
+            disabled=["Tag", "Examples (from corpus)"],
+            column_config={
+                "Tag": st.column_config.TextColumn("Tag", width=120),
+                "Definition": st.column_config.TextColumn("Definition", width=350),
+                "Examples (from corpus)": st.column_config.TextColumn("Examples (from corpus)", width=250)
+            }
         )
         
         if st.button("💾 Save Definitions", key=f"save_pos_{key_suffix}", type="primary", use_container_width=True):

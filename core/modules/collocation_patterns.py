@@ -268,19 +268,21 @@ def _matches_collocate_constraints(t_dict: Dict, constraints: List[Dict]) -> boo
                     return True
         elif c['type'] == 'lemma':
             # Support wildcard in lemma constraint
+            lemma_val = (t_dict.get('lemma') or '').lower()
             if '*' in c['value'] or '?' in c['value']:
-                if fnmatch.fnmatch(t_dict.get('lemma', '').lower(), c['value']):
+                if fnmatch.fnmatch(lemma_val, c['value']):
                     return True
             else:
-                if t_dict.get('lemma', '').lower() == c['value']:
+                if lemma_val == c['value']:
                     return True
         elif c['type'] == 'token':
             # Support wildcard in token constraint
+            token_val = (t_dict.get('token') or '').lower()
             if '*' in c['value'] or '?' in c['value']:
-                if fnmatch.fnmatch(t_dict['token'].lower(), c['value']):
+                if fnmatch.fnmatch(token_val, c['value']):
                     return True
             else:
-                if t_dict['token'].lower() == c['value']:
+                if token_val == c['value']:
                     return True
     return False
 
@@ -297,13 +299,13 @@ def match_pattern_in_concordance(
     # Helper to match node/collocate with potential constraints
     def _matches(t_dict, val):
         if not val: return False
-        l_token = t_dict['token'].lower()
+        l_token = (t_dict.get('token') or '').lower()
         l_val = val.lower()
         
         # Handle lemma syntax: [lemma]
         if l_val.startswith('[') and l_val.endswith(']'):
             lemma = l_val[1:-1]
-            return t_dict.get('lemma', '').lower() == lemma
+            return (t_dict.get('lemma') or '').lower() == lemma
         # Handle POS syntax: _TAG
         if l_val.startswith('_'):
             tag = val[1:]
@@ -423,7 +425,7 @@ def _match_recursive(pattern_tokens: List[Dict], conc_tokens: List[Dict], p_idx:
         return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx + 1, require_full_match)
     
     elif p_token['type'] == 'token':
-        if c_token['token'].lower() == p_token['value']:
+        if (c_token.get('token') or '').lower() == p_token['value']:
             return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx + 1, require_full_match)
         elif p_token.get('optional', False):
             return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx, require_full_match)
@@ -435,7 +437,7 @@ def _match_recursive(pattern_tokens: List[Dict], conc_tokens: List[Dict], p_idx:
         if p_token['constraint_type'] == 'pos':
             matched = c_token.get('pos', '') == p_token['constraint_value']
         elif p_token['constraint_type'] == 'lemma':
-            matched = c_token.get('lemma', '').lower() == p_token['constraint_value']
+            matched = (c_token.get('lemma') or '').lower() == p_token['constraint_value']
         
         if matched:
             return _match_recursive(pattern_tokens, conc_tokens, p_idx + 1, c_idx + 1, require_full_match)

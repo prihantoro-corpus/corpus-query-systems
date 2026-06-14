@@ -211,7 +211,7 @@ def interpret_results_gemini(target_word, analysis_type, data_description, data,
     except Exception as e:
         return None, f"Gemini Connection Error: {e}"
 
-def get_ai_response(prompt, ai_provider=None, ollama_model=None, api_key=None, ollama_url=None, gemini_model=None):
+def get_ai_response(prompt, ai_provider=None, ollama_model=None, api_key=None, ollama_url=None, gemini_model=None, format=None):
     """
     Generic function to get a response from an AI provider for a given prompt.
     """
@@ -230,6 +230,8 @@ def get_ai_response(prompt, ai_provider=None, ollama_model=None, api_key=None, o
         # Ollama
         try:
             payload = {"model": settings["ollama_model"], "prompt": prompt, "stream": False}
+            if format:
+                payload["format"] = format
             response = requests.post(settings["ollama_url"], json=payload, timeout=180)
             res_json = response.json()
             return res_json.get('response') or res_json.get('content'), None

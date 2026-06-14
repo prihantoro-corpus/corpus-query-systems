@@ -40,6 +40,8 @@ def render_distribution_view():
         if search_mode == "Natural Language (AI)":
             st.markdown("### 🧠 Natural Language Search")
             nl_query = st.text_input("Describe distribution query", placeholder="e.g. Distribution of 'technology'")
+            from ui_streamlit.components.pos_help import render_pos_help_button
+            render_pos_help_button(corpus_path, "dist_ai")
 
             if st.button("Search with AI", type="primary", key="dist_ai_btn"):
                  if not nl_query:
@@ -69,6 +71,8 @@ def render_distribution_view():
             st.markdown("### ⚡ Natural Language Search (Rule-Based)")
             st.caption("Fast, deterministic parsing. Finds distribution of terms, wildcards, or POS tags.")
             nl_query = st.text_input("Distribution Query (NL)", value=get_state('dist_nl_query_rule', ''), placeholder="e.g. distribution of 'noun'", key="dist_nl_input_rule")
+            from ui_streamlit.components.pos_help import render_pos_help_button
+            render_pos_help_button(corpus_path, "dist_rule")
 
         if search_mode == "Standard":
             with st.expander("Search Controls", expanded=True):
@@ -85,6 +89,9 @@ def render_distribution_view():
                         search_term_1 = st.text_input(f"Primary ({corpus_name})", value=get_state('dist_search_term', ''), key="dist_input_c1")
                     with c2:
                         search_term_2 = st.text_input(f"Comparison ({comp_name if comp_name else 'Secondary'})", value=get_state('dist_search_term_2', ''), key="dist_input_c2")
+                
+                from ui_streamlit.components.pos_help import render_pos_help_button
+                render_pos_help_button(corpus_path, "dist_standard")
 
         # --- XML Restriction Filters ---
         if not comp_mode:

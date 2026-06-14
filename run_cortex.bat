@@ -79,6 +79,13 @@ if not exist "%SHORTCUT_PATH%" (
     )
 )
 
+:: Check if local virtual environment exists
+if exist "!CORTEX_DIR!\.venv\Scripts\python.exe" (
+    echo Local virtual environment (.venv) found. Using local Python...
+    set "PYTHON_CMD=!CORTEX_DIR!\.venv\Scripts\python.exe"
+    goto :python_found
+)
+
 :: Check Python installation
 echo Checking for Python...
 where python >nul 2>nul
@@ -116,8 +123,8 @@ echo Python !PY_VER! found.
 if exist ".git" (
     where git >nul 2>nul
     if %ERRORLEVEL% equ 0 (
-        echo Checking for updates from GitHub...
-        git pull
+        echo [INFO] Offline mode: Skipping updates from GitHub.
+        :: git pull
     )
 )
 
