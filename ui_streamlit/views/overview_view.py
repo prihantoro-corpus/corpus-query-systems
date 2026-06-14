@@ -2388,7 +2388,7 @@ def _render_lexical_complexity_tab(db_path, key_suffix=""):
                 st.metric("Adv Variation (AdvV)", f"{val:.4f}", help="Ratio of adverbs to total lexical words. Measures adverb diversity.")
                 st.caption(get_advv_label(val))
             with m9:
-                val = spec_overall.get('Modifier Var (ModV)', 0.0)
+                val = spec_overall.get('ModV', 0.0)
                 st.metric("Modifier Var (ModV)", f"{val:.4f}", help="Ratio of modifiers (adjectives + adverbs) to total lexical words. Measures modifier density.")
                 st.caption(get_modv_label(val))
             
