@@ -18,6 +18,15 @@ def get_detailed_contextual_ngrams(corpus_db_path, query_word, xml_where_clause=
         con = duckdb.connect(corpus_db_path, read_only=True)
         q = query_word.lower()
         
+        # Check if the exact term exists in the corpus first
+        exact_count = con.execute(f"SELECT count(*) FROM corpus WHERE _token_low = ? {xml_where_clause}", [q] + xml_params).fetchone()[0]
+        if exact_count > 0:
+            qualify_sql = "lower(node) = ?"
+            search_params = [q]
+        else:
+            qualify_sql = "lower(lemma) = ?"
+            search_params = [q]
+            
         # Use Window Functions to get context in one pass (Context size = 3)
         sql = f"""
         SELECT 
@@ -27,13 +36,14 @@ def get_detailed_contextual_ngrams(corpus_db_path, query_word, xml_where_clause=
             token as node,
             LEAD(token, 1) OVER (ORDER BY id) as n1,
             LEAD(token, 2) OVER (ORDER BY id) as n2,
-            LEAD(token, 3) OVER (ORDER BY id) as n3
+            LEAD(token, 3) OVER (ORDER BY id) as n3,
+            lemma
         FROM corpus
         WHERE 1=1 {xml_where_clause}
-        QUALIFY lower(node) = ?
+        QUALIFY {qualify_sql}
         """
         
-        df_res = con.execute(sql, xml_params + [q]).fetch_df()
+        df_res = con.execute(sql, xml_params + search_params).fetch_df()
         con.close()
         
         if df_res.empty: return None
@@ -90,9 +100,15 @@ def get_all_lemma_forms_details(corpus_db_path, target_word, xml_where_clause=""
     
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
-        # XML-Aware Lemma discovery: find lemmas that are relevant to this word IN THIS REGION
-        lemma_sql = f"SELECT DISTINCT lower(lemma) FROM corpus WHERE _token_low = ? AND lemma NOT LIKE '##%' {xml_where_clause}"
-        lemma_list = [r[0] for r in con.execute(lemma_sql, [term] + xml_params).fetchall()]
+        # XML-Aware Lemma discovery: find lemmas that are relevant to this word OR if the word is itself a lemma
+        lemma_sql = f"""
+            SELECT DISTINCT lower(lemma) 
+            FROM corpus 
+            WHERE (_token_low = ? OR lower(lemma) = ?) 
+              AND lemma NOT LIKE '##%' 
+              {xml_where_clause}
+        """
+        lemma_list = [r[0] for r in con.execute(lemma_sql, [term, term] + xml_params).fetchall()]
         
         if not lemma_list:
             sql = f"SELECT lower(token) as token, pos, lemma, count(*) as freq FROM corpus WHERE _token_low = ? {xml_where_clause} GROUP BY 1,2,3"
@@ -166,10 +182,14 @@ def get_dictionary_examples(corpus_db_path, target_word, xml_where_clause="", xm
         if meta_cols:
             meta_select_part = ", " + ", ".join([f"c.{c}" for c in meta_cols])
         
-        # PRINCIPLE: Examples must contain the EXACT search word. 
-        # We no longer expand to the whole lemma for example hits.
-        where_sql = "c._token_low = ?"
-        search_params = [term]
+        # Check if the exact term exists in the corpus first
+        exact_count = con.execute(f"SELECT count(*) FROM corpus WHERE _token_low = ? {xml_where_clause}", [term] + xml_params).fetchone()[0]
+        if exact_count > 0:
+            where_sql = "c._token_low = ?"
+            search_params = [term]
+        else:
+            where_sql = "lower(c.lemma) = ?"
+            search_params = [term]
 
         # Prioritizing shorter sentences (< 15 tokens)
         hits_df = con.execute(f"""
@@ -243,19 +263,29 @@ def get_random_examples(corpus_db_path, target_word, limit=5, xml_where_clause="
     if not corpus_db_path: return []
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
-        hits = con.execute(f"SELECT DISTINCT sent_id FROM corpus WHERE _token_low = ? {xml_where_clause} ORDER BY random() LIMIT ?", [target_word.lower()] + xml_params + [limit]).fetchall()
+        term = target_word.lower()
+        exact_count = con.execute(f"SELECT count(*) FROM corpus WHERE _token_low = ? {xml_where_clause}", [term] + xml_params).fetchone()[0]
+        if exact_count > 0:
+            where_sql = "_token_low = ?"
+            search_params = [term]
+        else:
+            where_sql = "lower(lemma) = ?"
+            search_params = [term]
+            
+        hits = con.execute(f"SELECT DISTINCT sent_id FROM corpus WHERE {where_sql} {xml_where_clause} ORDER BY random() LIMIT ?", search_params + xml_params + [limit]).fetchall()
         
         examples = []
         for (sent_id,) in hits:
-            tokens = con.execute("SELECT token, _token_low FROM corpus WHERE sent_id = ? ORDER BY id", [sent_id]).fetchall()
+            tokens = con.execute("SELECT token, _token_low, lower(lemma) FROM corpus WHERE sent_id = ? ORDER BY id", [sent_id]).fetchall()
             parts = []
-            for t, tl in tokens:
-                if tl == target_word.lower():
+            for t, tl, ll in tokens:
+                if (exact_count > 0 and tl == term) or (exact_count == 0 and ll == term):
                     parts.append(f"<b>{t}</b>")
                 else:
                     parts.append(t)
             examples.append(" ".join(parts))
         con.close()
         return examples
-    except Exception:
+    except Exception as e:
+        print(f"Error in get_random_examples: {e}")
         return []
