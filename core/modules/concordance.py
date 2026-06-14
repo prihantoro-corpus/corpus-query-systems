@@ -5,7 +5,7 @@ from collections import Counter
 from core.statistics.frequency import pmw_to_zipf, zipf_to_band
 import math
 
-def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpus_name, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=100, do_random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False, xml_where_clause="", xml_params=[], hide_symbols=False, focus_sentence=False):
+def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpus_name, pattern_collocate_input="", pattern_collocate_pos_input="", pattern_window=0, limit=100, do_random_sample=False, is_parallel_mode=False, show_pos=False, show_lemma=False, xml_where_clause="", xml_params=[], hide_symbols=False, focus_sentence=False, show_duplicates=False):
     """
     Generalized function to generate KWIC lines using DuckDB SQL queries.
     """
@@ -41,19 +41,27 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         except: pass
             
         def parse_term(term):
-            # XML Tag Check (e.g., <PN> or <PN type="human">)
-            xml_tag_match = re.match(r'<(\w+)(?:\s+(.+?))?>', term, re.IGNORECASE)
+            # XML Tag Check: Handles <TAG>, <TAG ATTR="VAL">, and <TAG="VAL">
+            xml_tag_match = re.match(r'<(\w+)(?:[=\s](.+?))?>', term, re.IGNORECASE)
             if xml_tag_match:
-                tag_name = xml_tag_match.group(1).lower() # Normalize to lowercase
-                attrs_str = xml_tag_match.group(2)
+                tag_name = xml_tag_match.group(1).lower()
+                val_or_attrs = xml_tag_match.group(2)
                 attrs = {}
-                if attrs_str:
-                    # Parse attributes: attr="value" or attr='value'
-                    attr_pattern = r'(\w+)=(["\'])([^"\']*)\2'
-                    for match in re.finditer(attr_pattern, attrs_str):
-                        attr_key = match.group(1).lower()
-                        attr_val = match.group(3)
-                        attrs[attr_key] = attr_val
+                if val_or_attrs:
+                    # Case 1: <TAG="VALUE">
+                    if not re.search(r'\w+=', val_or_attrs):
+                        # Strip quotes if present
+                        val = val_or_attrs.strip()
+                        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                            val = val[1:-1]
+                        attrs['value'] = val
+                    else:
+                        # Case 2: <TAG ATTR="VALUE">
+                        attr_pattern = r'(\w+)=(["\'])([^"\']*)\2'
+                        for match in re.finditer(attr_pattern, val_or_attrs):
+                            attr_key = match.group(1).lower()
+                            attr_val = match.group(3)
+                            attrs[attr_key] = attr_val
                 return {'type': 'xml_tag', 'tag': tag_name, 'attrs': attrs}
             
             lemma_match = re.search(r"\[(.*?)\]", term)
@@ -83,13 +91,19 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         for k, comp in enumerate(search_components):
             alias = f"c{k}"
             
-            # For match_token display, we need to handle multi-token tags
+            # For match_token display, we need to handle multi-token tags vs token-level metadata
             if comp['type'] == 'xml_tag':
                 tag_name = comp['tag']
-                # Concatenate tokens within the tag span
-                # We use a subquery to gather tokens from id to id + tag_len - 1
-                token_expr = f"(SELECT string_agg(token, ' ') FROM corpus c_sub WHERE c_sub.id BETWEEN {alias}.id AND {alias}.id + {alias}.{tag_name}_len - 1)"
-                current_offset_exprs.append(f"COALESCE({alias}.{tag_name}_len, 1)")
+                tag_len_col = f"{tag_name}_len"
+                
+                if tag_len_col in cols:
+                    # Span-based tag (standard XML)
+                    token_expr = f"(SELECT string_agg(token, ' ') FROM corpus c_sub WHERE c_sub.id BETWEEN {alias}.id AND {alias}.id + {alias}.{tag_len_col} - 1)"
+                    current_offset_exprs.append(f"COALESCE({alias}.{tag_len_col}, 1)")
+                else:
+                    # Token-level property (length 1)
+                    token_expr = f"{alias}.token"
+                    current_offset_exprs.append("1")
             else:
                 token_expr = f"{alias}.token"
                 current_offset_exprs.append("1")
@@ -107,7 +121,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         
         match_token_expr = "(" + " || ' ' || ".join(token_concat_parts) + ")" if len(token_concat_parts) > 1 else token_concat_parts[0]
         
-        query_select = f"SELECT c0.id, {total_len_expr} as total_len, {match_token_expr} as match_token FROM corpus c0"
+        query_select = f"SELECT DISTINCT c0.id, {total_len_expr} as total_len, {match_token_expr} as match_token FROM corpus c0"
         # query_joins already built in loop above
         query_where = []
         query_params = []
@@ -142,20 +156,38 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 tag_name = comp['tag']
                 attrs = comp['attrs']
                 
-                # Check if it's the START of the tag instance
+                # Dynamic check: Is this a span-based tag or a token-level property?
                 tag_start_col = f"in_{tag_name}_start"
-                query_where.append(f"{alias}.{tag_start_col} = TRUE")
-                
-                # Add attribute filters
-                for attr_key, attr_val in attrs.items():
-                    attr_col = f"{tag_name}_{attr_key}"
-                    if '*' in attr_val:
-                        regex_pat = '^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
-                        query_where.append(f"regexp_matches({alias}.{attr_col}, ?)")
-                        query_params.append(regex_pat)
+                if tag_start_col in cols:
+                    # Span-based tag (standard XML)
+                    query_where.append(f"{alias}.{tag_start_col} = TRUE")
+                    for attr_key, attr_val in attrs.items():
+                        attr_col = f"{tag_name}_{attr_key}"
+                        if '*' in attr_val:
+                            regex_pat = '^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
+                            query_where.append(f"regexp_matches({alias}.{attr_col}, ?)")
+                            query_params.append(regex_pat)
+                        else:
+                            query_where.append(f"{alias}.{attr_col} = ?")
+                            query_params.append(attr_val)
+                elif tag_name in cols:
+                    # Token-level metadata property (e.g. <dep_rel="nsubj">)
+                    # Use 'value' attribute or first attribute as the target for the column
+                    target_val = attrs.get('value') or (list(attrs.values())[0] if attrs else None)
+                    if target_val:
+                        if '*' in target_val:
+                            regex_pat = '^' + re.escape(target_val).replace(r'\*', '.*') + '$'
+                            query_where.append(f"regexp_matches({alias}.{tag_name}, ?)")
+                            query_params.append(regex_pat)
+                        else:
+                            query_where.append(f"{alias}.{tag_name} = ?")
+                            query_params.append(target_val)
                     else:
-                        query_where.append(f"{alias}.{attr_col} = ?")
-                        query_params.append(attr_val)
+                        # Just <TAG> (ensure it's not null)
+                        query_where.append(f"{alias}.{tag_name} IS NOT NULL")
+                else:
+                    # Column doesn't exist, ignore match or filter by null
+                    query_where.append("1=0")
 
             elif comp['type'] == 'word':
                 val = comp['val']
@@ -501,6 +533,29 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 "Collocate": collocate_to_display,
                 "Metadata": metadata  # Add Metadata
             })
+
+        # Apply Duplicate Filtering if requested
+        if not show_duplicates:
+            unique_rows = []
+            seen_content = set()
+            for row in kwic_rows:
+                # content-based unique check (Left + Node + Right)
+                # strip HTML for cleaner comparison
+                l_plain = re.sub(r'<[^>]*>', '', row['Left']).strip()
+                n_plain = re.sub(r'<[^>]*>', '', row['Node']).strip()
+                r_plain = re.sub(r'<[^>]*>', '', row['Right']).strip()
+                key = (l_plain, n_plain, r_plain)
+                if key not in seen_content:
+                    unique_rows.append(row)
+                    seen_content.add(key)
+            
+            # If we filtered rows, should we also adjust the 'total' match count?
+            # Usually 'total' refers to the full search breadth.
+            # However if duplicates are hidden, the 'total' might be misleading.
+            # We'll stick to filtering the DISPLAY rows to maintain limit consistency.
+            kwic_rows = unique_rows
+            # If we are under the limit now, we could theoretically fetch more, 
+            # but that's complex with the current architecture.
 
         return (kwic_rows, total_matches, raw_target_input, literal_freq, sent_ids, breakdown_df)
         

@@ -18,7 +18,7 @@ def render_sidebar():
     if os.path.exists(logo_path):
         st.sidebar.image(logo_path, width=150)
     st.sidebar.title("CORTEX")
-    st.sidebar.caption("App Version: v130626")
+    st.sidebar.caption("App Version: v150626")
     
     # Environment detection
     import socket

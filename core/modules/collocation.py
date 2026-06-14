@@ -89,16 +89,26 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
             except: pass
 
         def parse_term(term):
-            # XML Tag Check (e.g., <PN> or <PN type="human">)
-            xml_tag_match = re.match(r'<(\w+)(?:\s+(.+?))?>', term, re.IGNORECASE)
+            # XML Tag Check: Handles <TAG>, <TAG ATTR="VAL">, and <TAG="VAL">
+            xml_tag_match = re.match(r'<(\w+)(?:[=\s](.+?))?>', term, re.IGNORECASE)
             if xml_tag_match:
                 tag_name = xml_tag_match.group(1).lower()
-                attrs_str = xml_tag_match.group(2)
+                val_or_attrs = xml_tag_match.group(2)
                 attrs = {}
-                if attrs_str:
-                    attr_pattern = r'(\w+)=(["\'])([^"\']*)\2'
-                    for match in re.finditer(attr_pattern, attrs_str):
-                        attrs[match.group(1).lower()] = match.group(3)
+                if val_or_attrs:
+                    # Case 1: <TAG="VALUE">
+                    if not re.search(r'\w+=', val_or_attrs):
+                        val = val_or_attrs.strip()
+                        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                            val = val[1:-1]
+                        attrs['value'] = val
+                    else:
+                        # Case 2: <TAG ATTR="VALUE">
+                        attr_pattern = r'(\w+)=(["\'])([^"\']*)\2'
+                        for match in re.finditer(attr_pattern, val_or_attrs):
+                            attr_key = match.group(1).lower()
+                            attr_val = match.group(3)
+                            attrs[attr_key] = attr_val
                 return {'type': 'xml_tag', 'tag': tag_name, 'attrs': attrs}
             
             # Same logic as concordance.py
@@ -142,7 +152,11 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
             
             if comp['type'] == 'xml_tag':
                 tag_name = comp['tag']
-                current_offset_exprs.append(f"COALESCE({alias}.{tag_name}_len, 1)")
+                tag_len_col = f"{tag_name}_len"
+                if tag_len_col in cols:
+                    current_offset_exprs.append(f"COALESCE({alias}.{tag_len_col}, 1)")
+                else:
+                    current_offset_exprs.append("1")
             else:
                 current_offset_exprs.append("1")
             
@@ -154,7 +168,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
         # Calculate TOTAL match length expression
         total_len_expr = " + ".join(current_offset_exprs)
         
-        query_select = f"SELECT c0.id, {total_len_expr} as total_len FROM corpus c0"
+        query_select = f"SELECT DISTINCT c0.id, {total_len_expr} as total_len FROM corpus c0"
         query_where = []
         query_params = []
         
@@ -182,19 +196,35 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
                 tag_name = comp['tag']
                 attrs = comp['attrs']
                 
-                # Use the START of the tag instance
+                # Dynamic check: Is this a span-based tag or a token-level property?
                 tag_start_col = f"in_{tag_name}_start"
-                query_where.append(f"{alias}.{tag_start_col} = TRUE")
-                
-                for attr_key, attr_val in attrs.items():
-                    attr_col = f"{tag_name}_{attr_key}"
-                    if '*' in attr_val:
-                        regex_pat = '^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
-                        query_where.append(f"regexp_matches({alias}.{attr_col}, ?)")
-                        query_params.append(regex_pat)
+                if tag_start_col in cols:
+                    # Span-based tag (standard XML)
+                    query_where.append(f"{alias}.{tag_start_col} = TRUE")
+                    for attr_key, attr_val in attrs.items():
+                        attr_col = f"{tag_name}_{attr_key}"
+                        if '*' in attr_val:
+                            regex_pat = '^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
+                            query_where.append(f"regexp_matches({alias}.{attr_col}, ?)")
+                            query_params.append(regex_pat)
+                        else:
+                            query_where.append(f"{alias}.{attr_col} = ?")
+                            query_params.append(attr_val)
+                elif tag_name in cols:
+                    # Token-level property (e.g. <dep_rel="nsubj">)
+                    target_val = attrs.get('value') or (list(attrs.values())[0] if attrs else None)
+                    if target_val:
+                        if '*' in target_val:
+                            regex_pat = '^' + re.escape(target_val).replace(r'\*', '.*') + '$'
+                            query_where.append(f"regexp_matches({alias}.{tag_name}, ?)")
+                            query_params.append(regex_pat)
+                        else:
+                            query_where.append(f"{alias}.{tag_name} = ?")
+                            query_params.append(target_val)
                     else:
-                        query_where.append(f"{alias}.{attr_col} = ?")
-                        query_params.append(attr_val)
+                        query_where.append(f"{alias}.{tag_name} IS NOT NULL")
+                else:
+                    query_where.append("1=0")
             
             else:
                 val = comp['val']
