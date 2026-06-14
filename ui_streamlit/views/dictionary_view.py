@@ -139,6 +139,11 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     forms_df, unique_pos, unique_lemmas = cached_get_lemma_details(
         path, current_term, xml_where_clause=xml_where, xml_params=xml_params
     )
+    
+    # Check if exact token has frequency > 0 in forms_df
+    exact_word_df = forms_df[forms_df['Token'] == current_term.lower()] if not forms_df.empty else pd.DataFrame()
+    exact_count = exact_word_df['freq'].sum() if not exact_word_df.empty else 0
+    
     context_ngrams = cached_get_context_ngrams(
         path, current_term, xml_where_clause=xml_where, xml_params=xml_params
     ) or {}
@@ -150,10 +155,11 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     random_examples = cached_get_random_examples(path, current_term, limit=5, xml_where_clause=xml_where, xml_params=xml_params)
     related_forms = cached_get_related_forms(path, current_term, xml_where_clause=xml_where, xml_params=xml_params)
     
-    # New: Collocates for examples
+    # New: Collocates for examples (use lemma search if exact word doesn't exist)
+    collocate_search_word = f"[{current_term}]" if exact_count == 0 else current_term
     coll_df, _, _ = cached_generate_collocation(
         db_path=path, 
-        word=current_term, 
+        word=collocate_search_word, 
         window=5, 
         min_freq=3, 
         max_rows=20, 
@@ -173,6 +179,11 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
         total_tokens = cached_get_subcorpus_size(path, xml_where_clause=xml_where, xml_params=xml_params)
     else:
         total_tokens = stats.get('total_tokens', 1)
+        
+    is_lemma_fallback = False
+    if exact_count == 0 and not forms_df.empty:
+        is_lemma_fallback = True
+        total_freq = forms_df['freq'].sum()
     
     pmw = (total_freq / total_tokens) * 1000000 if total_tokens > 0 else 0
     zipf_score = pmw_to_zipf(pmw)
@@ -340,6 +351,8 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     # Harmonized Header Layout: Term /IPA/ (CEFR) [Warning]
     s_html = f'<div style="background-color: #1a1a1a; padding: 20px; border-radius: 10px; border: 1px solid #444; color: #eee; font-family: sans-serif; font-size: {base_font_size}; line-height: 1.5; margin-bottom: 20px;">'
     s_html += f'<h3 style="color: #FFEA00; margin: 0; display: inline-block;">{current_term}</h3>'
+    if is_lemma_fallback:
+        s_html += f' <span style="display: inline-block; background-color: #1e3a8a; color: #93c5fd; font-size: 0.6em; padding: 2px 6px; border-radius: 4px; margin-left: 10px; border: 1px solid #3b82f6; vertical-align: middle; font-weight: bold;">LEMMA MATCH</span>'
     if ipa_text:
         s_html += f'<span style="color: #888; margin-left:10px;">/{ipa_text}/</span>'
     if cefr_level:
@@ -350,8 +363,8 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     s_html += '<div style="margin-top: 5px; margin-bottom: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">'
     s_html += f'<span><b>Lemma:</b> <span style="color: #00ADB5;">{lemma_str}</span></span>'
     s_html += f'<span><b>POS:</b> {", ".join(unique_pos)}</span>'
-    s_html += f'<span><b>Freq:</b> {total_freq:,}</span>'
-    s_html += f'<span><b>Rel:</b> {pmw:.2f} pmw</span>'
+    s_html += f'<span><b>Freq:</b> {total_freq:,} {"(Lemma)" if is_lemma_fallback else ""}</span>'
+    s_html += f'<span><b>Rel:</b> {pmw:.2f} pmw {"(Lemma)" if is_lemma_fallback else ""}</span>'
     s_html += f'<span style="display: inline-flex; align-items: center; gap: 5px;"><b>Band:</b> {get_zipf_bar_html(band)}</span>'
     s_html += '</div>'
     
