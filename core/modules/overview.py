@@ -122,22 +122,204 @@ def get_unique_pos_tags(db_path, xml_where_clause="", xml_params=[]):
     finally:
         con.close()
 
-def get_pos_definitions(db_path):
+def infer_tagset(db_path):
     """
-    Fetches the POS definitions dictionary from the database.
+    Infers the POS tagset used in the corpus.
     """
-    if not db_path: return {}
+    if not db_path:
+        return "Unknown"
     con = duckdb.connect(db_path, read_only=True)
     try:
         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
-        if 'pos_definitions' not in tables:
-            return {}
-        rows = con.execute("SELECT tag, definition FROM pos_definitions").fetchall()
-        return {r[0]: r[1] for r in rows}
-    except:
-        return {}
+        if 'corpus_metadata' in tables:
+            res_ts = con.execute("SELECT value FROM corpus_metadata WHERE key='tagset'").fetchone()
+            if res_ts:
+                return res_ts[0]
+                
+        # Check POS column existence
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+        cols = [c[1] for c in cols_info]
+        if 'pos' not in cols:
+            return "None"
+            
+        res_tags = con.execute("SELECT DISTINCT pos FROM corpus WHERE pos NOT IN ('##', '###', 'O', '') AND pos NOT LIKE '##%' LIMIT 50").fetchall()
+        tags = {r[0] for r in res_tags if r[0]}
+        
+        upos_tags = {'ADJ', 'ADP', 'ADV', 'AUX', 'CCONJ', 'DET', 'INTJ', 'NOUN', 'NUM', 'PART', 'PRON', 'PROPN', 'PUNCT', 'SCONJ', 'SYM', 'VERB', 'X'}
+        ptb_tags = {'CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$', 'RB', 'RBR', 'RBS', 'RP', 'SYM', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT', 'WP', 'WP$', 'WRB'}
+        
+        if not tags:
+            return "None"
+        elif tags.issubset(upos_tags) or len(tags.intersection(upos_tags)) / max(len(tags), 1) > 0.7:
+            return "Universal Dependencies (UPOS)"
+        elif any(t.startswith('NS') or t in ('VSD', 'NEG', 'KUA', 'FOC') for t in tags):
+            return "ID-BPPT Indonesian Tagset"
+        elif len(tags.intersection(ptb_tags)) / max(len(tags), 1) > 0.5:
+            return "Penn Treebank (PTB)"
+        else:
+            return "Custom / Other"
+    except Exception as e:
+        print(f"Error inferring tagset: {e}")
+        return "Unknown"
     finally:
         con.close()
+
+def get_pos_definitions(db_path):
+    """
+    Fetches the POS definitions dictionary from the database.
+    If the table is missing or empty, dynamically infers the tagset scheme
+    and returns standard pre-populated descriptions (UPOS, PTB, or BPPT) as a fallback.
+    """
+    if not db_path: return {}
+    
+    db_defs = {}
+    has_defs = False
+    
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+        if 'pos_definitions' in tables:
+            rows = con.execute("SELECT tag, definition FROM pos_definitions").fetchall()
+            if rows:
+                db_defs = {r[0]: r[1] for r in rows}
+                has_defs = True
+    except:
+        pass
+    finally:
+        con.close()
+        
+    if has_defs and db_defs:
+        return db_defs
+        
+    # Fallback to inferred tagset definitions
+    tagset = infer_tagset(db_path)
+    tagset_lower = tagset.lower()
+    
+    UPOS_DEFS = {
+        'ADJ': 'adjective (words that modify nouns or pronouns describing properties)',
+        'ADP': 'adposition (prepositions and postpositions describing relations)',
+        'ADV': 'adverb (words modifying verbs, adjectives, or other adverbs)',
+        'AUX': 'auxiliary verb (verbs adding grammatical info to another verb)',
+        'CCONJ': 'coordinating conjunction (conjunctions connecting words/phrases of equal rank)',
+        'DET': 'determiner (words expressing reference/quantity of a noun)',
+        'INTJ': 'interjection (words expressing emotion, exclamation, or greeting)',
+        'NOUN': 'noun (words denoting people, places, things, or concepts)',
+        'NUM': 'numeral (words denoting numbers (cardinal or ordinal))',
+        'PART': 'particle (function words associated with another word/phrase)',
+        'PRON': 'pronoun (words substituting for nouns or noun phrases)',
+        'PROPN': 'proper noun (names of specific people, places, organizations)',
+        'PUNCT': 'punctuation (marks used to delimit sentences or clauses)',
+        'SCONJ': 'subordinating conjunction (conjunctions introducing subordinate clauses)',
+        'SYM': 'symbol (characters representing math, currency, or other signs)',
+        'VERB': 'verb (words expressing actions, occurrences, or states)',
+        'X': 'other / unknown (foreign words, abbreviations, or typos)'
+    }
+    
+    PTB_DEFS = {
+        'CC': 'Coordinating conjunction (connects words or phrases)',
+        'CD': 'Cardinal number (numerical values)',
+        'DT': 'Determiner (precedes nouns to express reference)',
+        'EX': 'Existential there (there as introductory pronoun)',
+        'FW': 'Foreign word (words from foreign languages)',
+        'IN': 'Preposition or subordinating conjunction (relational/subordinating words)',
+        'JJ': 'Adjective (describes nouns)',
+        'JJR': 'Adjective, comparative (comparative descriptors)',
+        'JJS': 'Adjective, superlative (superlative descriptors)',
+        'LS': 'List item marker (markers for lists)',
+        'MD': 'Modal (modal auxiliary verbs)',
+        'NN': 'Noun, singular or mass (singular common nouns)',
+        'NNS': 'Noun, plural (plural common nouns)',
+        'NNP': 'Proper noun, singular (singular names)',
+        'NNPS': 'Proper noun, plural (plural names)',
+        'PDT': 'Predeterminer (determiners preceding others)',
+        'POS': 'Possessive ending (possessive suffix)',
+        'PRP': 'Personal pronoun (substitutes for persons)',
+        'PRP$': 'Possessive pronoun (expresses possession)',
+        'RB': 'Adverb (modifies verbs or adjectives)',
+        'RBR': 'Adverb, comparative (comparative modifiers)',
+        'RBS': 'Adverb, superlative (superlative modifiers)',
+        'RP': 'Particle (preposition-like words acting with verbs)',
+        'SYM': 'Symbol (signs/symbols)',
+        'TO': 'to (infinitive marker or preposition)',
+        'UH': 'Interjection (exclamations)',
+        'VB': 'Verb, base form (infinitive or present verbs)',
+        'VBD': 'Verb, past tense (past tense action verbs)',
+        'VBG': 'Verb, gerund or present participle (-ing verbs)',
+        'VBN': 'Verb, past participle (past participle verbs)',
+        'VBP': 'Verb, non-3rd person singular present (present verbs with I/you/we/they)',
+        'VBZ': 'Verb, 3rd person singular present (present verbs with he/she/it)',
+        'WDT': 'Wh-determiner (wh-question determiners)',
+        'WP': 'Wh-pronoun (wh-question pronouns)',
+        'WP$': 'Possessive wh-pronoun (possessive wh-pronouns)',
+        'WRB': 'Wh-adverb (wh-question adverbs)'
+    }
+    
+    BPPT_DEFS = {
+        "NEG": "negation (kata penyangkalan, e.g., tidak, bukan)",
+        "SC": "subordinating conjunction (kata hubung anak kalimat, e.g., karena, jika)",
+        "CC": "coordinating conjunction (kata hubung setara, e.g., dan, tetapi)",
+        "CD": "cardinal / numeral (kata bilangan, e.g., satu, dua)",
+        "DT": "determiner (kata sandang/penentu, e.g., itu, sebuah)",
+        "FW": "foreign word (kata asing)",
+        "IN": "preposition (kata depan, e.g., di, ke, dari)",
+        "JJ": "adjective (kata sifat, e.g., bagus, besar)",
+        "MD": "modal / auxiliary (kata bantu, e.g., akan, dapat)",
+        "NN": "common noun (kata benda am)",
+        "NNP": "proper noun (kata benda khas)",
+        "PRP": "personal pronoun (kata ganti nama diri, e.g., saya, kamu)",
+        "RB": "adverb (kata keterangan, e.g., sangat, cepat)",
+        "RP": "particle (partikel)",
+        "UH": "interjection (kata seru, e.g., wah, aduh)",
+        "VB": "verb (kata kerja)",
+        "Z": "punctuation (tanda baca)",
+        "FOC": "focus particle (partikel penegas, e.g., -lah, -kah)",
+        "KUA": "quantifier (kata penentu jumlah)",
+        "VSD": "intransitive verb (kata kerja intransitif)",
+        "VBT": "transitive verb (kata kerja transitif)",
+        "NSD": "common noun (kata benda am)",
+        "NSM": "proper noun (kata benda khas)"
+    }
+    
+    VERB_EXT_DEFS = {
+        "VV": "verb, lexical, base form (e.g., take, run)",
+        "VVB": "verb, lexical, base form (e.g., take, run)",
+        "VVD": "verb, lexical, past tense (e.g., took, ran)",
+        "VVG": "verb, lexical, gerund or present participle (e.g., taking, running)",
+        "VVN": "verb, lexical, past participle (e.g., taken, run)",
+        "VVP": "verb, lexical, present tense, non-3rd person singular (e.g., take, run)",
+        "VVZ": "verb, lexical, present tense, 3rd person singular (e.g., takes, runs)",
+        "VBD": "verb, auxiliary/be, past tense (e.g., was, were)",
+        "VBG": "verb, auxiliary/be, gerund or present participle (e.g., being)",
+        "VBN": "verb, auxiliary/be, past participle (e.g., been)",
+        "VBP": "verb, auxiliary/be, present tense, non-3rd person singular (e.g., am, are)",
+        "VBZ": "verb, auxiliary/be, present tense, 3rd person singular (e.g., is)",
+        "VH": "verb, auxiliary/have, base form (e.g., have)",
+        "VHD": "verb, auxiliary/have, past tense (e.g., had)",
+        "VHG": "verb, auxiliary/have, gerund or present participle (e.g., having)",
+        "VHN": "verb, auxiliary/have, past participle (e.g., had)",
+        "VHP": "verb, auxiliary/have, present tense, non-3rd person singular (e.g., have)",
+        "VHZ": "verb, auxiliary/have, present tense, 3rd person singular (e.g., has)",
+        "VD": "verb, auxiliary/do, base form (e.g., do)",
+        "VDD": "verb, auxiliary/do, past tense (e.g., did)",
+        "VDG": "verb, auxiliary/do, gerund or present participle (e.g., doing)",
+        "VDN": "verb, auxiliary/do, past participle (e.g., done)",
+        "VDP": "verb, auxiliary/do, present tense, non-3rd person singular (e.g., do)",
+        "VDZ": "verb, auxiliary/do, present tense, 3rd person singular (e.g., does)"
+    }
+    
+    fallback_defs = {}
+    if "upos" in tagset_lower or "universal" in tagset_lower:
+        fallback_defs.update(UPOS_DEFS)
+    elif "bppt" in tagset_lower or "indonesian" in tagset_lower:
+        fallback_defs.update(BPPT_DEFS)
+        fallback_defs.update(PTB_DEFS)
+        fallback_defs.update(VERB_EXT_DEFS)
+    else:
+        fallback_defs.update(PTB_DEFS)
+        fallback_defs.update(VERB_EXT_DEFS)
+        
+    return fallback_defs
+
 
 def save_pos_definitions(db_path, definitions):
     """

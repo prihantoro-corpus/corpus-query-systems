@@ -41,6 +41,24 @@ def classify_pos_tag(tag, definition, lang="English"):
         if tag_clean.startswith("副詞") or "副詞" in tag_clean:
             return "Adv"
             
+    # Universal Dependencies (UPOS) fallbacks
+    if tag_clean in ("noun", "propn", "pron"):
+        return "N"
+    if tag_clean in ("verb", "aux"):
+        return "V"
+    if tag_clean == "adj":
+        return "Adj"
+    if tag_clean == "adv":
+        return "Adv"
+        
+    # Indonesian BPPT / other standard tagset fallbacks
+    if tag_clean in ("nsd", "nsm", "prp", "prp$", "pr"):
+        return "N"
+    if tag_clean in ("vsd", "vbt", "md"):
+        return "V"
+    if tag_clean == "neg":
+        return "Adv"
+            
     # Default fallback (English Penn Treebank / CLAWS)
     if tag_clean.startswith("nn") or tag_clean.startswith("np"):
         return "N"
