@@ -309,7 +309,11 @@ def calculate_specific_complexity(tokens, lemmas, pos_tags, pos_definitions, lan
         "ModV": round(modv, 4),
         "NDW_50": ndw_50,
         "NDW_ER50": round(ndw_er50, 4),
-        "NDW_ES50": round(ndw_es50, 4)
+        "NDW_ES50": round(ndw_es50, 4),
+        "_verb_tokens": verb_tokens,
+        "_verb_types": verb_types,
+        "_lexical_tokens": lexical_tokens,
+        "_lexical_types": lexical_types,
     }
     
     # 2. Lexical Sophistication
@@ -365,16 +369,25 @@ def calculate_specific_complexity(tokens, lemmas, pos_tags, pos_definitions, lan
             
             ls1 = soph_lex_tokens / lexical_tokens if lexical_tokens > 0 else 0
             ls2 = soph_lex_types / lexical_types if lexical_types > 0 else 0
-            vs1 = soph_verb_types / verb_tokens if verb_tokens > 0 else 0
-            cvs1 = soph_verb_types / math.sqrt(2 * verb_tokens) if verb_tokens > 0 else 0
-            vs2 = (soph_verb_types ** 2) / verb_tokens if verb_tokens > 0 else 0
+            
+            # Verb sophistication: use None when no verbs detected (vs 0 when verbs exist but all are common)
+            if verb_tokens > 0:
+                vs1 = soph_verb_types / verb_tokens
+                cvs1 = soph_verb_types / math.sqrt(2 * verb_tokens)
+                vs2 = (soph_verb_types ** 2) / verb_tokens
+            else:
+                vs1 = None
+                cvs1 = None
+                vs2 = None
             
             results.update({
                 "LS1": round(ls1, 4),
                 "LS2": round(ls2, 4),
-                "VS1": round(vs1, 4),
-                "CVS1": round(cvs1, 4),
-                "VS2": round(vs2, 4)
+                "VS1": round(vs1, 4) if vs1 is not None else None,
+                "CVS1": round(cvs1, 4) if cvs1 is not None else None,
+                "VS2": round(vs2, 4) if vs2 is not None else None,
+                "_soph_verb_types": soph_verb_types,
+                "_soph_verb_lemmas_sample": list(set(soph_verb_lemmas))[:10],
             })
             
     return results

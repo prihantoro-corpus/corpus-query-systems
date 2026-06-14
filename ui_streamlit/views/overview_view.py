@@ -244,21 +244,26 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
         st.write("") # spacing
         with open(path, "rb") as db_file:
             st.download_button(
-                label="📥 Download Pre-compiled Database (.db)",
+                label="📥 Download Database (.db)",
                 data=db_file,
                 file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
                 mime="application/octet-stream",
-                help="Download this corpus as a pre-compiled DuckDB database. In the future, you can upload this .db file directly for instant loading and to save memory!",
+                help="Download this corpus as a pre-compiled DuckDB database.",
                 use_container_width=True,
                 key=f"dl_btn_{key_suffix}"
             )
+            
+    # --- Corpus Narration ---
+    _render_corpus_narration(name, path, display_stats, structure, condensed=True)
+    
+    st.markdown("---")
 
     # Language Settings removed: choosing is now automatic or sidebar-driven
     # _render_language_confirmation(path, key_suffix)
 
 
     # Show classification for ALL languages now (via Translation)
-    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "🏷️ Named Entities", "📖 Reading Ease", "📖 Lexical Complexity"]
+    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "🏷️ Named Entities", "🔱 Dependency Parsing", "📖 Reading Ease", "📖 Lexical Complexity"]
     
     selected_tab = render_custom_button_tabs(tabs_list, key_suffix)
     
@@ -300,11 +305,145 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     elif selected_tab == "🏷️ Named Entities":
         _render_ner_tab(path, key_suffix)
 
+    elif selected_tab == "🔱 Dependency Parsing":
+        _render_dependency_tab(path, key_suffix)
+
     elif selected_tab == "📖 Reading Ease":
         _render_reading_ease_tab(path, key_suffix)
 
     elif selected_tab == "📖 Lexical Complexity":
         _render_lexical_complexity_tab(path, key_suffix)
+
+def _render_corpus_narration(name, path, display_stats, structure, condensed=False):
+    """
+    Builds and renders a natural-language summary paragraph above the tabs,
+    strictly following the user's requested template.
+    """
+    try:
+        con = duckdb.connect(path, read_only=True)
+        
+        # --- 1. Basic corpus size ---
+        total_tokens = display_stats.get('total_tokens', 0)
+        file_count = con.execute("SELECT COUNT(DISTINCT filename) FROM corpus").fetchone()[0]
+        
+        # --- 2. Language ---
+        lang_code = ov.get_corpus_language(path)
+        lang_map = {
+            'en': 'English', 'id': 'Indonesian', 'fr': 'French', 'de': 'German', 
+            'es': 'Spanish', 'it': 'Italian', 'pt': 'Portuguese', 'zh': 'Chinese',
+            'ja': 'Japanese', 'ko': 'Korean', 'ru': 'Russian', 'ar': 'Arabic',
+            'ms': 'Malay', 'vi': 'Vietnamese', 'th': 'Thai'
+        }
+        full_lang = lang_map.get(lang_code.lower(), lang_code)
+        
+        # --- 3. Column & Annotation info ---
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
+        all_cols = set(cols_info['name'].tolist())
+        
+        # Post-processed status
+        has_sentiment = 'sentiment' in all_cols
+        has_ner = 'ent_type' in all_cols or 'ner' in all_cols
+        
+        status_parts = []
+        if has_sentiment and has_ner:
+            status_text = "This corpus has been post-processed with sentiment and Named Entity Recognition annotators."
+        elif has_sentiment:
+            status_text = "This corpus has been post-processed with a sentiment annotator, but does not yet include NER."
+        elif has_ner:
+            status_text = "This corpus has been post-processed with a Named Entity Recognition annotator, but does not yet include sentiment analysis."
+        else:
+            status_text = "This corpus has not been post-processed with sentiment or Named Entity Recognition annotators."
+
+        # --- 4. Metadata Attributes & Sub-corpora ---
+        from core.preprocessing.xml_parser import get_xml_attribute_columns
+        attr_cols = get_xml_attribute_columns(con)
+        attr_count = len(attr_cols)
+        total_unique_values = 0
+        total_sub_corpora = 0
+        
+        if attr_count > 0:
+            for col in attr_cols:
+                val_count = con.execute(f'SELECT COUNT(DISTINCT "{col}") FROM corpus WHERE "{col}" IS NOT NULL').fetchone()[0]
+                total_unique_values += val_count
+            
+            # Sub-corpora estimation: for simplicity, we count unique rows across the metadata space
+            cols_str = ", ".join([f'"{c}"' for c in attr_cols])
+            total_sub_corpora = con.execute(f'SELECT COUNT(*) FROM (SELECT DISTINCT {cols_str} FROM corpus WHERE { " AND ".join([f"\"{c}\" IS NOT NULL" for c in attr_cols]) })').fetchone()[0]
+        
+        # --- 5. Lexical Diversity (STTR 100) ---
+        # Note: We need a quick way to get STTR. For narration, we'll try to pull from cached complexity if possible, 
+        # or calculate a representative sample if corpus is huge.
+        from core.modules.lexical_complexity import calculate_generic_complexity
+        
+        # We take a sample of up to 20k tokens to keep it fast for the overview
+        lemmas_sample = [r[0] for r in con.execute("SELECT lemma FROM corpus LIMIT 20000").fetchall()]
+        complexity = calculate_generic_complexity(lemmas_sample)
+        sttr_100 = complexity.get('STTR_100', 0)
+        
+        if sttr_100 > 0.65: div_label = "high"
+        elif sttr_100 > 0.45: div_label = "moderate"
+        else: div_label = "low"
+        
+        # --- 6. Lexical Density (LD) ---
+        ld_score = 0
+        ld_label = "unknown"
+        pos_populated = 'pos' in all_cols and con.execute("SELECT COUNT(*) FROM corpus WHERE pos IS NOT NULL AND pos != '' LIMIT 1").fetchone()[0] > 0
+        
+        if pos_populated:
+            lexical_count = con.execute("""
+                SELECT COUNT(*) FROM corpus 
+                WHERE pos GLOB 'NN*' OR pos GLOB 'VB*' OR pos GLOB 'JJ*' OR pos GLOB 'RB*'
+                OR pos IN ('NOUN', 'VERB', 'ADJ', 'ADV', 'PROPN')
+            """).fetchone()[0]
+            if total_tokens > 0:
+                ld_score = lexical_count / total_tokens
+                if ld_score < 0.45: ld_label = "low"
+                elif ld_score <= 0.52: ld_label = "moderate"
+                else: ld_label = "high"
+
+        # --- 7. Reading Ease ---
+        re_score = 0
+        re_label = "not available"
+        if 'fre' in all_cols or 'fkgl' in all_cols:
+            re_col = 'fre' if 'fre' in all_cols else 'fkgl'
+            re_score = con.execute(f"SELECT AVG(CAST({re_col} AS FLOAT)) FROM corpus WHERE {re_col} IS NOT NULL").fetchone()[0]
+            if re_score:
+                if re_score >= 60: re_label = "easy to read"
+                elif re_score >= 30: re_label = "moderately complex"
+                else: re_label = "very difficult"
+
+        con.close()
+        
+        # --- Constructing the Final Template ---
+        if not condensed:
+            narration_text = (
+                f"The language of this corpus is {full_lang}. This corpus is composed of {file_count:,} text{'s' if file_count != 1 else ''} "
+                f"and composed of {total_tokens:,} tokens overall. It has {attr_count} metadata attribute{'s' if attr_count != 1 else ''} "
+                f"and {total_unique_values} unique category values. This means it has {total_sub_corpora} distinct sub-corpora combinations. "
+                f"The lexical diversity is {div_label} with STTR (100) = {sttr_100:.4f}. "
+                f"The lexical density is {ld_label} ({ld_score:.4f}). "
+                f"The reading ease is {re_label} with an average grade/score of {re_score:.1f}. "
+                f"{status_text}"
+            )
+        else:
+            # Condensed remains narrative but follows the logic
+            narration_text = (
+                f"A {full_lang} corpus of {total_tokens:,} tokens with {attr_count} metadata facets. "
+                f"Lexically {div_label} (STTR: {sttr_100:.4f}). {status_text}"
+            )
+
+        # Render Narration
+        st.markdown(
+            f'<div style="padding: 20px 25px; background: linear-gradient(145deg, #1e2129, #1a1c22); '
+            f'border-left: 5px solid #61afef; border-radius: 12px; margin: 15px 0; '
+            f'font-size: 1.15em; line-height: 1.8; color: #abb2bf; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">'
+            f'📋 Corpus Narration: {narration_text}'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        
+    except Exception:
+        pass
 
 def render_full_overview(name, path, stats, structure, error):
     # --- XML Restriction Filters ---
@@ -332,7 +471,7 @@ def render_full_overview(name, path, stats, structure, error):
                 data=db_file,
                 file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
                 mime="application/octet-stream",
-                help="Download this corpus as a pre-compiled DuckDB database. In the future, you can upload this .db file directly for instant loading and to save memory!",
+                help="Download this corpus as a pre-compiled DuckDB database.",
                 use_container_width=True,
                 key="dl_btn_full"
             )
@@ -342,11 +481,15 @@ def render_full_overview(name, path, stats, structure, error):
         
     st.markdown("---")
     
+    # --- Corpus Narration Summary ---
+    _render_corpus_narration(name, path, display_stats, structure)
+    
+    st.markdown("---")
 
     current_lang = ov.get_corpus_language(path)
     show_classification = True
     
-    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "🏷️ Named Entity Recognition (NER)", "📖 Reading Ease", "📖 Lexical Complexity"]
+    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "🏷️ Named Entity Recognition (NER)", "🔱 Dependency Parsing", "📖 Reading Ease", "📖 Lexical Complexity"]
 
     selected_tab = render_custom_button_tabs(tabs_list, "full")
     
@@ -376,7 +519,7 @@ def render_full_overview(name, path, stats, structure, error):
 
                         # Columns check
                         cols = info['name'].tolist()
-                        standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename'}
+                        standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'dep_head_id'}
                         meta = [c for c in cols if c not in standard]
                         st.write("Detected Metadata Columns:", meta)
 
@@ -425,6 +568,9 @@ def render_full_overview(name, path, stats, structure, error):
 
         elif selected_tab == "🏷️ Named Entity Recognition (NER)":
             _render_ner_tab(path, "full")
+            
+        elif selected_tab == "🔱 Dependency Parsing":
+            _render_dependency_tab(path, "full")
 
         elif selected_tab == "📖 Reading Ease":
             _render_reading_ease_tab(path, "full")
@@ -2104,6 +2250,48 @@ def _render_ner_tab(db_path, key_suffix=""):
     elif df_flat is not None:
         st.info("No entities were detected in the corpus matching the selected criteria.")
 
+def _render_dependency_tab(db_path, key_suffix=""):
+    import core.modules.dependency_service as dep
+    st.subheader("🔱 Dependency Parsing")
+    
+    with st.expander("💡 Method & Transparency: Dependency Parsing", expanded=False):
+        st.markdown("""
+        **spaCy Dependency Parsing:** Analyzes the grammatical structure of sentences, identifying relationships between "head" words and their "dependents".
+        * **dep_rel**: The type of relationship (e.g., `nsubj` for nominal subject, `obj` for object).
+        * **dep_head_id**: The unique ID of the word that governs this token.
+        """)
+
+    # Check current status
+    stats = dep.get_dependency_stats(db_path)
+    
+    if stats is not None and not stats.empty:
+        st.success("✅ **Dependency relations are already annotated in this corpus.**")
+        st.write("You can use the 'Restrictions' panel in the Concordance or Statistics tabs to filter searches by specific relations (e.g. searching only for nominal subjects).")
+        
+        st.markdown("#### 📊 Dependency Relation Distribution")
+        st.dataframe(stats, use_container_width=True, hide_index=True)
+    else:
+        st.info("Dependency relations have not been annotated for this corpus yet.")
+
+    st.divider()
+    st.write("**Annotate Dependency Relations**")
+    model_name = st.radio(
+        "spaCy Pipeline Model",
+        options=["en_core_web_sm", "en_core_web_md", "xx_ent_wiki_sm"],
+        index=0,
+        horizontal=True,
+        key=f"dep_spacy_model_{key_suffix}",
+        help="en_core_web_sm: Fast. xx_ent_wiki_sm: Multilingual."
+    )
+    
+    if st.button("🚀 Run Dependency Parsing Annotation", key=f"run_dep_btn_{key_suffix}", type="primary"):
+        with st.spinner("Analyzing grammatical structure..."):
+            if dep.run_dependency_parsing(db_path, model_name=model_name):
+                st.toast("Dependency parsing completed successfully!", icon="🔱")
+                st.rerun()
+            else:
+                st.error("Failed to run dependency parsing.")
+
 
 def _render_lexical_complexity_tab(db_path, key_suffix=""):
     st.subheader("📖 Lexical Complexity Analysis")
@@ -2404,19 +2592,41 @@ def _render_lexical_complexity_tab(db_path, key_suffix=""):
                     st.metric("Lexical Soph. (LS2)", f"{val:.4f}", help="Ratio of sophisticated word types to total lexical word types.")
                     st.caption(get_ls_label(val))
                 with m12:
-                    val = spec_overall.get('VS1', 0.0)
-                    st.metric("Verb Soph. (VS1)", f"{val:.4f}", help="Ratio of sophisticated verb tokens to total verb tokens.")
-                    st.caption(get_vs_label(val))
+                    vs1_val = spec_overall.get('VS1')
+                    if vs1_val is not None:
+                        st.metric("Verb Soph. (VS1)", f"{vs1_val:.4f}", help="Ratio of sophisticated verb tokens to total verb tokens.")
+                        st.caption(get_vs_label(vs1_val))
+                    else:
+                        st.metric("Verb Soph. (VS1)", "N/A", help="No verbs were detected by POS tagging. Check POS definitions.")
+                        st.caption("⚠️ No verbs detected")
                 
                 m13, m14 = st.columns([1, 2])
                 with m13:
-                    val = spec_overall.get('VS2', 0.0)
-                    st.metric("Verb Soph. (VS2)", f"{val:.4f}", help="Ratio of sophisticated verb types to total verb types.")
-                    st.caption(get_vs_label(val))
+                    vs2_val = spec_overall.get('VS2')
+                    if vs2_val is not None:
+                        st.metric("Verb Soph. (VS2)", f"{vs2_val:.4f}", help="Ratio of sophisticated verb types to total verb types.")
+                        st.caption(get_vs_label(vs2_val))
+                    else:
+                        st.metric("Verb Soph. (VS2)", "N/A", help="No verbs were detected by POS tagging. Check POS definitions.")
+                        st.caption("⚠️ No verbs detected")
                 with m14:
-                    val = spec_overall.get('CVS1', 0.0)
-                    st.metric("Corr. Verb Soph. (CVS1)", f"{val:.4f}", help="Corrected Verb Sophistication (sophisticated verb types / sqrt(2 * total verbs)). Controls for length.")
-                    st.caption(get_cvs1_label(val))
+                    cvs1_val = spec_overall.get('CVS1')
+                    if cvs1_val is not None:
+                        st.metric("Corr. Verb Soph. (CVS1)", f"{cvs1_val:.4f}", help="Corrected Verb Sophistication (sophisticated verb types / sqrt(2 * total verbs)). Controls for length.")
+                        st.caption(get_cvs1_label(cvs1_val))
+                    else:
+                        st.metric("Corr. Verb Soph. (CVS1)", "N/A", help="No verbs were detected by POS tagging. Check POS definitions.")
+                        st.caption("⚠️ No verbs detected")
+                
+                # Diagnostic info for verb sophistication
+                _verb_tokens = spec_overall.get('_verb_tokens', 0)
+                if _verb_tokens == 0:
+                    st.info("ℹ️ **Verb Sophistication is N/A** because no verbs were identified by the POS tagger. "
+                            "This can happen if POS tag definitions are missing or don't map to the 'verb' category. "
+                            "Go to the **Unique POS Tags** tab to review and correct POS definitions (ensure verb tags have 'verb' in their definition).")
+                elif vs1_val == 0.0 and vs2_val == 0.0:
+                    st.info(f"ℹ️ **Verb Sophistication is 0.0** — all {_verb_tokens} verb tokens in the corpus use lemmas "
+                            f"found in the reference wordlist (NGSL). This is normal for corpora with basic/common vocabulary.")
 
     st.markdown("---")
     if group_col == "filename":
@@ -2464,9 +2674,9 @@ def _render_lexical_complexity_tab(db_path, key_suffix=""):
                 row.update({
                     "Lexical Soph. (LS1)": f_spec.get("LS1", 0.0),
                     "Lexical Soph. (LS2)": f_spec.get("LS2", 0.0),
-                    "Verb Soph. (VS1)": f_spec.get("VS1", 0.0),
-                    "Verb Soph. (VS2)": f_spec.get("VS2", 0.0),
-                    "Corr. Verb Soph. (CVS1)": f_spec.get("CVS1", 0.0),
+                    "Verb Soph. (VS1)": f_spec.get("VS1"),
+                    "Verb Soph. (VS2)": f_spec.get("VS2"),
+                    "Corr. Verb Soph. (CVS1)": f_spec.get("CVS1"),
                 })
         file_rows.append(row)
         

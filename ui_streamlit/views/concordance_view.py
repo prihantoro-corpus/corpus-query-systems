@@ -102,23 +102,30 @@ def render_concordance_view():
                             coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
                         with c_adv2:
                             sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
-                            c_sh1, c_sh2, c_sh3, c_sh4, c_sh5 = st.columns(5)
-                            with c_sh1:
+                            # Display Control Row 1
+                            c_r1_1, c_r1_2, c_r1_3 = st.columns(3)
+                            with c_r1_1:
                                 show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
-                            with c_sh2:
+                            with c_r1_2:
                                 show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_rule")
-                            with c_sh3:
+                            with c_r1_3:
                                 show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', False), key="kwic_show_meta_rule")
-                            with c_sh4:
+
+                            # Display Control Row 2
+                            c_r2_1, c_r2_2, c_r2_3 = st.columns(3)
+                            with c_r2_1:
                                 hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_rule")
-                            with c_sh5:
+                            with c_r2_2:
                                 focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_rule", help="Only preserve the exact sentence containing the keyword in context")
+                            with c_r2_3:
+                                show_duplicates = st.checkbox("Show duplicate concordance lines", value=get_state('kwic_show_duplicates', False), key="kwic_show_duplicates_rule", help="Show all occurrences even if they are identical sentences")
 
                             set_state('kwic_show_pos', show_pos)
                             set_state('kwic_show_lemma', show_lemma)
                             set_state('kwic_show_meta', show_meta)
                             set_state('kwic_hide_symbols', hide_symbols)
-
+                            set_state('kwic_focus_sentence', focus_sentence)
+                            set_state('kwic_show_duplicates', show_duplicates)
 
                             wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
                             set_state('kwic_wrap_mode', wrap_mode)
@@ -256,24 +263,31 @@ def render_concordance_view():
                             coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
                         with c_adv2:
                             sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
-                            c_sh1, c_sh2, c_sh3, c_sh4, c_sh5 = st.columns(5)
-                            with c_sh1:
+                            
+                            # Display Control Row 1
+                            c_st1, c_st2, c_st3 = st.columns(3)
+                            with c_st1:
                                 show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
-                            with c_sh2:
+                            with c_st2:
                                 show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_cb")
-                            with c_sh3:
+                            with c_st3:
                                 show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', False), key="kwic_show_meta_cb")
-                            with c_sh4:
+
+                            # Display Control Row 2
+                            c_st4, c_st5, c_st6 = st.columns(3)
+                            with c_st4:
                                 hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_cb")
-                            with c_sh5:
+                            with c_st5:
                                 focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_cb", help="Only preserve the exact sentence containing the keyword in context")
+                            with c_st6:
+                                show_duplicates = st.checkbox("Show duplicate concordance lines", value=get_state('kwic_show_duplicates', False), key="kwic_show_duplicates_cb", help="Show all occurrences even if they are identical sentences")
 
                             set_state('kwic_show_pos', show_pos)
                             set_state('kwic_show_lemma', show_lemma)
                             set_state('kwic_show_meta', show_meta)
                             set_state('kwic_hide_symbols', hide_symbols)
                             set_state('kwic_focus_sentence', focus_sentence)
-
+                            set_state('kwic_show_duplicates', show_duplicates)
 
                             wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
                             set_state('kwic_wrap_mode', wrap_mode)
@@ -319,12 +333,14 @@ def render_concordance_view():
                             last_show_pos = current_results.get('show_pos', False)
                             last_show_lemma = current_results.get('show_lemma', False)
                             last_focus_sentence = current_results.get('focus_sentence', False)
+                            last_show_duplicates = current_results.get('show_duplicates', False)
                             if (current_results.get('xml_where') != xml_where or 
                                 current_results.get('xml_params') != xml_params or
                                 last_hide_symbols != hide_symbols or
                                 last_show_pos != show_pos or
                                 last_show_lemma != show_lemma or
-                                last_focus_sentence != focus_sentence):
+                                last_focus_sentence != focus_sentence or
+                                last_show_duplicates != show_duplicates):
                                 run_concordance_query('primary', corpus_path, corpus_name, current_results['search_term'], window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
                     else:
                         current_results_1 = st.session_state.get('last_kwic_results_primary')
@@ -666,6 +682,7 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
         
     hide_symbols = get_state('kwic_hide_symbols', False)
     focus_sentence = get_state('kwic_focus_sentence', False)
+    show_duplicates = get_state('kwic_show_duplicates', False)
     with st.spinner(f"Searching {name}..."):
         kwic_rows, total, raw_q, lit_freq, sent_ids, breakdown_df = cached_generate_kwic(
             db_path=path,
@@ -681,7 +698,8 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             show_pos=show_pos,
             show_lemma=show_lemma,
             hide_symbols=hide_symbols,
-            focus_sentence=focus_sentence
+            focus_sentence=focus_sentence,
+            show_duplicates=show_duplicates
         )
         st.session_state[f'last_kwic_results_{identifier}'] = {
             'rows': kwic_rows,
@@ -696,7 +714,8 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             'show_pos': show_pos,
             'show_lemma': show_lemma,
             'hide_symbols': hide_symbols,
-            'focus_sentence': focus_sentence
+            'focus_sentence': focus_sentence,
+            'show_duplicates': show_duplicates
         }
 
 def render_concordance_column(results, search_term, key_suffix=""):
