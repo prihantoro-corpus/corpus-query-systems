@@ -18,13 +18,22 @@ def classify_pos_tag(tag, definition, lang="English"):
     
     # 1. Check definition keywords (supports any language if definitions are provided)
     if def_clean:
-        if "adjective" in def_clean or "形容詞" in def_clean:
-            return "Adj"
-        if "adverb" in def_clean or "副詞" in def_clean:
+        # Extract the base definition before parentheses/separators to avoid description collisions
+        # e.g., "adverb (words modifying verbs, adjectives...)" -> base is "adverb"
+        base_def = def_clean
+        for sep in ('(', ',', '-', ';', ':', '/'):
+            if sep in base_def:
+                base_def = base_def.split(sep)[0]
+        base_def = base_def.strip()
+        
+        # Check adverb first to prevent collision with adjective
+        if "adverb" in base_def or "副詞" in base_def:
             return "Adv"
-        if "noun" in def_clean or "名詞" in def_clean:
+        if "adjective" in base_def or "形容詞" in base_def:
+            return "Adj"
+        if "noun" in base_def or "名詞" in base_def:
             return "N"
-        if "verb" in def_clean or "動詞" in def_clean:
+        if "verb" in base_def or "動詞" in base_def:
             return "V"
 
     # 2. Fall back to standard language-specific prefixes / tag structures
