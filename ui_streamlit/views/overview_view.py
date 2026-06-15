@@ -368,7 +368,10 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
             
             # Sub-corpora estimation: for simplicity, we count unique rows across the metadata space
             cols_str = ", ".join([f'"{c}"' for c in attr_cols])
-            total_sub_corpora = con.execute(f'SELECT COUNT(*) FROM (SELECT DISTINCT {cols_str} FROM corpus WHERE { " AND ".join([f"\"{c}\" IS NOT NULL" for c in attr_cols]) })').fetchone()[0]
+            where_clauses = [f'"{c}" IS NOT NULL' for c in attr_cols]
+            where_str = " AND ".join(where_clauses)
+            query = f'SELECT COUNT(*) FROM (SELECT DISTINCT {cols_str} FROM corpus WHERE {where_str})'
+            total_sub_corpora = con.execute(query).fetchone()[0]
         
         # --- 5. Lexical Diversity (STTR 100) ---
         # Note: We need a quick way to get STTR. For narration, we'll try to pull from cached complexity if possible, 

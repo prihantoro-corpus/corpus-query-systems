@@ -142,7 +142,7 @@ Output a single JSON object containing only the key 'adapted_passage'. Do not in
         prompt = f"""Role: Expert curriculum designer.
 Task: Write 3 to 5 clear summary bullet points in '{language}' based on the reading passage.
 Passage:
-{data["adapted_passage"]}
+{data['adapted_passage']}
 
 Instructions:
 Output a single JSON object containing only the key 'summary'. Do not include markdown code block wrappers.
@@ -162,7 +162,7 @@ Output a single JSON object containing only the key 'summary'. Do not include ma
         prompt = f"""Role: Expert curriculum designer.
 Task: Extract 4 key vocabulary words from the reading passage. For each term, provide its part of speech, a definition matching the grade level, and a context sentence in '{language}'.
 Passage:
-{data["adapted_passage"]}
+{data['adapted_passage']}
 
 Instructions:
 Output a single JSON object containing only the key 'vocabulary'. Do not include markdown code block wrappers.
@@ -185,7 +185,7 @@ Output a single JSON object containing only the key 'vocabulary'. Do not include
         prompt = f"""Role: Expert curriculum designer.
 Task: Write 3 to 5 multiple-choice questions checking comprehension in '{language}' based on the reading passage. Include correct options and explanations.
 Passage:
-{data["adapted_passage"]}
+{data['adapted_passage']}
 
 Instructions:
 Output a single JSON object containing only the key 'mcqs'. Do not include markdown code block wrappers.
@@ -208,7 +208,7 @@ Output a single JSON object containing only the key 'mcqs'. Do not include markd
         prompt = f"""Role: Expert curriculum designer.
 Task: Write 3 short-answer comprehension questions and expected responses in '{language}' based on the reading passage.
 Passage:
-{data["adapted_passage"]}
+{data['adapted_passage']}
 
 Instructions:
 Output a single JSON object containing only the key 'short_answers'. Do not include markdown code block wrappers.
@@ -229,7 +229,7 @@ Output a single JSON object containing only the key 'short_answers'. Do not incl
         prompt = f"""Role: Expert curriculum designer.
 Task: Write 3 open-ended discussion prompts in '{language}' based on the reading passage, matching Bloom's Taxonomy cognitive levels (e.g. Analyze, Evaluate, Create).
 Passage:
-{data["adapted_passage"]}
+{data['adapted_passage']}
 
 Instructions:
 Output a single JSON object containing only the key 'blooms_prompts'. Do not include markdown code block wrappers.
