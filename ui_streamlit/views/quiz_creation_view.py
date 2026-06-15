@@ -218,9 +218,10 @@ def render_quiz_creation_view():
                         st.info("📄 Please select at least one document from the list above to choose text parts.")
                     else:
                         st.write(f"**Document Text Preview (Total Words: {total_words_count}):**")
+                        preview_text_html = full_raw_text.replace('\n', '<br>')
                         st.markdown(f"""
                         <div style="height: 180px; overflow-y: scroll; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; font-size: 0.85rem; background-color: rgba(255,255,255,0.02); line-height: 1.5; color: #E2E8F0; margin-bottom: 15px;">
-                            {full_raw_text.replace('\n', '<br>')}
+                            {preview_text_html}
                         </div>
                         """, unsafe_allow_html=True)
                         
