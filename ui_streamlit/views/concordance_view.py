@@ -414,7 +414,12 @@ def render_concordance_view():
                                     _active_search_term,
                                     window_size,
                                     limit_val,  # samples per cluster
-                                    _active_filters
+                                    _active_filters,
+                                    coll_filter=coll_filter,
+                                    show_pos=show_pos,
+                                    show_lemma=show_lemma,
+                                    hide_symbols=hide_symbols,
+                                    show_duplicates=show_duplicates
                                 )
                     else:
                         if st.button("Generate Comparison Concordance", type="primary"):
@@ -603,7 +608,7 @@ def render_concordance_view():
                         render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
 
 @notify_timing("Cluster Concordance generated")
-def run_cluster_concordance_query(path, name, query, window, limit, filters):
+def run_cluster_concordance_query(path, name, query, window, limit, filters, coll_filter="", show_pos=False, show_lemma=False, hide_symbols=False, show_duplicates=False):
     # 1. Prepare Cartesian Product of list-based filters
     keys = []
     value_lists = []
@@ -647,11 +652,17 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters):
             left=window,
             right=window,
             corpus_name=name,
+            pattern_collocate_input=coll_filter,
+            pattern_window=window,
             limit=limit,
             do_random_sample=True,
             xml_where_clause=where,
             xml_params=tuple(params),
-            focus_sentence=get_state('kwic_focus_sentence', False)
+            show_pos=show_pos,
+            show_lemma=show_lemma,
+            hide_symbols=hide_symbols,
+            focus_sentence=get_state('kwic_focus_sentence', False),
+            show_duplicates=show_duplicates
         )
         
         if rows:
@@ -664,7 +675,12 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters):
                 'window': window,
                 'xml_where': where,
                 'xml_params': params,
-                'breakdown': pd.DataFrame() # Add empty breakdown
+                'breakdown': pd.DataFrame(), # Add empty breakdown
+                'show_pos': show_pos,
+                'show_lemma': show_lemma,
+                'hide_symbols': hide_symbols,
+                'focus_sentence': get_state('kwic_focus_sentence', False),
+                'show_duplicates': show_duplicates
             }
         
         progress_bar.progress((i + 1) / len(combinations))
