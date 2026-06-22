@@ -186,7 +186,11 @@ def generate_keyword_list(target_db_path, ref_db_path=None, target_xml_where="",
         merged['Significance'] = merged['LL'].apply(vec_sig)
         
         # Categorize
-        merged['Type'] = np.where(merged['LogRatio'] > 0, 'Positive', 'Negative')
+        merged['Type'] = np.where(
+            merged['LL'] < 3.84,
+            'Stable',
+            np.where(merged['LogRatio'] > 0, 'Positive', 'Negative')
+        )
         
         # Sort by LL (absolute strength of keyness)
         merged = merged.sort_values("LL", ascending=False)
@@ -293,7 +297,11 @@ def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None
                 merged['LogRatio'] = np.log2(rel_t_smooth / rel_r_smooth)
             
             merged['Significance'] = merged['LL'].apply(vec_sig)
-            merged['Type'] = np.where(merged['LogRatio'] > 0, 'Positive', 'Negative')
+            merged['Type'] = np.where(
+                merged['LL'] < 3.84,
+                'Stable',
+                np.where(merged['LogRatio'] > 0, 'Positive', 'Negative')
+            )
             merged = merged.sort_values("LL", ascending=False)
             
             results[group_val] = merged

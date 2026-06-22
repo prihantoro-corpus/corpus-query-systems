@@ -252,13 +252,16 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
         def apply_p_val_filter(df, p_cutoff):
             if df is None or df.empty or p_cutoff == "None":
                 return df
+            is_stable = df['Type'] == 'Stable'
             if p_cutoff == "0.001":
-                return df[df['Significance'].str.contains(r'\*\*\*', na=False)]
+                is_sig = df['Significance'].str.contains(r'\*\*\*', na=False)
             elif p_cutoff == "0.01":
-                return df[df['Significance'].str.contains(r'\*\*', na=False)]
+                is_sig = df['Significance'].str.contains(r'\*\*', na=False)
             elif p_cutoff == "0.05":
-                return df[df['Significance'] != 'ns']
-            return df
+                is_sig = df['Significance'] != 'ns'
+            else:
+                is_sig = pd.Series(True, index=df.index)
+            return df[is_stable | is_sig]
 
         # Custom handling for frequency list reference
         ref_freq_df = None
@@ -327,38 +330,50 @@ def render_keyword_results(res, key_suffix=""):
     st.markdown(f"### Results for: **{res['target']}**")
     st.caption(f"Compared against: {res['ref']}")
 
-    def _get_top_list(df, n=10, is_positive=True):
+    def _get_top_list(df, n=10, category='Positive'):
         if df is None or df.empty:
             return ""
-        filtered = df[df['Type'] == ('Positive' if is_positive else 'Negative')]
-        if not is_positive:
+        filtered = df[df['Type'] == category]
+        if category == 'Negative':
             filtered = filtered.sort_values('LL', ascending=False)
+        elif category == 'Stable':
+            filtered = filtered.sort_values('LL', ascending=True)
         return ", ".join(filtered.head(n)['token'].tolist())
 
-    o_rows_pos, o_rows_neg = [], []
-    o_rows_pos.append({"Classification": "Overall", "Keywords": _get_top_list(res.get('overall'))})
-    o_rows_neg.append({"Classification": "Overall", "Keywords": _get_top_list(res.get('overall'), is_positive=False)})
+    o_rows_pos, o_rows_neg, o_rows_stable = [], [], []
+    o_rows_pos.append({"Classification": "Overall", "Keywords": _get_top_list(res.get('overall'), category='Positive')})
+    o_rows_neg.append({"Classification": "Overall", "Keywords": _get_top_list(res.get('overall'), category='Negative')})
+    o_rows_stable.append({"Classification": "Overall", "Keywords": _get_top_list(res.get('overall'), category='Stable')})
 
     for fname, df in res.get('by_filename', {}).items():
-        o_rows_pos.append({"Classification": f"File: {fname}", "Keywords": _get_top_list(df)})
-        o_rows_neg.append({"Classification": f"File: {fname}", "Keywords": _get_top_list(df, is_positive=False)})
+        o_rows_pos.append({"Classification": f"File: {fname}", "Keywords": _get_top_list(df, category='Positive')})
+        o_rows_neg.append({"Classification": f"File: {fname}", "Keywords": _get_top_list(df, category='Negative')})
+        o_rows_stable.append({"Classification": f"File: {fname}", "Keywords": _get_top_list(df, category='Stable')})
     for attr, groups in res.get('by_attributes', {}).items():
         for val, df in groups.items():
-            o_rows_pos.append({"Classification": f"{attr}={val}", "Keywords": _get_top_list(df)})
-            o_rows_neg.append({"Classification": f"{attr}={val}", "Keywords": _get_top_list(df, is_positive=False)})
+            o_rows_pos.append({"Classification": f"{attr}={val}", "Keywords": _get_top_list(df, category='Positive')})
+            o_rows_neg.append({"Classification": f"{attr}={val}", "Keywords": _get_top_list(df, category='Negative')})
+            o_rows_stable.append({"Classification": f"{attr}={val}", "Keywords": _get_top_list(df, category='Stable')})
 
-    df_o_pos, df_o_neg = pd.DataFrame(o_rows_pos), pd.DataFrame(o_rows_neg)
+    df_o_pos, df_o_neg, df_o_stable = pd.DataFrame(o_rows_pos), pd.DataFrame(o_rows_neg), pd.DataFrame(o_rows_stable)
 
     st.markdown("#### 📊 Keyword Overview (Top 10)")
-    oc1, oc2 = st.columns(2)
+    oc1, oc2, oc3 = st.columns(3)
     with oc1:
-        st.markdown("**High Keyness (Positive)**")
+        st.markdown("**High Keyness (Positive)** <span style='cursor: help;' title='Positive keywords are words used significantly MORE in the target corpus compared to the reference corpus (Log-Likelihood >= 3.84, LogRatio > 0). The threshold 3.84 corresponds to p < 0.05.'>❓</span>", unsafe_allow_html=True)
         st.dataframe(df_o_pos, use_container_width=True, hide_index=True)
     with oc2:
-        st.markdown("**Low Keyness (Negative)**")
+        st.markdown("**Low Keyness (Negative)** <span style='cursor: help;' title='Negative keywords are words used significantly LESS in the target corpus compared to the reference corpus (Log-Likelihood >= 3.84, LogRatio < 0). The threshold 3.84 corresponds to p < 0.05.'>❓</span>", unsafe_allow_html=True)
         st.dataframe(df_o_neg, use_container_width=True, hide_index=True)
+    with oc3:
+        st.markdown("**Comparable (Stable)** <span style='cursor: help;' title='Stable words are those that occur with comparable frequencies in both corpora and fail to reach a statistically significant difference (Log-Likelihood < 3.84, which corresponds to p >= 0.05).'>❓</span>", unsafe_allow_html=True)
+        st.dataframe(df_o_stable, use_container_width=True, hide_index=True)
 
-    all_dfs = {'Overview_Positive': df_o_pos, 'Overview_Negative': df_o_neg}
+    all_dfs = {
+        'Overview_Positive': df_o_pos, 
+        'Overview_Negative': df_o_neg,
+        'Overview_Stable': df_o_stable
+    }
     if res.get('overall') is not None:
         all_dfs['Overall'] = res['overall']
     for fname, df in res.get('by_filename', {}).items():
@@ -378,20 +393,40 @@ def render_keyword_results(res, key_suffix=""):
 
     def _draw_kw_table(df, title_prefix, sub_key):
         if df is None or df.empty:
-            st.info(f"No significant keywords for {title_prefix}.")
+            st.info(f"No keywords for {title_prefix}.")
             return
         pos = df[df['Type'] == 'Positive'].head(top_n)
         neg = df[df['Type'] == 'Negative'].sort_values('LL', ascending=False).head(top_n)
-        tab_p, tab_n = st.tabs([f"High Keyness ({len(pos)})", f"Low Keyness ({len(neg)})"])
+        stable = df[df['Type'] == 'Stable'].sort_values('LL', ascending=True).head(top_n)
+        tab_p, tab_n, tab_s = st.tabs([
+            f"High Keyness ({len(pos)})", 
+            f"Low Keyness ({len(neg)})", 
+            f"Stable ({len(stable)})"
+        ])
         with tab_p:
+            st.caption("ℹ️ **High Keyness (Positive)**: Words significantly overused in target (Log-Likelihood ≥ 3.84, LogRatio > 0, corresponding to $p < 0.05$).")
             if not pos.empty:
                 fd = dict(zip(pos['token'], pos['LL']))
                 fig = generate_wordcloud(fd, title=f"Positive: {title_prefix}", width=400, height=200)
-                st.pyplot(fig)
+                if fig:
+                    st.pyplot(fig)
                 st.dataframe(pos[['token', 'LL', 'LogRatio', 'Significance']], use_container_width=True, height=250, hide_index=True)
         with tab_n:
+            st.caption("ℹ️ **Low Keyness (Negative)**: Words significantly underused in target (Log-Likelihood ≥ 3.84, LogRatio < 0, corresponding to $p < 0.05$).")
             if not neg.empty:
+                fd = dict(zip(neg['token'], neg['LL']))
+                fig = generate_wordcloud(fd, title=f"Negative: {title_prefix}", width=400, height=200)
+                if fig:
+                    st.pyplot(fig)
                 st.dataframe(neg[['token', 'LL', 'LogRatio', 'Significance']], use_container_width=True, height=250, hide_index=True)
+        with tab_s:
+            st.caption("ℹ️ **Comparable (Stable)**: Words with similar frequencies that fail to reach statistical significance (Log-Likelihood < 3.84, corresponding to $p \ge 0.05$).")
+            if not stable.empty:
+                fd = dict(zip(stable['token'], stable['freq_t']))
+                fig = generate_wordcloud(fd, title=f"Stable: {title_prefix}", width=400, height=200)
+                if fig:
+                    st.pyplot(fig)
+                st.dataframe(stable[['token', 'freq_t', 'freq_r', 'LL', 'LogRatio', 'Significance']], use_container_width=True, height=250, hide_index=True)
 
     with st.expander("🌍 Overall Corpus Keywords", expanded=True):
         _draw_kw_table(res.get('overall'), "Overall", f"ov_{key_suffix}")
