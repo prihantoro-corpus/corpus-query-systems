@@ -389,7 +389,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         
         df_context = con.execute(context_query).fetch_df()
         
-        breakdown_data = Counter(matching_tokens_at_node_one)
+        # USER REQUEST: Ensure the breakdown table is CASE-INSENSITIVE by lowercasing all tokens before counting
+        breakdown_data = Counter([str(t).lower() for t in matching_tokens_at_node_one if t])
         breakdown_list = []
         # Need total rows for relative freq.
         if xml_where_clause:
@@ -627,5 +628,127 @@ def persist_annotations_to_db(db_path: str, annotations: dict):
         return True, f"Successfully saved annotations to {len(attr_updates)} attributes."
     except Exception as e:
         return False, f"Database Error: {e}"
+    finally:
+        con.close()
+
+def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_where="", xml_params=()):
+    """
+    Returns a dictionary of {token: frequency} for collocates matching the filter
+    around the primary query matches.
+    """
+    import duckdb
+    import re
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        # 1. Parse Primary Query and Collocate Filter
+        search_terms = query.strip().split()
+        node_len = len(search_terms)
+        
+        # We need the base match logic from generate_kwic but simplified to just find IDs
+        # For simplicity, we'll use a subquery approach
+        
+        # This is a bit complex to rewrite, so let's use a more direct approach:
+        # We'll build the same JOIN logic as generate_kwic
+        
+        # (Internal parse_term copy for standalone use)
+        def _parse(term):
+            # Check for POS tag first (e.g. _JJ)
+            pos_match = re.search(r"\_([A-Za-z0-9\*|\\-]+)", term)
+            if pos_match: return {'type': 'pos', 'val': pos_match.group(1).strip()}
+            
+            lemma_match = re.search(r"\[(.*?)\]", term)
+            if lemma_match: return {'type': 'lemma', 'val': lemma_match.group(1).strip().lower()}
+            
+            if '_' in term:
+                parts = term.rsplit('_', 1)
+                return {'type': 'token_pos', 'token': parts[0].lower(), 'pos': parts[1]}
+                
+            return {'type': 'word', 'val': term.lower()}
+
+        search_comps = [_parse(t) for t in search_terms]
+        coll_comp = _parse(collocate_filter)
+        
+        # Build node match WHERE
+        node_where = []
+        node_params = []
+        for k, comp in enumerate(search_comps):
+            alias = f"c{k}"
+            if comp['type'] == 'token_pos':
+                node_where.append(f"{alias}._token_low = ? AND {alias}.pos = ?")
+                node_params.extend([comp['token'], comp['pos']])
+            elif comp['type'] == 'pos':
+                node_where.append(f"regexp_matches({alias}.pos, ?)")
+                pats = [p.strip() for p in comp['val'].split('|') if p.strip()]
+                node_params.append("(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$")
+            elif comp['type'] == 'lemma':
+                node_where.append(f"lower({alias}.lemma) = ?")
+                node_params.append(comp['val'])
+            else:
+                node_where.append(f"{alias}._token_low = ?")
+                node_params.append(comp['val'])
+                
+        node_joins = ""
+        for k in range(1, len(search_comps)):
+             node_joins += f" JOIN corpus c{k} ON c{k}.id = c0.id + {k} "
+        
+        # Build collocate match WHERE
+        coll_where = []
+        if coll_comp['type'] == 'pos':
+            coll_where.append("regexp_matches(c_coll.pos, ?)")
+            pats = [p.strip() for p in coll_comp['val'].split('|') if p.strip()]
+            node_params.append("(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$")
+        elif coll_comp['type'] == 'word':
+             coll_where.append("c_coll._token_low = ?")
+             node_params.append(coll_comp['val'])
+        # (Simplified for now, focusing on tokens/POS)
+
+        # Apply XML restrictions to c0
+        c0_xml_where = ""
+        if xml_where:
+            # Basic injection of c0 prefix
+            c0_xml_where = " AND " + xml_where.strip()[4:]
+            c0_xml_where = re.sub(r'"(\w+)"', r'c0."\1"', c0_xml_where)
+            node_params.extend(xml_params)
+
+        final_sql = f"""
+            SELECT lower(c_coll.token) as token_low, COUNT(*) as freq
+            FROM corpus c0
+            {node_joins}
+            JOIN corpus c_coll ON c_coll.id BETWEEN c0.id - ? AND c0.id + ? + {node_len} - 1
+            WHERE {" AND ".join(node_where)}
+            AND (c_coll.id < c0.id OR c_coll.id >= c0.id + {node_len})
+            AND {" AND ".join(coll_where)}
+            {c0_xml_where}
+            GROUP BY lower(c_coll.token)
+            ORDER BY freq DESC
+        """
+        p_node = []
+        for k, comp in enumerate(search_comps):
+            if comp['type'] == 'token_pos': p_node.extend([comp['token'], comp['pos']])
+            elif comp['type'] == 'pos': 
+                pats = [p.strip() for p in comp['val'].split('|') if p.strip()]
+                p_node.append("(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$")
+            else: p_node.append(comp['val'])
+        
+        p_coll = []
+        if coll_comp['type'] == 'pos':
+            pats = [p.strip() for p in coll_comp['val'].split('|') if p.strip()]
+            p_coll.append("(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$")
+        else:
+            p_coll.append(coll_comp['val'])
+
+        # SQL Placeholder order:
+        # 1. window (BETWEEN c0.id - ?)
+        # 2. window (AND c0.id + ?)
+        # 3. p_node (from node_where)
+        # 4. p_coll (from coll_where)
+        # 5. xml_params (from c0_xml_where)
+        final_params = [window, window] + p_node + p_coll + list(xml_params)
+        
+        results = con.execute(final_sql, final_params).fetchall()
+        return {r[0]: r[1] for r in results}
+    except Exception as e:
+        print(f"Collocate breakdown error: {e}")
+        return {}
     finally:
         con.close()
