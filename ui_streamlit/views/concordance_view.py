@@ -312,6 +312,9 @@ def render_concordance_view():
                         else:
                             xml_where_2, xml_params_2 = "", []
 
+                search_term_1 = ""
+                search_term_2 = None
+
                 if search_mode == "Standard":
                     if comp_mode:
                         st.markdown("##### Comparison Search Inputs")
@@ -324,59 +327,20 @@ def render_concordance_view():
                         search_term_1 = search_term # Use the main input
                         search_term_2 = None
 
-                    # Auto-reactive update on filter or display changes
-                    focus_sentence = get_state('kwic_focus_sentence', False)
                     if not comp_mode:
-                        current_results = st.session_state.get('last_kwic_results_primary')
-                        if current_results:
-                            last_hide_symbols = current_results.get('hide_symbols', False)
-                            last_show_pos = current_results.get('show_pos', False)
-                            last_show_lemma = current_results.get('show_lemma', False)
-                            last_focus_sentence = current_results.get('focus_sentence', False)
-                            last_show_duplicates = current_results.get('show_duplicates', False)
-                            if (current_results.get('xml_where') != xml_where or 
-                                current_results.get('xml_params') != xml_params or
-                                last_hide_symbols != hide_symbols or
-                                last_show_pos != show_pos or
-                                last_show_lemma != show_lemma or
-                                last_focus_sentence != focus_sentence or
-                                last_show_duplicates != show_duplicates):
-                                run_concordance_query('primary', corpus_path, corpus_name, current_results['search_term'], window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
-                    else:
-                        current_results_1 = st.session_state.get('last_kwic_results_primary')
-                        if current_results_1:
-                            last_hide_symbols = current_results_1.get('hide_symbols', False)
-                            last_show_pos = current_results_1.get('show_pos', False)
-                            last_show_lemma = current_results_1.get('show_lemma', False)
-                            last_focus_sentence = current_results_1.get('focus_sentence', False)
-                            if (current_results_1.get('xml_where') != xml_where_1 or 
-                                current_results_1.get('xml_params') != xml_params_1 or
-                                last_hide_symbols != hide_symbols or
-                                last_show_pos != show_pos or
-                                last_show_lemma != show_lemma or
-                                last_focus_sentence != focus_sentence):
-                                run_concordance_query('primary', corpus_path, corpus_name, current_results_1['search_term'], window_size, window_size, limit, coll_filter, xml_where_1, xml_params_1, show_pos, show_lemma)
-
-                        current_results_2 = st.session_state.get('last_kwic_results_secondary')
-                        if current_results_2 and comp_path:
-                            last_hide_symbols = current_results_2.get('hide_symbols', False)
-                            last_show_pos = current_results_2.get('show_pos', False)
-                            last_show_lemma = current_results_2.get('show_lemma', False)
-                            last_focus_sentence = current_results_2.get('focus_sentence', False)
-                            if (current_results_2.get('xml_where') != xml_where_2 or 
-                                current_results_2.get('xml_params') != xml_params_2 or
-                                last_hide_symbols != hide_symbols or
-                                last_show_pos != show_pos or
-                                last_show_lemma != show_lemma or
-                                last_focus_sentence != focus_sentence):
-                                run_concordance_query('secondary', comp_path, comp_name, current_results_2['search_term'], window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
-
-                    if not comp_mode:
-                        has_results = bool(st.session_state.get('last_kwic_results_primary'))
+                        has_search_term = bool(search_term_1 and search_term_1.strip())
                         _active_filters = xml_filters or {}
                         _has_categorical = any(
                             f.get('type') == 'list' and f.get('values') for f in _active_filters.values()
                         ) if _active_filters else False
+                        
+                        # Generate a descriptive name for the current restriction
+                        _restriction_parts = []
+                        for _k, _f in _active_filters.items():
+                            if _f['type'] == 'list' and _f['values']:
+                                _restriction_parts.append(", ".join([str(v) for v in _f['values']]))
+                        _display_name = " | ".join(_restriction_parts) if _restriction_parts else corpus_name
+
                         cluster_examples_limit = st.radio(
                             "Examples per Cluster",
                             options=[5, 10, 15, 20, 25, "All"],
@@ -390,14 +354,14 @@ def render_concordance_view():
                                 # Clear any previous cluster results when re-generating
                                 st.session_state['last_kwic_results_cluster'] = None
                                 set_state('kwic_search_term', search_term_1)
-                                run_concordance_query('primary', corpus_path, corpus_name, search_term_1, window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
+                                run_concordance_query('primary', corpus_path, _display_name, search_term_1, window_size, window_size, limit, coll_filter, xml_where, xml_params, show_pos, show_lemma)
                         with btn_col2:
                             cluster_btn_help = (
                                 "Cluster concordance by selected metadata categories"
-                                if has_results and _has_categorical
-                                else "Generate concordance lines first, then select categorical metadata filters to enable clustering"
+                                if has_search_term and _has_categorical
+                                else "Enter a search term and select categorical metadata filters to enable clustering"
                             )
-                            cluster_btn_disabled = not (has_results and _has_categorical)
+                            cluster_btn_disabled = not (has_search_term and _has_categorical)
                             if st.button(
                                 "🧩 Cluster Mode",
                                 type="secondary",
@@ -430,7 +394,7 @@ def render_concordance_view():
                             if comp_path:
                                 run_concordance_query('secondary', comp_path, comp_name, search_term_2, window_size, window_size, limit, coll_filter, xml_where_2, xml_params_2, show_pos, show_lemma)
                 else:
-                    # For NL mode, ensure search_term_1 is defined for display logic
+                    # For NL mode
                     search_term_1 = get_state('kwic_search_term', '')
                     search_term_2 = None
 
@@ -574,9 +538,115 @@ def render_concordance_view():
             if 'kwic_annotations' not in st.session_state:
                 st.session_state['kwic_annotations'] = {}
             kwic_annotations = st.session_state['kwic_annotations']
-            if results:
+
+            # Case A: Cluster Mode Results
+            if cluster_results:
+                _cluster_search_term = get_state('kwic_search_term', search_term_1 if 'search_term_1' in dir() else '')
+                st.markdown(f"## 🧩 Cluster Concordance: *{_cluster_search_term}*")
+                st.caption(
+                    f"**{len(cluster_results)} cluster(s)** generated from selected metadata filters. "
+                )
+                
+                # Show all clusters fully expanded (no expanders)
+                for cluster_name, res in cluster_results.items():
+                    _n = len(res.get('rows', []))
+                    _total = res.get('total', _n)
+                    st.markdown(f"### 📦 **{cluster_name}** — {_n} sample(s) of {_total:,} total")
+                    render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
+                    st.markdown("---")
+
+                # Show Analytical Tables at the bottom
+                st.markdown("### 📊 Clustered Result Analysis")
+                render_aggregate_cluster_summary(cluster_results)
+                
+                # Check for collocate filter
+                first_res = next(iter(cluster_results.values()))
+                if first_res.get('coll_filter'):
+                    render_collocate_filter_tables(cluster_results)
+
+            # Case B: Standard Results
+            elif results:
                 if not comp_mode:
+                    # 1. Show Concordance lines first
                     render_concordance_column(results, search_term_1)
+                    
+                    # 2. Show analysis tables AT THE BOTTOM
+                    # Use the locally available xml_filters to perform the comparative analysis
+                    _active_filters = xml_filters or {}
+                    _active_keys = []
+                    _active_values = []
+                    for k, f in _active_filters.items():
+                        if f.get('type') == 'list' and f.get('values'):
+                            _active_keys.append(k)
+                            _active_values.append(f['values'])
+                    
+                    if _active_values and len(list(itertools.product(*_active_values))) > 1:
+                        st.markdown("---")
+                        st.markdown("### 📊 Comparative Result Analysis (By Restrictions)")
+                        with st.spinner("Analyzing restrictions..."):
+                            _comparative_data = {}
+                            _combinations = list(itertools.product(*_active_values))
+                            for combo in _combinations:
+                                combo_name = " | ".join([str(v) for v in combo])
+                                combo_filters = {}
+                                for j, val in enumerate(combo):
+                                    combo_filters[_active_keys[j]] = {'type': 'list', 'values': [val]}
+                                
+                                where, params = apply_xml_restrictions(combo_filters)
+                                # Fetch breakdown data for this specific restriction
+                                _, total, _, _, _, breakdown = cached_generate_kwic(
+                                    db_path=results['path'],
+                                    query=results['search_term'],
+                                    left=results.get('left', 5),
+                                    right=results.get('right', 5),
+                                    corpus_name=results['name'],
+                                    pattern_collocate_input=results.get('coll_filter', ""),
+                                    pattern_window=results.get('left', 5),
+                                    limit=1,
+                                    xml_where_clause=where,
+                                    xml_params=tuple(params),
+                                    show_pos=results.get('show_pos', False),
+                                    show_lemma=results.get('show_lemma', False),
+                                    hide_symbols=results.get('hide_symbols', False),
+                                    focus_sentence=results.get('focus_sentence', False),
+                                    show_duplicates=results.get('show_duplicates', False)
+                                )
+                                
+                                # Fetch actual collocate tokens breakdown if a collocate filter is active
+                                col_counts = {}
+                                _coll = results.get('coll_filter', "")
+                                if _coll:
+                                    import core.modules.concordance as cm
+                                    # We run a specific query to get the collocate types and their frequencies
+                                    col_counts = cm.get_collocate_frequency_list(
+                                        db_path=results['path'],
+                                        query=results['search_term'],
+                                        collocate_filter=_coll,
+                                        window=results.get('left', 5),
+                                        xml_where=where,
+                                        xml_params=tuple(params)
+                                    )
+
+                                _comparative_data[combo_name] = {
+                                    'breakdown': breakdown,
+                                    'total': total,
+                                    'xml_where': where,
+                                    'xml_params': params,
+                                    'path': results['path'],
+                                    'coll_filter': _coll,
+                                    'collocate_counts': col_counts
+                                }
+                            render_aggregate_cluster_summary(_comparative_data)
+                            if _coll:
+                                render_collocate_filter_tables(_comparative_data)
+                    else:
+                        # Single or No filter - Standard Analysis
+                        st.markdown("---")
+                        st.markdown("### 📊 Search Analysis")
+                        _res_name = results.get('name', 'Whole Corpus')
+                        render_aggregate_cluster_summary({_res_name: results})
+                        if results.get('coll_filter'):
+                            render_collocate_filter_tables({_res_name: results})
                 else:
                     col_c1, col_c2 = st.columns(2)
                     with col_c1:
@@ -591,21 +661,6 @@ def render_concordance_view():
                             results_2 = st.session_state.get('last_kwic_results_secondary')
                             if results_2:
                                 render_concordance_column(results_2, get_state('kwic_search_term_2', ''), key_suffix="c2")
-
-            # --- Cluster Results (shown below primary results regardless of mode) ---
-            if cluster_results:
-                st.markdown("---")
-                _cluster_search_term = get_state('kwic_search_term', search_term_1 if 'search_term_1' in dir() else '')
-                st.markdown(f"## 🧩 Cluster Concordance: *{_cluster_search_term}*")
-                st.caption(
-                    f"**{len(cluster_results)} cluster(s)** generated from selected metadata filters. "
-                    "Each cluster shows a random sample of concordance lines matching that combination."
-                )
-                for cluster_name, res in cluster_results.items():
-                    _n = len(res.get('rows', []))
-                    _total = res.get('total', _n)
-                    with st.expander(f"📦 **{cluster_name}** — {_n} sample(s) of {_total:,} total", expanded=True):
-                        render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
 
 @notify_timing("Cluster Concordance generated")
 def run_cluster_concordance_query(path, name, query, window, limit, filters, coll_filter="", show_pos=False, show_lemma=False, hide_symbols=False, show_duplicates=False):
@@ -646,7 +701,7 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters, col
         where, params = apply_xml_restrictions(current_filters)
         
         # Run query with random sampling as requested
-        rows, total, _, _, _, _ = cached_generate_kwic(
+        rows, total, _, _, _, breakdown = cached_generate_kwic(
             db_path=path,
             query=query,
             left=window,
@@ -675,7 +730,8 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters, col
                 'window': window,
                 'xml_where': where,
                 'xml_params': params,
-                'breakdown': pd.DataFrame(), # Add empty breakdown
+                'breakdown': breakdown, 
+                'coll_filter': coll_filter,
                 'show_pos': show_pos,
                 'show_lemma': show_lemma,
                 'hide_symbols': hide_symbols,
@@ -689,7 +745,183 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters, col
     status_text.empty()
     st.session_state['last_kwic_results_cluster'] = cluster_results
     st.session_state['last_kwic_results_primary'] = None # Clear primary to focus on cluster
-    st.success(f"Generated {len(cluster_results)} clusters.")
+    if not cluster_results:
+        st.warning("No results found for any of the generated clusters.")
+    else:
+        st.success(f"Generated {len(cluster_results)} clusters.")
+    st.rerun()
+
+def render_aggregate_cluster_summary(cluster_results):
+    """Renders Absolute and Relative frequency tables for all clusters."""
+    if not cluster_results:
+        st.info("No cluster results available for summary.")
+        return
+
+    # 1. Collect all unique node forms across all clusters
+    all_node_forms = set()
+    for res in cluster_results.values():
+        br = res.get('breakdown')
+        if br is not None and not br.empty:
+            # Check for column name variations
+            target_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+            all_node_forms.update(br[target_col].tolist())
+    
+    if not all_node_forms:
+        st.warning("⚠️ No node word breakdown data found. Summary tables cannot be generated.")
+        return
+
+    node_forms = sorted(list(all_node_forms))
+    cluster_names = list(cluster_results.keys())
+
+    # 2. Build Absolute Frequency Data
+    abs_data = []
+    for form in node_forms:
+        row = {"Query result": form}
+        for name in cluster_names:
+            br = cluster_results[name].get('breakdown')
+            if br is not None and not br.empty:
+                # Find the 'Token Form' column
+                t_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+                # Find the 'Absolute Frequency' column
+                a_col = 'Absolute Frequency' if 'Absolute Frequency' in br.columns else (br.columns[1] if len(br.columns)>1 else None)
+                
+                match = br[br[t_col] == form]
+                if not match.empty and a_col:
+                    row[name] = int(match[a_col].iloc[0])
+                else:
+                    row[name] = 0
+            else:
+                row[name] = 0
+        abs_data.append(row)
+    
+    df_abs = pd.DataFrame(abs_data)
+
+    # 3. Build Relative Frequency Data
+    rel_data = []
+    for form in node_forms:
+        row = {"Query result": form}
+        for name in cluster_names:
+            br = cluster_results[name].get('breakdown')
+            if br is not None and not br.empty:
+                # Find the 'Token Form' column
+                t_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+                # Find the 'Relative Frequency' column
+                r_col = 'Relative Frequency (per M)' if 'Relative Frequency (per M)' in br.columns else (br.columns[2] if len(br.columns)>2 else None)
+                
+                match = br[br[t_col] == form]
+                if not match.empty and r_col:
+                    row[name] = float(match[r_col].iloc[0])
+                else:
+                    row[name] = 0.0
+            else:
+                row[name] = 0.0
+        rel_data.append(row)
+    
+    df_rel = pd.DataFrame(rel_data)
+
+    st.markdown("#### Absolute Frequency")
+    st.dataframe(df_abs, use_container_width=True, hide_index=True)
+
+    st.markdown("#### Relative Frequency (PMW)")
+    st.dataframe(df_rel, use_container_width=True, hide_index=True)
+
+def render_collocate_filter_tables(cluster_results):
+    """Renders Collocate Filter tables (Absolute and Relative)."""
+    st.markdown("---")
+    st.markdown("### 🔍 Collocate Filter Analysis")
+    
+    # 1. Aggregate Collocate Counts per cluster
+    # cluster_colls: { cluster_name: { collocate_word: count } }
+    cluster_colls = {}
+    all_collocates = set()
+    
+    for cluster_name, res in cluster_results.items():
+        # Optimization: Use pre-calculated collocate_counts if available (from standard mode comparative analysis)
+        if 'collocate_counts' in res:
+            counts = res['collocate_counts']
+            for c in counts: all_collocates.add(c)
+            cluster_colls[cluster_name] = counts
+            continue
+
+        counts = {}
+        for row in res.get('rows', []):
+            coll = row.get('Collocate')
+            if coll:
+                counts[coll] = counts.get(coll, 0) + 1
+                all_collocates.add(coll)
+        cluster_colls[cluster_name] = counts
+
+    if not all_collocates:
+        st.info("No collocates found matching the filter.")
+        return
+
+    sorted_collocates = sorted(list(all_collocates))
+    cluster_names = list(cluster_results.keys())
+
+    # 2. Build Absolute Frequency Table
+    abs_list = []
+    for coll in sorted_collocates:
+        row = {"Collocate Filter": coll}
+        found_in = []
+        for name in cluster_names:
+            count = cluster_colls[name].get(coll, 0)
+            row[name] = count
+            if count > 0:
+                found_in.append(name)
+        
+        # Shared / Unique Logic
+        if len(found_in) == len(cluster_names):
+            row["Shared"] = "all"
+            row["Unique"] = ""
+        elif len(found_in) == 1:
+            row["Shared"] = ""
+            row["Unique"] = found_in[0]
+        else:
+            row["Shared"] = ", ".join(found_in)
+            row["Unique"] = ""
+        
+        abs_list.append(row)
+    
+    df_abs = pd.DataFrame(abs_list)
+    
+    # 3. Build Relative Frequency Table
+    # Need subcorpus sizes for each cluster
+    rel_list = []
+    for coll in sorted_collocates:
+        row = {"Collocate Filter": coll}
+        found_in = []
+        for name in cluster_names:
+            res = cluster_results[name]
+            count = cluster_colls[name].get(coll, 0)
+            
+            # Fetch subcorpus size
+            total_tokens = cached_get_subcorpus_size(res['path'], xml_where_clause=res['xml_where'], xml_params=tuple(res['xml_params']))
+            rel_freq = (count / total_tokens) * 1_000_000 if total_tokens > 0 else 0
+            
+            row[name] = round(rel_freq, 2)
+            if count > 0:
+                found_in.append(name)
+        
+        # Shared / Unique Logic
+        if len(found_in) == len(cluster_names):
+            row["Shared"] = "all"
+            row["Unique"] = ""
+        elif len(found_in) == 1:
+            row["Shared"] = ""
+            row["Unique"] = found_in[0]
+        else:
+            row["Shared"] = ", ".join(found_in)
+            row["Unique"] = ""
+            
+        rel_list.append(row)
+
+    df_rel = pd.DataFrame(rel_list)
+
+    st.markdown("#### Collocate Filter Table (Absolute Frequency)")
+    st.dataframe(df_abs, use_container_width=True, hide_index=True)
+
+    st.markdown("#### Collocate Filter Table (Relative Frequency)")
+    st.dataframe(df_rel, use_container_width=True, hide_index=True)
 
 def run_concordance_query(identifier, path, name, query, left, right, limit, coll_filter, xml_where, xml_params, show_pos=False, show_lemma=False, source='advanced'):
     if not query or not query.strip():
@@ -726,6 +958,9 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             'xml_where': xml_where,
             'xml_params': xml_params,
             'path': path,
+            'left': left,
+            'right': right,
+            'coll_filter': coll_filter,
             'source': source,
             'show_pos': show_pos,
             'show_lemma': show_lemma,
