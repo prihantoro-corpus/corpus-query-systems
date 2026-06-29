@@ -75,52 +75,70 @@ def mock_generate_grouped_keyword_list(db_path, ref_db_path, group_by_col):
     return results
 
 def setup_test_db(filename="test_grouped_kw.duckdb"):
+    import os
+    if os.path.exists(filename):
+        try: os.remove(filename)
+        except: pass
     con = duckdb.connect(filename)
-    con.execute("CREATE TABLE corpus (token VARCHAR, file_id VARCHAR, domain VARCHAR)")
+    con.execute("CREATE TABLE corpus (token VARCHAR, file_id VARCHAR, domain VARCHAR, _token_low VARCHAR)")
     
     # File 1 (Fruit): apple x 20, common x 5
     data = []
-    for _ in range(20): data.append(("apple", "file1.txt", "fruit"))
-    for _ in range(5): data.append(("common", "file1.txt", "fruit"))
+    for _ in range(20): data.append(("apple", "file1.txt", "fruit", "apple"))
+    for _ in range(5): data.append(("common", "file1.txt", "fruit", "common"))
     
     # File 2 (Tech): python x 20, common x 5
-    for _ in range(20): data.append(("python", "file2.txt", "tech"))
-    for _ in range(5): data.append(("common", "file2.txt", "tech"))
+    for _ in range(20): data.append(("python", "file2.txt", "tech", "python"))
+    for _ in range(5): data.append(("common", "file2.txt", "tech", "common"))
         
-    con.executemany("INSERT INTO corpus VALUES (?, ?, ?)", data)
+    con.executemany("INSERT INTO corpus VALUES (?, ?, ?, ?)", data)
     con.close()
     return filename
 
 def test_grouped_keywords():
     db_path = setup_test_db()
     
-    print("\n--- Testing Group By File ---")
-    results_file = mock_generate_grouped_keyword_list(db_path, None, "file_id")
+    from core.modules.keyword import generate_grouped_keyword_list
+    
+    print("\n--- Testing Real Group By File ---")
+    ref_freq_df = pd.DataFrame([
+        {'token': 'apple', 'freq': 10},
+        {'token': 'banana', 'freq': 10},
+        {'token': 'common', 'freq': 500}
+    ])
+    total_ref = 1000
+    
+    results = generate_grouped_keyword_list(
+        db_path, 
+        'file_id', 
+        ref_freq_df=ref_freq_df, 
+        ref_total_tokens=total_ref, 
+        min_freq=1
+    )
     
     # Check File 1
-    # Expect 'apple' to be high keyness vs Ref (which has 'apple':10, 'common':500)
-    # File 1 has 'apple':20.
-    # Ref has 'apple':10.
-    # Relative freq in File 1: 20/25 = 0.8
-    # Relative freq in Ref: 10/1000 = 0.01
-    # Should be HUGE positive keyness.
-    
-    df_f1 = results_file['file1.txt']
+    df_f1 = results['file1.txt']
     top_kw_f1 = df_f1.iloc[0]['token']
     print(f"File1 Top KW: {top_kw_f1} (LL: {df_f1.iloc[0]['LL']:.2f})")
     
     assert top_kw_f1 == 'apple'
-    assert 'python' not in df_f1['token'].values # Python is not in file1
+    assert 'python' not in df_f1['token'].values
     
     # Check File 2
-    df_f2 = results_file['file2.txt']
+    df_f2 = results['file2.txt']
     top_kw_f2 = df_f2.iloc[0]['token']
     print(f"File2 Top KW: {top_kw_f2} (LL: {df_f2.iloc[0]['LL']:.2f})")
     
     assert top_kw_f2 == 'python'
     
-    print("\n--- Testing Group By Attribute (Domain) ---")
-    results_domain = mock_generate_grouped_keyword_list(db_path, None, "domain")
+    print("\n--- Testing Real Group By Attribute (Domain) ---")
+    results_domain = generate_grouped_keyword_list(
+        db_path, 
+        'domain', 
+        ref_freq_df=ref_freq_df, 
+        ref_total_tokens=total_ref, 
+        min_freq=1
+    )
     
     df_fruit = results_domain['fruit']
     print(f"Fruit Domain Top KW: {df_fruit.iloc[0]['token']}")
