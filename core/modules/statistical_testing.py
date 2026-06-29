@@ -129,24 +129,24 @@ def build_query_where_clause(parsed_term: Dict, alias: str = "c") -> Tuple[str, 
             params.append(l_val)
         if '|' in p_val or '*' in p_val:
             pats = [p.strip() for p in p_val.split('|') if p.strip()]
-            regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+            regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
             where_parts.append(f"regexp_matches({alias}.pos, ?)")
             params.append(regex)
         else:
-            where_parts.append(f"{alias}.pos = ?")
-            params.append(p_val)
+            where_parts.append(f"regexp_matches({alias}.pos, ?)")
+            params.append('(?i)^' + re.escape(p_val) + '$')
             
     elif parsed_term['type'] == 'pos':
         val = parsed_term['val']
         if '|' in val or '*' in val:
             # Multiple POS: _NN*|VB*
             pos_patterns = [p.strip() for p in val.split('|') if p.strip()]
-            full_regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$"
+            full_regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$"
             where_parts.append(f"regexp_matches({alias}.pos, ?)")
             params.append(full_regex)
         else:
-            where_parts.append(f"{alias}.pos = ?")
-            params.append(val)
+            where_parts.append(f"regexp_matches({alias}.pos, ?)")
+            params.append('(?i)^' + re.escape(val) + '$')
             
     elif parsed_term['type'] == 'token_pos':
         # Combined: light_V*
@@ -165,12 +165,12 @@ def build_query_where_clause(parsed_term: Dict, alias: str = "c") -> Tuple[str, 
         # POS part
         if '|' in p_val or '*' in p_val:
             pats = [p.strip() for p in p_val.split('|') if p.strip()]
-            regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+            regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
             where_parts.append(f"regexp_matches({alias}.pos, ?)")
             params.append(regex)
         else:
-            where_parts.append(f"{alias}.pos = ?")
-            params.append(p_val)
+            where_parts.append(f"regexp_matches({alias}.pos, ?)")
+            params.append('(?i)^' + re.escape(p_val) + '$')
             
     elif parsed_term['type'] == 'xml_tag':
         tag_name = parsed_term['tag']

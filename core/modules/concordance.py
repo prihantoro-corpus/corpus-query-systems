@@ -245,22 +245,22 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                  if not is_raw_mode:
                      if '|' in p_val or '*' in p_val:
                          pats = [p.strip() for p in p_val.split('|') if p.strip()]
-                         regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                         regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
                          query_where.append(f"regexp_matches({alias}.pos, ?)")
                          query_params.append(regex)
                      else:
-                         query_where.append(f"{alias}.pos = ?")
-                         query_params.append(p_val)
+                         query_where.append(f"regexp_matches({alias}.pos, ?)")
+                         query_params.append('(?i)^' + re.escape(p_val) + '$')
             elif comp['type'] == 'pos' and not is_raw_mode:
                 val = comp['val']
                 if '|' in val or '*' in val:
                     pos_patterns = [p.strip() for p in val.split('|') if p.strip()]
-                    full_regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$"
+                    full_regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$"
                     query_where.append(f"regexp_matches({alias}.pos, ?)")
                     query_params.append(full_regex)
                 else:
-                    query_where.append(f"{alias}.pos = ?")
-                    query_params.append(val)
+                    query_where.append(f"regexp_matches({alias}.pos, ?)")
+                    query_params.append('(?i)^' + re.escape(val) + '$')
 
         # --- Primary Target Query Construction ---
         final_query = query_select + query_joins
@@ -837,12 +837,12 @@ def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_w
                 
                 if '|' in p_val or '*' in p_val:
                     pats = [p.strip() for p in p_val.split('|') if p.strip()]
-                    regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                    regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
                     node_where.append(f"regexp_matches({alias}.pos, ?)")
                     node_params.append(regex)
                 else:
-                    node_where.append(f"{alias}.pos = ?")
-                    node_params.append(p_val)
+                    node_where.append(f"regexp_matches({alias}.pos, ?)")
+                    node_params.append('(?i)^' + re.escape(p_val) + '$')
             elif comp['type'] == 'pos':
                 node_where.append(f"regexp_matches({alias}.pos, ?)")
                 pats = [p.strip() for p in comp['val'].split('|') if p.strip()]
@@ -868,12 +868,12 @@ def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_w
                     node_params.append(l_val)
                 if '|' in p_val or '*' in p_val:
                     pats = [p.strip() for p in p_val.split('|') if p.strip()]
-                    regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                    regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
                     node_where.append(f"regexp_matches({alias}.pos, ?)")
                     node_params.append(regex)
                 else:
-                    node_where.append(f"{alias}.pos = ?")
-                    node_params.append(p_val)
+                    node_where.append(f"regexp_matches({alias}.pos, ?)")
+                    node_params.append('(?i)^' + re.escape(p_val) + '$')
             else: # comp['type'] == 'word'
                 val = comp['val']
                 if '*' in val:
@@ -907,8 +907,8 @@ def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_w
                 coll_where.append("regexp_matches(c_coll.pos, ?)")
                 p_coll.append(regex)
             else:
-                coll_where.append("c_coll.pos = ?")
-                p_coll.append(p_val)
+                coll_where.append("regexp_matches(c_coll.pos, ?)")
+                p_coll.append('(?i)^' + re.escape(p_val) + '$')
         else:
             val = coll_comp['val']
             if coll_comp['type'] == 'word':
