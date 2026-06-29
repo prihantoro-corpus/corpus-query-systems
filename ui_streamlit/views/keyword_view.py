@@ -299,11 +299,27 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
 
         by_attributes = {}
         if params.get('by_subcorpus', False):
-            attr_cols = get_xml_attribute_columns(duckdb.connect(target_path, read_only=True))
+            con_temp = duckdb.connect(target_path, read_only=True)
+            attr_cols = get_xml_attribute_columns(con_temp)
+            # Filter attributes to only keep those with <= 100 unique values (to avoid doc_id, titles, details, etc.)
+            filtered_attr_cols = []
             if attr_cols:
                 for attr in attr_cols:
                     if attr == "filename":
                         continue
+                    try:
+                        num_unique = con_temp.execute(f"SELECT count(DISTINCT \"{attr}\") FROM corpus").fetchone()[0]
+                        if num_unique <= 100:
+                            filtered_attr_cols.append(attr)
+                        else:
+                            st.info(f"Skipping attribute '{attr}' for sub-corpora logic: has too many unique values ({num_unique}).")
+                    except:
+                        # Fallback: keep it if query fails
+                        filtered_attr_cols.append(attr)
+            con_temp.close()
+
+            if filtered_attr_cols:
+                for attr in filtered_attr_cols:
                     grouped = generate_grouped_keyword_list(
                         target_path, 
                         attr, 
@@ -434,18 +450,18 @@ def render_keyword_results(res, key_suffix=""):
     by_file = res.get('by_filename', {})
     if by_file:
         with st.expander("📁 Keywords By Filename", expanded=False):
-            f_tabs = st.tabs(list(by_file.keys()))
-            for idx, (fname, df_f) in enumerate(by_file.items()):
-                with f_tabs[idx]:
-                    _draw_kw_table(df_f, fname, f"f_{idx}_{key_suffix}")
+            file_list = list(by_file.keys())
+            selected_file = st.selectbox("Select File", file_list, key=f"sb_file_{key_suffix}")
+            if selected_file:
+                _draw_kw_table(by_file[selected_file], selected_file, f"f_{selected_file}_{key_suffix}")
                     
     by_attr = res.get('by_attributes', {})
     if by_attr:
         for attr_name, groups in by_attr.items():
             with st.expander(f"🏷️ Keywords By {attr_name.title()}", expanded=False):
-                a_tabs = st.tabs(list(groups.keys()))
-                for idx, (gv, df_g) in enumerate(groups.items()):
-                    with a_tabs[idx]:
-                        st.markdown(f"**Value:** `{gv}`")
-                        _draw_kw_table(df_g, f"{attr_name}={gv}", f"a_{attr_name}_{idx}_{key_suffix}")
+                val_list = list(groups.keys())
+                selected_val = st.selectbox(f"Select {attr_name.title()} Value", val_list, key=f"sb_attr_{attr_name}_{key_suffix}")
+                if selected_val:
+                    st.markdown(f"**Value:** `{selected_val}`")
+                    _draw_kw_table(groups[selected_val], f"{attr_name}={selected_val}", f"a_{attr_name}_{selected_val}_{key_suffix}")
 

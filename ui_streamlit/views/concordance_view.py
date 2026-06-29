@@ -13,6 +13,12 @@ from core.io_utils import df_to_excel_bytes
 import core.modules.overview as ov
 
 def render_concordance_view():
+    import importlib
+    import core.modules.concordance
+    importlib.reload(core.modules.concordance)
+    import ui_streamlit.caching
+    importlib.reload(ui_streamlit.caching)
+    
     st.header("Concordance (KWIC)")
     
     # Guidelines Layout using shared component
@@ -539,39 +545,38 @@ def render_concordance_view():
                 st.session_state['kwic_annotations'] = {}
             kwic_annotations = st.session_state['kwic_annotations']
 
-            # Case A: Cluster Mode Results
+            # Case A: Cluster Mode Results -- 3 TABS
             if cluster_results:
                 _cluster_search_term = get_state('kwic_search_term', search_term_1 if 'search_term_1' in dir() else '')
                 st.markdown(f"## 🧩 Cluster Concordance: *{_cluster_search_term}*")
-                st.caption(
-                    f"**{len(cluster_results)} cluster(s)** generated from selected metadata filters. "
-                )
-                
-                # Show all clusters fully expanded (no expanders)
-                for cluster_name, res in cluster_results.items():
-                    _n = len(res.get('rows', []))
-                    _total = res.get('total', _n)
-                    st.markdown(f"### 📦 **{cluster_name}** — {_n} sample(s) of {_total:,} total")
-                    render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
-                    st.markdown("---")
+                st.caption(f"**{len(cluster_results)} cluster(s)** generated from selected metadata filters.")
 
-                # Show Analytical Tables at the bottom
-                st.markdown("### 📊 Clustered Result Analysis")
-                render_aggregate_cluster_summary(cluster_results)
-                
-                # Check for collocate filter
-                first_res = next(iter(cluster_results.values()))
-                if first_res.get('coll_filter'):
-                    render_collocate_filter_tables(cluster_results)
+                _first_res = next(iter(cluster_results.values()))
+                _has_coll = bool(_first_res.get('coll_filter'))
 
-            # Case B: Standard Results
+                _tab_lines, _tab_tables, _tab_viz = st.tabs(["📝 Concordance Lines", "📊 Tables", "📈 Visualisation"])
+
+                with _tab_lines:
+                    for cluster_name, res in cluster_results.items():
+                        _n = len(res.get('rows', []))
+                        _total = res.get('total', _n)
+                        st.markdown(f"### 📦 **{cluster_name}** — {_n} sample(s) of {_total:,} total")
+                        render_concordance_column(res, _cluster_search_term, key_suffix=f"cluster_{cluster_name}")
+                        st.markdown("---")
+
+                with _tab_tables:
+                    st.markdown("### 📊 Clustered Result Analysis")
+                    render_aggregate_cluster_summary(cluster_results)
+                    if _has_coll:
+                        render_collocate_filter_tables(cluster_results)
+
+                with _tab_viz:
+                    st.markdown("### 📈 Visualisation")
+                    render_visualisation_tab(cluster_results, has_coll_filter=_has_coll)
+
+            # Case B: Standard Results -- 3 TABS
             elif results:
                 if not comp_mode:
-                    # 1. Show Concordance lines first
-                    render_concordance_column(results, search_term_1)
-                    
-                    # 2. Show analysis tables AT THE BOTTOM
-                    # Use the locally available xml_filters to perform the comparative analysis
                     _active_filters = xml_filters or {}
                     _active_keys = []
                     _active_values = []
@@ -579,28 +584,28 @@ def render_concordance_view():
                         if f.get('type') == 'list' and f.get('values'):
                             _active_keys.append(k)
                             _active_values.append(f['values'])
-                    
-                    if _active_values and len(list(itertools.product(*_active_values))) > 1:
-                        st.markdown("---")
-                        st.markdown("### 📊 Comparative Result Analysis (By Restrictions)")
+
+                    _has_multiple = _active_values and len(list(itertools.product(*_active_values))) > 1
+                    _coll = results.get('coll_filter', "")
+
+                    # Build comparative data (needed by both Tables and Viz tabs)
+                    _comparative_data = {}
+                    if _has_multiple:
                         with st.spinner("Analyzing restrictions..."):
-                            _comparative_data = {}
                             _combinations = list(itertools.product(*_active_values))
                             for combo in _combinations:
                                 combo_name = " | ".join([str(v) for v in combo])
                                 combo_filters = {}
                                 for j, val in enumerate(combo):
                                     combo_filters[_active_keys[j]] = {'type': 'list', 'values': [val]}
-                                
                                 where, params = apply_xml_restrictions(combo_filters)
-                                # Fetch breakdown data for this specific restriction
                                 _, total, _, _, _, breakdown = cached_generate_kwic(
                                     db_path=results['path'],
                                     query=results['search_term'],
                                     left=results.get('left', 5),
                                     right=results.get('right', 5),
                                     corpus_name=results['name'],
-                                    pattern_collocate_input=results.get('coll_filter', ""),
+                                    pattern_collocate_input=_coll,
                                     pattern_window=results.get('left', 5),
                                     limit=1,
                                     xml_where_clause=where,
@@ -611,13 +616,9 @@ def render_concordance_view():
                                     focus_sentence=results.get('focus_sentence', False),
                                     show_duplicates=results.get('show_duplicates', False)
                                 )
-                                
-                                # Fetch actual collocate tokens breakdown if a collocate filter is active
                                 col_counts = {}
-                                _coll = results.get('coll_filter', "")
                                 if _coll:
                                     import core.modules.concordance as cm
-                                    # We run a specific query to get the collocate types and their frequencies
                                     col_counts = cm.get_collocate_frequency_list(
                                         db_path=results['path'],
                                         query=results['search_term'],
@@ -626,7 +627,6 @@ def render_concordance_view():
                                         xml_where=where,
                                         xml_params=tuple(params)
                                     )
-
                                 _comparative_data[combo_name] = {
                                     'breakdown': breakdown,
                                     'total': total,
@@ -636,17 +636,39 @@ def render_concordance_view():
                                     'coll_filter': _coll,
                                     'collocate_counts': col_counts
                                 }
-                            render_aggregate_cluster_summary(_comparative_data)
-                            if _coll:
-                                render_collocate_filter_tables(_comparative_data)
                     else:
-                        # Single or No filter - Standard Analysis
-                        st.markdown("---")
-                        st.markdown("### 📊 Search Analysis")
                         _res_name = results.get('name', 'Whole Corpus')
-                        render_aggregate_cluster_summary({_res_name: results})
-                        if results.get('coll_filter'):
-                            render_collocate_filter_tables({_res_name: results})
+                        if _coll and 'collocate_counts' not in results:
+                            import core.modules.concordance as cm
+                            results['collocate_counts'] = cm.get_collocate_frequency_list(
+                                db_path=results['path'],
+                                query=results['search_term'],
+                                collocate_filter=_coll,
+                                window=results.get('left', 5),
+                                xml_where=results.get('xml_where', ""),
+                                xml_params=tuple(results.get('xml_params', []))
+                            )
+                        _comparative_data = {_res_name: results}
+
+                    # ---- 3 TABS ----
+                    _tab_lines, _tab_tables, _tab_viz = st.tabs(["📝 Concordance Lines", "📊 Tables", "📈 Visualisation"])
+
+                    with _tab_lines:
+                        render_concordance_column(results, search_term_1)
+
+                    with _tab_tables:
+                        if _has_multiple:
+                            st.markdown("### 📊 Comparative Result Analysis (By Restrictions)")
+                        else:
+                            st.markdown("### 📊 Search Analysis")
+                        render_aggregate_cluster_summary(_comparative_data)
+                        if _coll:
+                            render_collocate_filter_tables(_comparative_data)
+
+                    with _tab_viz:
+                        st.markdown("### 📈 Visualisation")
+                        render_visualisation_tab(_comparative_data, has_coll_filter=bool(_coll))
+
                 else:
                     col_c1, col_c2 = st.columns(2)
                     with col_c1:
@@ -721,6 +743,17 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters, col
         )
         
         if rows:
+            col_counts = {}
+            if coll_filter:
+                import core.modules.concordance as cm
+                col_counts = cm.get_collocate_frequency_list(
+                    db_path=path,
+                    query=query,
+                    collocate_filter=coll_filter,
+                    window=window,
+                    xml_where=where,
+                    xml_params=tuple(params)
+                )
             cluster_results[combo_name] = {
                 'rows': rows,
                 'total': total,
@@ -736,7 +769,8 @@ def run_cluster_concordance_query(path, name, query, window, limit, filters, col
                 'show_lemma': show_lemma,
                 'hide_symbols': hide_symbols,
                 'focus_sentence': get_state('kwic_focus_sentence', False),
-                'show_duplicates': show_duplicates
+                'show_duplicates': show_duplicates,
+                'collocate_counts': col_counts
             }
         
         progress_bar.progress((i + 1) / len(combinations))
@@ -824,6 +858,8 @@ def render_aggregate_cluster_summary(cluster_results):
 
     st.markdown("#### Relative Frequency (PMW)")
     st.dataframe(df_rel, use_container_width=True, hide_index=True)
+
+    return df_abs, df_rel, cluster_names
 
 def render_collocate_filter_tables(cluster_results):
     """Renders Collocate Filter tables (Absolute and Relative)."""
@@ -922,6 +958,193 @@ def render_collocate_filter_tables(cluster_results):
 
     st.markdown("#### Collocate Filter Table (Relative Frequency)")
     st.dataframe(df_rel, use_container_width=True, hide_index=True)
+
+    return df_abs, df_rel, cluster_names, cluster_colls
+
+
+def render_visualisation_tab(cluster_results, has_coll_filter=False):
+    """Renders horizontal stacked bar charts for absolute frequency and collocate analysis."""
+    import plotly.graph_objects as go
+
+    cluster_names = list(cluster_results.keys())
+
+    # ---- 1. Node word frequency chart ----
+    # Collect all unique node forms across all clusters
+    all_node_forms = set()
+    for res in cluster_results.values():
+        br = res.get('breakdown')
+        if br is not None and not br.empty:
+            target_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+            all_node_forms.update(br[target_col].tolist())
+            
+    node_forms = sorted(list(all_node_forms))
+    
+    node_totals = {name: cluster_results[name].get('total', 0) for name in cluster_names}
+
+    if any(v > 0 for v in node_totals.values()):
+        freq_type = st.radio("Frequency Metric for Node Word", ["Absolute Frequency", "Relative Frequency (PMW)"], horizontal=True, key="viz_node_freq_type")
+        is_rel = (freq_type == "Relative Frequency (PMW)")
+
+        fig_node = go.Figure()
+        if node_forms:
+            if len(cluster_names) == 1:
+                # Single corpus / no restrictions case: plot variations on Y-axis
+                name = cluster_names[0]
+                br = cluster_results[name].get('breakdown')
+                frequencies = []
+                for form in node_forms:
+                    val = 0.0
+                    if br is not None and not br.empty:
+                        t_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+                        if is_rel:
+                            col = 'Relative Frequency (per M)' if 'Relative Frequency (per M)' in br.columns else (br.columns[2] if len(br.columns)>2 else None)
+                        else:
+                            col = 'Absolute Frequency' if 'Absolute Frequency' in br.columns else (br.columns[1] if len(br.columns)>1 else None)
+                        
+                        match = br[br[t_col] == form]
+                        if not match.empty and col:
+                            val = float(match[col].iloc[0]) if is_rel else int(match[col].iloc[0])
+                    frequencies.append(val)
+                    
+                text_labels = [f"{f:.2f}" if is_rel else str(int(f)) for f in frequencies]
+                fig_node.add_trace(go.Bar(
+                    y=node_forms,
+                    x=frequencies,
+                    orientation='h',
+                    text=text_labels,
+                    textposition='outside',
+                    marker_color='#FFEA00' # Highlight color
+                ))
+                fig_node.update_layout(
+                    title=f'Node Word Variation {freq_type} ({name})',
+                    xaxis_title=freq_type,
+                    yaxis_title='Token Form',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=13),
+                    height=max(300, 45 * len(node_forms) + 100)
+                )
+            else:
+                # Multiple restrictions case: plot grouped bar chart
+                for form in node_forms:
+                    x_vals = []
+                    y_vals = []
+                    for name in cluster_names:
+                        br = cluster_results[name].get('breakdown')
+                        val = 0.0
+                        if br is not None and not br.empty:
+                            t_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+                            if is_rel:
+                                col = 'Relative Frequency (per M)' if 'Relative Frequency (per M)' in br.columns else (br.columns[2] if len(br.columns)>2 else None)
+                            else:
+                                col = 'Absolute Frequency' if 'Absolute Frequency' in br.columns else (br.columns[1] if len(br.columns)>1 else None)
+                            
+                            match = br[br[t_col] == form]
+                            if not match.empty and col:
+                                val = float(match[col].iloc[0]) if is_rel else int(match[col].iloc[0])
+                        y_vals.append(name)
+                        x_vals.append(val)
+                        
+                    text_labels = [f"{x:.2f}" if is_rel and x > 0 else (str(int(x)) if x > 0 else "") for x in x_vals]
+                    fig_node.add_trace(go.Bar(
+                        name=form,
+                        y=y_vals,
+                        x=x_vals,
+                        orientation='h',
+                        text=text_labels,
+                        textposition='inside'
+                    ))
+                fig_node.update_layout(
+                    barmode='group',
+                    title=f'Node Word Variation {freq_type} by Restriction',
+                    xaxis_title=freq_type,
+                    yaxis_title='Restriction',
+                    legend_title='Token Form',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=13),
+                    height=max(350, 80 * len(cluster_names) + 120)
+                )
+        else:
+            # Fallback to aggregates if no breakdown exists
+            fig_node = go.Figure()
+            for name in cluster_names:
+                val = node_totals[name]
+                fig_node.add_trace(go.Bar(
+                    name=name,
+                    y=[name],
+                    x=[val],
+                    orientation='h',
+                    text=[str(val)],
+                    textposition='outside'
+                ))
+            fig_node.update_layout(
+                barmode='group',
+                title=f'Node Word {freq_type} by Restriction (Aggregate)',
+                xaxis_title=freq_type,
+                yaxis_title='Restriction',
+                legend_title='Restriction',
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(size=13),
+                height=max(300, 60 * len(cluster_names) + 100)
+            )
+        st.plotly_chart(fig_node, use_container_width=True)
+    else:
+        st.info("No node word frequency data available for visualisation.")
+
+    # ---- 2. Collocate frequency — stacked horizontal bar per collocate ----
+    if has_coll_filter:
+        cluster_colls = {}
+        all_collocates = set()
+        for cluster_name, res in cluster_results.items():
+            if 'collocate_counts' in res:
+                counts = res['collocate_counts']
+            else:
+                counts = {}
+                for row in res.get('rows', []):
+                    coll = row.get('Collocate')
+                    if coll:
+                        counts[coll] = counts.get(coll, 0) + 1
+            cluster_colls[cluster_name] = counts
+            all_collocates.update(counts.keys())
+
+        if all_collocates:
+            # Sort by total frequency descending, take top 30
+            sorted_colls = sorted(
+                list(all_collocates),
+                key=lambda c: -sum(cluster_colls[n].get(c, 0) for n in cluster_names)
+            )
+            top_colls = sorted_colls[:30]
+            # Reverse so highest-frequency collocate is at top of chart
+            top_colls_display = list(reversed(top_colls))
+
+            fig_coll = go.Figure()
+            for name in cluster_names:
+                vals = [cluster_colls[name].get(c, 0) for c in top_colls_display]
+                fig_coll.add_trace(go.Bar(
+                    name=name,
+                    y=top_colls_display,
+                    x=vals,
+                    orientation='h'
+                ))
+            fig_coll.update_layout(
+                barmode='stack',
+                title='Collocate Absolute Frequency by Restriction (Top 30)',
+                xaxis_title='Frequency',
+                yaxis_title='Collocate',
+                legend_title='Restriction',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(size=12),
+                height=max(450, 22 * len(top_colls_display) + 120)
+            )
+            st.plotly_chart(fig_coll, use_container_width=True)
+        else:
+            st.info("No collocate data found for visualisation.")
+
+
 
 def run_concordance_query(identifier, path, name, query, left, right, limit, coll_filter, xml_where, xml_params, show_pos=False, show_lemma=False, source='advanced'):
     if not query or not query.strip():
