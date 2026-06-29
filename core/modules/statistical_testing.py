@@ -41,6 +41,24 @@ def parse_query_term(term: str) -> Dict:
         return {'type': 'xml_tag', 'tag': tag_name, 'attrs': attrs}
 
     # Check for lemma: [lemma]
+    lemma_match = re.search(r"\[(.*?)\]", term)
+    bracket_idx = term.find('[')
+    if lemma_match:
+        inner_val = lemma_match.group(1).strip()
+        if '_' in inner_val and not inner_val.startswith('_'):
+            parts = inner_val.rsplit('_', 1)
+            if len(parts) == 2 and parts[1]:
+                prefix = term[:bracket_idx] if bracket_idx > 0 else ""
+                suffix = term[term.find(']')+1:]
+                return {
+                    'type': 'lemma_pos',
+                    'lemma': prefix + parts[0].lower() + suffix,
+                    'pos': parts[1]
+                }
+        val = inner_val.lower()
+        prefix = term[:bracket_idx] if bracket_idx > 0 else ""
+        suffix = term[term.find(']')+1:]
+        return {'type': 'lemma', 'val': prefix + val + suffix}
     
     # Check for combined Token_POS: light_V*
     if '_' in term and not term.startswith('_'):
@@ -98,6 +116,25 @@ def build_query_where_clause(parsed_term: Dict, alias: str = "c") -> Tuple[str, 
         else:
             where_parts.append(f"lower({alias}.lemma) = ?")
             params.append(val)
+            
+    elif parsed_term['type'] == 'lemma_pos':
+        l_val = parsed_term['lemma']
+        p_val = parsed_term['pos']
+        if '*' in l_val:
+            regex_pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+            where_parts.append(f"regexp_matches(lower({alias}.lemma), ?)")
+            params.append(regex_pat)
+        else:
+            where_parts.append(f"lower({alias}.lemma) = ?")
+            params.append(l_val)
+        if '|' in p_val or '*' in p_val:
+            pats = [p.strip() for p in p_val.split('|') if p.strip()]
+            regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+            where_parts.append(f"regexp_matches({alias}.pos, ?)")
+            params.append(regex)
+        else:
+            where_parts.append(f"{alias}.pos = ?")
+            params.append(p_val)
             
     elif parsed_term['type'] == 'pos':
         val = parsed_term['val']

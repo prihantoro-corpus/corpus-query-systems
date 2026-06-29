@@ -114,8 +114,19 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
                 # 1. Lemma [lemma]
                 m_lemma = re.search(r"\[(.*?)\]", pat)
                 if m_lemma and not is_raw:
+                    inner_val = m_lemma.group(1).strip()
+                    if '_' in inner_val and not inner_val.startswith('_'):
+                        parts = inner_val.rsplit('_', 1)
+                        if len(parts) == 2 and parts[1]:
+                            l_pat = '^' + standardize_wildcards(parts[0].lower()) + '$'
+                            p_pat = '(?i)^' + standardize_wildcards(parts[1]) + '$'
+                            op = "NOT regexp_matches" if is_negative else "regexp_matches"
+                            clause_str = f"({op}(lower(l{idx}), ?) AND {op}(p{idx}, ?))"
+                            sub_clauses.append(clause_str)
+                            sub_params.extend([l_pat, p_pat])
+                            continue
                     target_col = f"lower(l{idx})"
-                    regex_pat = '^' + standardize_wildcards(m_lemma.group(1).lower()) + '$'
+                    regex_pat = '^' + standardize_wildcards(inner_val.lower()) + '$'
                 
                 # 2. POS _POS
                 elif '_' in pat and not is_raw and pat.startswith('_'): 
