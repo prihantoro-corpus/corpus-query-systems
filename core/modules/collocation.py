@@ -312,6 +312,13 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
             match_query += " WHERE " + c0_xml_where.strip()[4:]
         
         full_params = query_params + xml_params
+        
+        try:
+            with open(r"c:\Users\priha\Documents\cortex\debug_query.log", "a", encoding="utf-8") as f_debug:
+                f_debug.write(f"--- COLLOCATION START ---\nTarget: {raw_target_input}\nQuery: {match_query}\nParams: {full_params}\n")
+        except Exception as log_err:
+            pass
+            
         con.execute(match_query, full_params)
         
         if xml_where_clause:
