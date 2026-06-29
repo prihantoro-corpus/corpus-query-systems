@@ -65,7 +65,23 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 return {'type': 'xml_tag', 'tag': tag_name, 'attrs': attrs}
             
             lemma_match = re.search(r"\[(.*?)\]", term)
-            if lemma_match: return {'type': 'lemma', 'val': lemma_match.group(1).strip().lower()}
+            bracket_idx = term.find('[')
+            if lemma_match:
+                inner_val = lemma_match.group(1).strip()
+                if '_' in inner_val and not inner_val.startswith('_'):
+                    parts = inner_val.rsplit('_', 1)
+                    if len(parts) == 2 and parts[1]:
+                        prefix = term[:bracket_idx] if bracket_idx > 0 else ""
+                        suffix = term[term.find(']')+1:]
+                        return {
+                            'type': 'lemma_pos',
+                            'lemma': prefix + parts[0].lower() + suffix,
+                            'pos': parts[1]
+                        }
+                val = inner_val.lower()
+                prefix = term[:bracket_idx] if bracket_idx > 0 else ""
+                suffix = term[term.find(']')+1:]
+                return {'type': 'lemma', 'val': prefix + val + suffix}
             # Combined Token_POS Check (e.g. light_V*)
             if '_' in term and not term.startswith('_') and not lemma_match:
                 parts = term.rsplit('_', 1)
@@ -207,6 +223,34 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 else:
                     query_where.append(f"lower({alias}.lemma) = ?")
                     query_params.append(val)
+            elif comp['type'] == 'lemma_pos':
+                 l_val = comp['lemma']
+                 p_val = comp['pos']
+                 if not is_raw_mode:
+                     if '*' in l_val:
+                         regex_pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                         query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
+                         query_params.append(regex_pat)
+                     else:
+                         query_where.append(f"lower({alias}.lemma) = ?")
+                         query_params.append(l_val)
+                 else:
+                     if '*' in l_val:
+                         regex_pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                         query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                         query_params.append(regex_pat)
+                     else:
+                         query_where.append(f"{alias}._token_low = ?")
+                         query_params.append(l_val)
+                 if not is_raw_mode:
+                     if '|' in p_val or '*' in p_val:
+                         pats = [p.strip() for p in p_val.split('|') if p.strip()]
+                         regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                         query_where.append(f"regexp_matches({alias}.pos, ?)")
+                         query_params.append(regex)
+                     else:
+                         query_where.append(f"{alias}.pos = ?")
+                         query_params.append(p_val)
             elif comp['type'] == 'pos' and not is_raw_mode:
                 val = comp['val']
                 if '|' in val or '*' in val:
@@ -295,6 +339,16 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                             regex = '(?i)^' + re.escape(val).replace(r'\*', '.*') + '$'
                             coll_filter_parts.append("regexp_matches(c_coll.lemma, ?)")
                             coll_filter_params.append(regex)
+                        elif cp['type'] == 'lemma_pos':
+                            l_val = cp['lemma']
+                            p_val = cp['pos']
+                            regex = '(?i)^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                            coll_filter_parts.append("regexp_matches(c_coll.lemma, ?)")
+                            coll_filter_params.append(regex)
+                            pats = [p.strip() for p in p_val.split('|') if p.strip()]
+                            regex_pos = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                            coll_filter_parts.append("regexp_matches(c_coll.pos, ?)")
+                            coll_filter_params.append(regex_pos)
                         elif cp['type'] == 'pos':
                             # Always use case-insensitive matching for POS tags in ID-BPPT and others
                             pats = [p.strip() for p in val.split('|') if p.strip()]
@@ -495,6 +549,14 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 elif coll_comp_hl['type'] == 'lemma':
                     pat = '^' + re.escape(val).replace(r'\*', '.*') + '$'
                     coll_lemma_regex_hl = re.compile(pat, re.IGNORECASE)
+                elif coll_comp_hl['type'] == 'lemma_pos':
+                    l_val = coll_comp_hl['lemma']
+                    p_val = coll_comp_hl['pos']
+                    pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                    coll_lemma_regex_hl = re.compile(pat, re.IGNORECASE)
+                    pats = [p.strip() for p in p_val.split('|') if p.strip()]
+                    full_regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                    coll_pos_regex_input_hl = re.compile(full_regex, re.IGNORECASE)
                 elif coll_comp_hl['type'] == 'pos':
                     if '|' in val or '*' in val:
                         pos_patterns = [p.strip() for p in val.split('|') if p.strip()]
@@ -568,6 +630,11 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                         wm = coll_word_regex_hl.fullmatch(t_low) if coll_word_regex_hl else True
                         pm = coll_pos_regex_input_hl.fullmatch(t_pos) if coll_pos_regex_input_hl and not is_raw_mode else True
                         if wm and pm:
+                            is_coll_match = True
+                    elif coll_comp_hl and coll_comp_hl['type'] == 'lemma_pos':
+                        lm = coll_lemma_regex_hl.fullmatch(t_lemma.lower()) if coll_lemma_regex_hl else True
+                        pm = coll_pos_regex_input_hl.fullmatch(t_pos) if coll_pos_regex_input_hl and not is_raw_mode else True
+                        if lm and pm:
                             is_coll_match = True
                     else:
                         wm = True
@@ -722,7 +789,23 @@ def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_w
         # (Internal parse_term copy for standalone use)
         def _parse(term):
             lemma_match = re.search(r"\[(.*?)\]", term)
-            if lemma_match: return {'type': 'lemma', 'val': lemma_match.group(1).strip().lower()}
+            bracket_idx = term.find('[')
+            if lemma_match:
+                inner_val = lemma_match.group(1).strip()
+                if '_' in inner_val and not inner_val.startswith('_'):
+                    parts = inner_val.rsplit('_', 1)
+                    if len(parts) == 2 and parts[1]:
+                        prefix = term[:bracket_idx] if bracket_idx > 0 else ""
+                        suffix = term[term.find(']')+1:]
+                        return {
+                            'type': 'lemma_pos',
+                            'lemma': prefix + parts[0].lower() + suffix,
+                            'pos': parts[1]
+                        }
+                val = inner_val.lower()
+                prefix = term[:bracket_idx] if bracket_idx > 0 else ""
+                suffix = term[term.find(']')+1:]
+                return {'type': 'lemma', 'val': prefix + val + suffix}
             
             if '_' in term and not term.startswith('_') and not lemma_match:
                 parts = term.rsplit('_', 1)
@@ -773,6 +856,24 @@ def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_w
                 else:
                     node_where.append(f"lower({alias}.lemma) = ?")
                     node_params.append(val)
+            elif comp['type'] == 'lemma_pos':
+                l_val = comp['lemma']
+                p_val = comp['pos']
+                if '*' in l_val:
+                    regex_pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                    node_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
+                    node_params.append(regex_pat)
+                else:
+                    node_where.append(f"lower({alias}.lemma) = ?")
+                    node_params.append(l_val)
+                if '|' in p_val or '*' in p_val:
+                    pats = [p.strip() for p in p_val.split('|') if p.strip()]
+                    regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                    node_where.append(f"regexp_matches({alias}.pos, ?)")
+                    node_params.append(regex)
+                else:
+                    node_where.append(f"{alias}.pos = ?")
+                    node_params.append(p_val)
             else: # comp['type'] == 'word'
                 val = comp['val']
                 if '*' in val:
@@ -824,6 +925,19 @@ def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_w
                 else:
                     coll_where.append("lower(c_coll.lemma) = ?")
                     p_coll.append(val)
+            elif coll_comp['type'] == 'lemma_pos':
+                l_val = coll_comp['lemma']
+                p_val = coll_comp['pos']
+                if '*' in l_val:
+                    coll_where.append("regexp_matches(c_coll.lemma, ?)")
+                    p_coll.append('(?i)^' + re.escape(l_val).replace(r'\*', '.*') + '$')
+                else:
+                    coll_where.append("lower(c_coll.lemma) = ?")
+                    p_coll.append(l_val)
+                pats = [p.strip() for p in p_val.split('|') if p.strip()]
+                regex_pos = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                coll_where.append("regexp_matches(c_coll.pos, ?)")
+                p_coll.append(regex_pos)
             elif coll_comp['type'] == 'pos':
                 coll_where.append("regexp_matches(c_coll.pos, ?)")
                 pats = [p.strip() for p in val.split('|') if p.strip()]

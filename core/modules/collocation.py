@@ -117,7 +117,18 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
             bracket_idx = term.find('[')
             
             if lemma_match:
-                val = lemma_match.group(1).strip().lower()
+                inner_val = lemma_match.group(1).strip()
+                if '_' in inner_val and not inner_val.startswith('_'):
+                    parts = inner_val.rsplit('_', 1)
+                    if len(parts) == 2 and parts[1]:
+                        prefix = term[:bracket_idx] if bracket_idx > 0 else ""
+                        suffix = term[term.find(']')+1:]
+                        return {
+                            'type': 'lemma_pos',
+                            'lemma': prefix + parts[0].lower() + suffix,
+                            'pos': parts[1]
+                        }
+                val = inner_val.lower()
                 # Check for suffix/prefix wildcards outside brackets
                 prefix = term[:bracket_idx] if bracket_idx > 0 else ""
                 suffix = term[term.find(']')+1:]
@@ -183,6 +194,32 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
                  pat = re.escape(t_val).replace(r'\*', '.*').replace(r'\%', '.*').replace(r'\_', '.')
                  query_where.append(f"regexp_matches({alias}._token_low, ?)")
                  query_params.append('^' + pat + '$')
+                 
+                 # POS
+                 if not is_raw_mode_active:
+                     pat_pos = re.escape(p_val).replace(r'\*', '.*').replace(r'\%', '.*').replace(r'\_', '.')
+                     if '|' in p_val:
+                         pat_pos = pat_pos.replace(r'\|', '|')
+                     query_where.append(f"regexp_matches({alias}.pos, ?)")
+                     query_params.append('^' + pat_pos + '$')
+            
+            elif comp['type'] == 'lemma_pos':
+                 l_val = comp['lemma']
+                 p_val = comp['pos']
+                 
+                 # Lemma
+                 if not is_raw_mode_active:
+                     pat = re.escape(l_val).replace(r'\*', '.*').replace(r'\%', '.*').replace(r'\_', '.')
+                     if '|' in l_val:
+                         pat = pat.replace(r'\|', '|')
+                     query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
+                     query_params.append('^' + pat + '$')
+                 else:
+                     pat = re.escape(l_val).replace(r'\*', '.*').replace(r'\%', '.*').replace(r'\_', '.')
+                     if '|' in l_val:
+                         pat = pat.replace(r'\|', '|')
+                     query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                     query_params.append('^' + pat + '$')
                  
                  # POS
                  if not is_raw_mode_active:
