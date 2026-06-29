@@ -14,6 +14,10 @@ import importlib
 import core.config
 import core.ai_service
 import core.modules.concordance
+import core.modules.collocation
+import core.modules.distribution
+import core.modules.statistical_testing
+import core.modules.ngram
 import ui_streamlit.state_manager
 import ui_streamlit.caching
 import ui_streamlit.components.sidebar
@@ -24,6 +28,10 @@ import ui_streamlit.views.concordance_view
 importlib.reload(core.config)
 importlib.reload(core.ai_service)
 importlib.reload(core.modules.concordance)
+importlib.reload(core.modules.collocation)
+importlib.reload(core.modules.distribution)
+importlib.reload(core.modules.statistical_testing)
+importlib.reload(core.modules.ngram)
 importlib.reload(ui_streamlit.state_manager)
 importlib.reload(ui_streamlit.caching)
 importlib.reload(ui_streamlit.components.sidebar)
