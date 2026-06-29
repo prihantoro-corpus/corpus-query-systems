@@ -62,6 +62,17 @@ def test_lemma_pos():
         print(f"Concordance [study_VB*] matches: {total_study_vb}")
         assert total_study_vb == 1, f"Expected 1 match, got {total_study_vb}"
 
+        # Lowercase POS tag checks for case-insensitivity:
+        # [study_nns] (lowercase tag) -> should match studies (1)
+        _, total_study_nns_lc, _, _, _, _ = generate_kwic(db_path, "[study_nns]", 1, 1, "Test")
+        print(f"Concordance [study_nns] matches: {total_study_nns_lc}")
+        assert total_study_nns_lc == 1, f"Expected 1 match, got {total_study_nns_lc}"
+
+        # [study_vb*] (lowercase wildcard tag) -> should match studying (1)
+        _, total_study_vb_lc, _, _, _, _ = generate_kwic(db_path, "[study_vb*]", 1, 1, "Test")
+        print(f"Concordance [study_vb*] matches: {total_study_vb_lc}")
+        assert total_study_vb_lc == 1, f"Expected 1 match, got {total_study_vb_lc}"
+
         # 2. Collocation Tests
         print("\n--- Testing Collocation ---")
         # Collocation node query: [study_VB*]

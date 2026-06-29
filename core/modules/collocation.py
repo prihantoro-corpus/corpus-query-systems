@@ -201,7 +201,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
                      if '|' in p_val:
                          pat_pos = pat_pos.replace(r'\|', '|')
                      query_where.append(f"regexp_matches({alias}.pos, ?)")
-                     query_params.append('^' + pat_pos + '$')
+                     query_params.append('(?i)^' + pat_pos + '$')
             
             elif comp['type'] == 'lemma_pos':
                  l_val = comp['lemma']
@@ -227,7 +227,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
                      if '|' in p_val:
                          pat_pos = pat_pos.replace(r'\|', '|')
                      query_where.append(f"regexp_matches({alias}.pos, ?)")
-                     query_params.append('^' + pat_pos + '$')
+                     query_params.append('(?i)^' + pat_pos + '$')
             
             elif comp['type'] == 'xml_tag':
                 tag_name = comp['tag']
@@ -278,12 +278,16 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
                     if '|' in val:
                         pat = pat.replace(r'\|', '|')
                     
-                    regex_pat = '^' + pat + '$'
+                    regex_pat = ('(?i)^' if comp['type'] == 'pos' else '^') + pat + '$'
                     query_where.append(f"regexp_matches({col_target}, ?)")
                     query_params.append(regex_pat)
                 else:
-                    query_where.append(f"{col_target} = ?")
-                    query_params.append(val)
+                    if comp['type'] == 'pos' and not is_raw_mode_active:
+                        query_where.append(f"regexp_matches({col_target}, ?)")
+                        query_params.append('(?i)^' + re.escape(val) + '$')
+                    else:
+                        query_where.append(f"{col_target} = ?")
+                        query_params.append(val)
 
         try: con.execute("DROP TABLE IF EXISTS search_matches")
         except: pass
