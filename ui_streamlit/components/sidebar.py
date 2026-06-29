@@ -68,6 +68,10 @@ def render_sidebar():
         ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
     )
     
+    if st.sidebar.button("🧹 Clear App Cache", key="sidebar_clear_cache_btn", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+    
     
     # 4. AI Interpretation Settings
     st.sidebar.title("AI Interpretation")
