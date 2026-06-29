@@ -26,6 +26,7 @@ def render_sidebar():
     if os.getenv("STREAMLIT_SHARING_AUTHOR") or os.getenv("IS_SERVER"):
         is_local = False
     else:
+        hostname = ""
         try:
             hostname = socket.gethostname().lower()
             if any(h in hostname for h in ['render', 'heroku', 'aws', 'gcp', 'azure', 'kubernetes', 'k8s', 'container', 'server']):
@@ -37,7 +38,25 @@ def render_sidebar():
             from streamlit import context
             if hasattr(context, "headers"):
                 host = context.headers.get("host", "").lower()
-                if host and not any(h in host for h in ["localhost", "127.0.0.1", "::1"]):
+                host_name = host.split(":")[0] if ":" in host else host
+                
+                is_host_local = False
+                if host_name in ["localhost", "127.0.0.1", "::1"]:
+                    is_host_local = True
+                elif hostname and host_name == hostname:
+                    is_host_local = True
+                elif host_name.endswith(".local"):
+                    is_host_local = True
+                else:
+                    import ipaddress
+                    try:
+                        ip = ipaddress.ip_address(host_name)
+                        if ip.is_private or ip.is_loopback:
+                            is_host_local = True
+                    except ValueError:
+                        pass
+                
+                if not is_host_local:
                     is_local = False
         except ImportError:
             pass
