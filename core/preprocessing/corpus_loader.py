@@ -16,7 +16,7 @@ import time
 from core.utils.profiler import profile_func
 
 @profile_func
-def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None):
+def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None, custom_tagger_config=None):
     """
     Loads one or more monolingual files into a DuckDB database.
     Returns: dict { 'db_path': str, 'stats': dict, 'structure': dict, 'lang_code': str, 'error': str }
@@ -42,6 +42,45 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         stanza_lang_code = STANZA_LANG_MAP[explicit_lang_code]
     elif explicit_lang_code.capitalize() in STANZA_LANG_MAP:
         stanza_lang_code = STANZA_LANG_MAP[explicit_lang_code.capitalize()]
+    
+    custom_tagger = None
+    if custom_tagger_config:
+        if 'pre_trained_tagger' in custom_tagger_config:
+            custom_tagger = custom_tagger_config['pre_trained_tagger']
+        else:
+            from core.preprocessing.custom_tagger import CustomDataDrivenTagger
+            custom_tagger = CustomDataDrivenTagger(
+                guesser_tag=custom_tagger_config.get('guesser_tag', 'NN'),
+                algorithm=custom_tagger_config.get('algorithm', 'Averaged Perceptron'),
+                context_window=custom_tagger_config.get('context_window', 2),
+                prob_threshold=custom_tagger_config.get('prob_threshold', 0.1)
+            )
+            try:
+                custom_tagger.train(
+                    corpus_content=custom_tagger_config['corpus_content'],
+                    lexicon_content=custom_tagger_config.get('lexicon_content')
+                )
+            except Exception as e:
+                return {'error': f"Failed to train custom tagger: {e}"}
+
+    def make_custom_tagger_wrapper(tagger, s_lang):
+        def custom_tagger_wrapper(text, lang_code=None):
+            sentences = tagging.tokenize_text_only(text, s_lang)
+            tagged_results = []
+            sent_id = 0
+            for sent_tokens in sentences:
+                sent_id += 1
+                tagged_tokens = tagger.tag(sent_tokens)
+                for t_idx, token_info in enumerate(tagged_tokens):
+                    tagged_results.append({
+                        'token': sent_tokens[t_idx],
+                        'pos': token_info['pos'],
+                        'lemma': token_info['lemma'],
+                        'sent_id': sent_id,
+                        'ent_type': ""
+                    })
+            return tagged_results, None
+        return custom_tagger_wrapper
     
     print(f"DEBUG: load_monolingual_corpus_files called. Lang: {explicit_lang_code} (Stanza: {stanza_lang_code}), Format: {selected_format}")
 
@@ -89,7 +128,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 
                 # 2. Content Parsing
                 stanza_proc = None
-                if stanza_lang_code and stanza_lang_code != "OTHER":
+                if custom_tagger:
+                    stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
+                elif stanza_lang_code and stanza_lang_code != "OTHER":
                     stanza_proc = tagging.tag_text_with_stanza
                 
                 result = parse_xml_content_to_df(
@@ -163,7 +204,10 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 
                 tagged_data = []
                 
-                if stanza_lang_code and stanza_lang_code != "OTHER":
+                if custom_tagger:
+                    stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
+                    tagged_data, err = stanza_proc(raw_text)
+                elif stanza_lang_code and stanza_lang_code != "OTHER":
                     try:
                         # Attempt Stanza Tagging
                         tagged_data, err = tagging.tag_text_with_stanza(raw_text, stanza_lang_code)
@@ -255,7 +299,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         'structure': combined_structure,
         'lang_code': final_lang_code,
         'error': None,
-        'warning': stanza_warning if 'stanza_warning' in locals() else None
+        'warning': stanza_warning if 'stanza_warning' in locals() else None,
+        'trained_tagger': custom_tagger
     }
 
 @profile_func

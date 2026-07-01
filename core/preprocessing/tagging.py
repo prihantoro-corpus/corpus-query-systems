@@ -203,3 +203,79 @@ def tag_text_simple_fallback(text):
             })
             
     return results, None
+
+def get_stanza_tokenizer_only(lang_code):
+    global _STANZA_PIPELINES
+    key = f"{lang_code}_tokenize_only"
+    if key in _STANZA_PIPELINES:
+        return _STANZA_PIPELINES[key]
+        
+    try:
+        nlp = stanza.Pipeline(lang=lang_code, processors='tokenize', download_method=None)
+    except Exception:
+        try:
+            stanza.download(lang_code, verbose=False)
+            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize')
+        except Exception:
+            return None
+    _STANZA_PIPELINES[key] = nlp
+    return nlp
+
+def tokenize_text_with_spacy(text, lang_code):
+    nlp = get_spacy_pipeline(lang_code)
+    if not nlp:
+        return None
+    try:
+        # Disable all parsing, tagging, lemmatization to run tokenizer only
+        with nlp.select_pipes(disable=['tagger', 'parser', 'ner', 'lemmatizer']):
+            doc = nlp(text)
+            sentences = []
+            for sent in doc.sents:
+                sent_tokens = [token.text for token in sent if not token.is_space]
+                if sent_tokens:
+                    sentences.append(sent_tokens)
+            return sentences
+    except Exception:
+        return None
+
+def tokenize_text_with_stanza(text, lang_code):
+    nlp = get_stanza_tokenizer_only(lang_code)
+    if not nlp:
+        return None
+    try:
+        doc = nlp(text)
+        sentences = []
+        for stanza_sent in doc.sentences:
+            sent_tokens = [word.text for word in stanza_sent.words]
+            if sent_tokens:
+                sentences.append(sent_tokens)
+        return sentences
+    except Exception:
+        return None
+
+def tokenize_text_only(text, lang_code):
+    """
+    Splits text into sentences and tokens, bypassing tagging & parsing.
+    Returns: list of list of str (list of sentences, where each sentence is a list of tokens)
+    """
+    # 1. Try SpaCy
+    spacy_res = tokenize_text_with_spacy(text, lang_code)
+    if spacy_res is not None:
+        return spacy_res
+        
+    # 2. Try Stanza
+    stanza_res = tokenize_text_with_stanza(text, lang_code)
+    if stanza_res is not None:
+        return stanza_res
+        
+    # 3. Fallback
+    import re
+    sentences = split_sentences_custom(text)
+    results = []
+    for sent_text in sentences:
+        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', sent_text)
+        tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+        if tokens:
+            results.append(tokens)
+    return results
+

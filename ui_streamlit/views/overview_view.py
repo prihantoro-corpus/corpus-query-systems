@@ -1148,7 +1148,7 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
         conn.close()
 
 def auto_process_online_files(files):
-    from core.preprocessing.corpus_loader import load_monolingual_corpus_files
+    import core.preprocessing.corpus_loader as corpus_loader
     from core.config import STANZA_LANG_MAP
     import io
     
@@ -1176,7 +1176,7 @@ def auto_process_online_files(files):
         files_to_process.append(buf)
         
     with st.spinner("Processing & indexing online corpus content..."):
-        result = load_monolingual_corpus_files(
+        result = corpus_loader.load_monolingual_corpus_files(
             files_to_process,
             explicit_lang_code=lang_code,
             selected_format="Raw (Natural text)",
@@ -1195,7 +1195,7 @@ def auto_process_online_files(files):
             st.rerun()
 
 def render_upload_ui():
-    from core.preprocessing.corpus_loader import load_monolingual_corpus_files
+    import core.preprocessing.corpus_loader as corpus_loader
     from core.config import STANZA_LANG_MAP
     
     st.subheader("📤 Upload Corpus Files")
@@ -1246,10 +1246,157 @@ def render_upload_ui():
                 key="upload_format_select",
                 label_visibility="collapsed"
             )
+            
+        # Custom Tagger Section
+        st.markdown("---")
+        st.markdown("**Tagging Tool**")
+        tagger_tool = st.radio(
+            "Select Tagging Tool",
+            ["Default (Stanza / SpaCy)", "Custom Tagger"],
+            index=0,
+            horizontal=True,
+            key="upload_tagger_tool_select",
+            label_visibility="collapsed"
+        )
+        
+        custom_config = None
+        if tagger_tool == "Custom Tagger":
+            st.info("🔧 **Configure Custom Tagger**")
+            
+            custom_type = st.radio(
+                "Custom Tagger Type",
+                ["Data-Driven", "Rule-Based"],
+                index=0,
+                horizontal=True,
+                key="custom_tagger_type"
+            )
+            
+            if custom_type == "Rule-Based":
+                st.warning("⚠️ Rule-based custom tagging is currently under construction.")
+            else:
+                custom_mode = st.radio(
+                    "Model Reusability Mode",
+                    ["Train New Model", "Load Existing Model"],
+                    index=0,
+                    horizontal=True,
+                    key="custom_tagger_mode"
+                )
+                
+                if custom_mode == "Train New Model":
+                    # Data-driven tagger uploads
+                    corp_col, lex_col = st.columns(2)
+                    with corp_col:
+                        custom_corpus_file = st.file_uploader(
+                            "Upload Pre-annotated Corpus (Mandatory)",
+                            type=["txt", "csv"],
+                            key="custom_corpus_file_uploader",
+                            help="One token per line: token TAG [lemma]. Sentences separated by blank lines."
+                        )
+                    with lex_col:
+                        custom_lexicon_file = st.file_uploader(
+                            "Upload Pre-annotated Lexicon (Optional)",
+                            type=["txt"],
+                            key="custom_lexicon_file_uploader",
+                            help="Format: token TAG [lemma]. One entry per line."
+                        )
+                    
+                    # Parameters
+                    p_col1, p_col2 = st.columns(2)
+                    with p_col1:
+                        custom_guesser = st.text_input(
+                            "Guesser Tag",
+                            value="NN",
+                            key="custom_guesser_input",
+                            help="Default tag to assign to out-of-vocabulary words or low-confidence tokens."
+                        )
+                        
+                        custom_algorithm = st.selectbox(
+                            "Tagging Algorithm",
+                            ["Averaged Perceptron", "Naive Bayes", "Hidden Markov Model (TnT Style)"],
+                            index=0,
+                            key="custom_algorithm_select"
+                        )
+                    with p_col2:
+                        custom_window = st.slider(
+                            "Context Window Size",
+                            min_value=1,
+                            max_value=3,
+                            value=2,
+                            step=1,
+                            key="custom_window_slider",
+                            help="Number of tokens left/right to look at. Applies to Perceptron and Naive Bayes."
+                        )
+                        
+                        custom_threshold = st.slider(
+                            "Probabilistic Threshold",
+                            min_value=0.0,
+                            max_value=1.0,
+                            value=0.1,
+                            step=0.05,
+                            key="custom_threshold_slider",
+                            help="Confidence cutoff score. Below this, tagger falls back to the guesser tag."
+                        )
+                    
+                    if custom_corpus_file:
+                        try:
+                            corpus_content = custom_corpus_file.read().decode('utf-8', errors='ignore')
+                            lexicon_content = None
+                            if custom_lexicon_file:
+                                lexicon_content = custom_lexicon_file.read().decode('utf-8', errors='ignore')
+                                
+                            custom_config = {
+                                'corpus_content': corpus_content,
+                                'lexicon_content': lexicon_content,
+                                'guesser_tag': custom_guesser,
+                                'algorithm': custom_algorithm,
+                                'context_window': custom_window,
+                                'prob_threshold': custom_threshold
+                            }
+                        except Exception as e:
+                            st.error(f"Error reading custom tagger files: {e}")
+                            
+                    # Download button for last trained model
+                    last_model_bytes = get_state('last_trained_tagger_bytes')
+                    if last_model_bytes:
+                        st.write("") # spacer
+                        st.download_button(
+                            label="📥 Click here to download trained model",
+                            data=last_model_bytes,
+                            file_name="custom_tagger_model.pkl",
+                            mime="application/octet-stream",
+                            key="download_trained_model_btn"
+                        )
+                else:
+                    # Load Existing Model
+                    st.write("**Load Pre-trained Model (.pkl)**")
+                    uploaded_model_file = st.file_uploader(
+                        "Upload Trained Model File",
+                        type=["pkl"],
+                        key="uploaded_model_file_uploader",
+                        help="Upload a previously trained and downloaded .pkl model file."
+                    )
+                    
+                    if uploaded_model_file:
+                        try:
+                            import pickle
+                            # Read and deserialize
+                            pre_trained_tagger = pickle.loads(uploaded_model_file.read())
+                            custom_config = {
+                                'pre_trained_tagger': pre_trained_tagger
+                            }
+                            st.success("✅ Model loaded successfully! (Algorithm: " + getattr(pre_trained_tagger, 'algorithm', 'Unknown') + ")")
+                        except Exception as e:
+                            st.error(f"Error loading model file: {e}")
     
     if uploaded_files:
         st.write("") # spacing
         if st.button("Process Uploaded Files", type="primary", use_container_width=True):
+            if not is_db_upload and tagger_tool == "Custom Tagger" and not custom_config:
+                if custom_mode == "Train New Model":
+                    st.error("Please upload a pre-annotated corpus first to use the Custom Tagger.")
+                else:
+                    st.error("Please upload a pre-trained model file (.pkl) first.")
+                st.stop()
             if is_db_upload:
                 with st.spinner("Loading Database..."):
                     import uuid
@@ -1353,16 +1500,24 @@ def render_upload_ui():
                     status_text.caption(text)
 
                 with st.spinner("Processing Corpus..."):
-                    result = notify_timing("Corpus loaded")(load_monolingual_corpus_files)(
+                    result = notify_timing("Corpus loaded")(corpus_loader.load_monolingual_corpus_files)(
                         uploaded_files, 
                         explicit_lang_code=lang_code,
                         selected_format=fmt,
-                        progress_callback=update_progress
+                        progress_callback=update_progress,
+                        custom_tagger_config=custom_config
                     )
                     
                     if result.get('error'):
                         st.error(result['error'])
                     else:
+                        if result.get('trained_tagger'):
+                            try:
+                                import pickle
+                                model_bytes = pickle.dumps(result['trained_tagger'])
+                                set_state('last_trained_tagger_bytes', model_bytes)
+                            except Exception as e:
+                                print(f"Error pickling model: {e}")
                         if result.get('warning'):
                             st.warning(result['warning'])
                             
