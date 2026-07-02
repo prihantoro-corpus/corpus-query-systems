@@ -258,6 +258,17 @@ def tokenize_text_only(text, lang_code):
     Splits text into sentences and tokens, bypassing tagging & parsing.
     Returns: list of list of str (list of sentences, where each sentence is a list of tokens)
     """
+    if not lang_code or lang_code == "OTHER":
+        import re
+        sentences = split_sentences_custom(text)
+        results = []
+        for sent_text in sentences:
+            cleaned_text = re.sub(r'([^\w\s])', r' \1 ', sent_text)
+            tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+            if tokens:
+                results.append(tokens)
+        return results
+        
     # 1. Try SpaCy
     spacy_res = tokenize_text_with_spacy(text, lang_code)
     if spacy_res is not None:
