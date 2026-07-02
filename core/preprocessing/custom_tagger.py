@@ -1,6 +1,8 @@
 import math
 import collections
 import re
+import csv
+import io
 
 class CustomDataDrivenTagger:
     def __init__(self, guesser_tag="NN", algorithm="Averaged Perceptron", context_window=2, prob_threshold=0.1):
@@ -32,16 +34,60 @@ class CustomDataDrivenTagger:
         self.hmm_total_tokens = 0
         self.hmm_lambdas = [0.0, 0.0, 0.0]  # [trigram, bigram, unigram]
 
+    def parse_csv_or_tsv_content(self, content):
+        """
+        Parses content that could be CSV/comma-separated or whitespace/tab-separated.
+        Yields a list of string elements for each line.
+        """
+        lines = content.splitlines()
+        if not lines:
+            return
+            
+        # Detect if it's a CSV by looking at the presence of commas in non-empty lines
+        is_csv = False
+        comma_lines = 0
+        checked_lines = 0
+        for line in lines:
+            line_strip = line.strip()
+            if not line_strip or line_strip.startswith('#'):
+                continue
+            checked_lines += 1
+            if ',' in line_strip:
+                comma_lines += 1
+            if checked_lines >= 10:
+                break
+                
+        if checked_lines > 0 and (comma_lines / checked_lines) > 0.5:
+            is_csv = True
+            
+        if is_csv:
+            reader = csv.reader(io.StringIO(content))
+            for row in reader:
+                if not row:
+                    yield []
+                    continue
+                if row[0].strip().startswith('#'):
+                    continue
+                yield [part.strip() for part in row]
+        else:
+            for line in lines:
+                line_strip = line.strip()
+                if not line_strip:
+                    yield []
+                    continue
+                if line_strip.startswith('#'):
+                    continue
+                parts = line_strip.split()
+                yield parts
+
     def parse_lexicon(self, lexicon_file_content):
         """
         Parses the optional pre-annotated lexicon.
-        Expected format: word <tab/space> TAG [<tab/space> lemma]
+        Supports both comma and tab/space separated rows.
         """
-        for line in lexicon_file_content.splitlines():
-            line = line.strip()
-            if not line or line.startswith('#'):
+        for parts in self.parse_csv_or_tsv_content(lexicon_file_content):
+            if not parts:
                 continue
-            parts = line.split()
             if len(parts) >= 2:
                 word = parts[0]
                 tag = parts[1]
@@ -49,30 +95,27 @@ class CustomDataDrivenTagger:
                 
                 if word not in self.lexicon:
                     self.lexicon[word] = []
-                self.lexicon[word].append((tag, lemma))
+                if (tag, lemma) not in self.lexicon[word]:
+                    self.lexicon[word].append((tag, lemma))
                 self.tag_lemmas[(word, tag)] = lemma
                 self.known_words.add(word)
 
     def parse_corpus(self, corpus_file_content):
         """
         Parses the mandatory pre-annotated corpus.
-        Format: one token per line: word <tab/space> TAG [<tab/space> lemma]
+        Format: one token per line: word <tab/space/comma> TAG [<tab/space/comma> lemma]
         Sentences are separated by empty lines.
         """
         sentences = []
         current_sentence = []
         
-        for line in corpus_file_content.splitlines():
-            line = line.strip()
-            if not line:
+        for parts in self.parse_csv_or_tsv_content(corpus_file_content):
+            if not parts:
                 if current_sentence:
                     sentences.append(current_sentence)
                     current_sentence = []
                 continue
-            if line.startswith('#'):
-                continue
                 
-            parts = line.split()
             if len(parts) >= 2:
                 word = parts[0]
                 tag = parts[1]

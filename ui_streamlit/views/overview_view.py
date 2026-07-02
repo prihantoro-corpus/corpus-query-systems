@@ -1295,7 +1295,7 @@ def render_upload_ui():
                     with lex_col:
                         custom_lexicon_file = st.file_uploader(
                             "Upload Pre-annotated Lexicon (Optional)",
-                            type=["txt"],
+                            type=["txt", "csv"],
                             key="custom_lexicon_file_uploader",
                             help="Format: token TAG [lemma]. One entry per line."
                         )
@@ -1387,6 +1387,18 @@ def render_upload_ui():
                             st.success("✅ Model loaded successfully! (Algorithm: " + getattr(pre_trained_tagger, 'algorithm', 'Unknown') + ")")
                         except Exception as e:
                             st.error(f"Error loading model file: {e}")
+                            
+                # Download button for annotated raw corpus (shown in both modes if available)
+                last_annotated_txt = get_state('last_annotated_corpus_text')
+                if last_annotated_txt:
+                    st.write("") # spacer
+                    st.download_button(
+                        label="📥 Download Annotated Corpus (.txt)",
+                        data=last_annotated_txt,
+                        file_name="annotated_corpus.txt",
+                        mime="text/plain",
+                        key="download_annotated_corpus_btn"
+                    )
     
     if uploaded_files:
         st.write("") # spacing
@@ -1516,8 +1528,13 @@ def render_upload_ui():
                                 import pickle
                                 model_bytes = pickle.dumps(result['trained_tagger'])
                                 set_state('last_trained_tagger_bytes', model_bytes)
+                                
+                                # Extract and save annotated corpus text
+                                tagger_inst = result['trained_tagger']
+                                if hasattr(tagger_inst, 'annotated_corpus_text') and tagger_inst.annotated_corpus_text:
+                                    set_state('last_annotated_corpus_text', tagger_inst.annotated_corpus_text)
                             except Exception as e:
-                                print(f"Error pickling model: {e}")
+                                print(f"Error pickling model or saving annotated text: {e}")
                         if result.get('warning'):
                             st.warning(result['warning'])
                             

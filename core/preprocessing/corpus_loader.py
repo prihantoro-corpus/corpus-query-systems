@@ -62,23 +62,40 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 )
             except Exception as e:
                 return {'error': f"Failed to train custom tagger: {e}"}
+        # Initialize an empty buffer to collect annotated vertical text output
+        custom_tagger.annotated_corpus_text = ""
 
     def make_custom_tagger_wrapper(tagger, s_lang):
         def custom_tagger_wrapper(text, lang_code=None):
             sentences = tagging.tokenize_text_only(text, s_lang)
             tagged_results = []
             sent_id = 0
+            
+            # Build vertical representation
+            annotated_lines = []
+            
             for sent_tokens in sentences:
                 sent_id += 1
                 tagged_tokens = tagger.tag(sent_tokens)
                 for t_idx, token_info in enumerate(tagged_tokens):
+                    word = sent_tokens[t_idx]
+                    pos = token_info['pos']
+                    lemma = token_info['lemma']
                     tagged_results.append({
-                        'token': sent_tokens[t_idx],
-                        'pos': token_info['pos'],
-                        'lemma': token_info['lemma'],
+                        'token': word,
+                        'pos': pos,
+                        'lemma': lemma,
                         'sent_id': sent_id,
                         'ent_type': ""
                     })
+                    # Format: word <tab> tag <tab> lemma
+                    annotated_lines.append(f"{word}\t{pos}\t{lemma}")
+                
+                # Separate sentences by an empty line
+                annotated_lines.append("")
+                
+            # Append vertical output of this text block/file to the tagger buffer
+            tagger.annotated_corpus_text += "\n".join(annotated_lines) + "\n"
             return tagged_results, None
         return custom_tagger_wrapper
     
