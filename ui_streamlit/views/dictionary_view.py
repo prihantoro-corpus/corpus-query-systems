@@ -350,7 +350,13 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
 
     # Harmonized Header Layout: Term /IPA/ (CEFR) [Warning]
     s_html = f'<div style="background-color: #1a1a1a; padding: 20px; border-radius: 10px; border: 1px solid #444; color: #eee; font-family: sans-serif; font-size: {base_font_size}; line-height: 1.5; margin-bottom: 20px;">'
-    s_html += f'<h3 style="color: #FFEA00; margin: 0; display: inline-block;">{current_term}</h3>'
+    
+    if target_lang == 'en':
+        youglish_link = f"https://youglish.com/pronounce/{current_term.lower()}/english"
+        s_html += f'<h3 style="margin: 0; display: inline-block;"><a href="{youglish_link}" target="_blank" style="color: #FFEA00; text-decoration: none; border-bottom: 1px dashed #FFEA00;" title="Listen on YouGlish">{current_term}</a></h3>'
+    else:
+        s_html += f'<h3 style="color: #FFEA00; margin: 0; display: inline-block;">{current_term}</h3>'
+    
     if is_lemma_fallback:
         s_html += f' <span style="display: inline-block; background-color: #1e3a8a; color: #93c5fd; font-size: 0.6em; padding: 2px 6px; border-radius: 4px; margin-left: 10px; border: 1px solid #3b82f6; vertical-align: middle; font-weight: bold;">LEMMA MATCH</span>'
     if ipa_text:
