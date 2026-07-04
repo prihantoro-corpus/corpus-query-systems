@@ -63,7 +63,14 @@ def render_word_profiler_view():
                 if not os.path.exists(base_wl_dir) and os.path.exists(os.path.join("..", "wordlist")):
                     base_wl_dir = os.path.join("..", "wordlist")
                 
-                wl_dir = os.path.join(base_wl_dir, corpus_lang.lower())
+                lang_map = {
+                    "en": "english", "id": "indonesian", "ar": "arabic", 
+                    "jp": "japanese", "ch": "chinese", "ko": "korean", 
+                    "lo": "limola", "hi": "hindi", "jv": "javanese"
+                }
+                mapped_lang = lang_map.get(corpus_lang.lower(), corpus_lang.lower())
+                
+                wl_dir = os.path.join(base_wl_dir, mapped_lang)
                 available_lists = []
                 if os.path.exists(wl_dir):
                     for root, dirs, files in os.walk(wl_dir):
@@ -88,7 +95,7 @@ def render_word_profiler_view():
                         with open(full_path, 'rb') as f:
                             selected_wordlists[chosen] = load_wordlist_from_file_object(f, chosen)
                 else:
-                    st.info(f"No wordlists found in the `wordlist/{corpus_lang.lower()}/` directory.")
+                    st.info(f"No wordlists found in the `wordlist/{mapped_lang}/` directory.")
             else:
                 uploaded_files = st.file_uploader(
                     "Upload Wordlist(s) (.txt, .csv, .xlsx, .xls)", 

@@ -93,7 +93,10 @@ def interpret_results_llm(target_word, analysis_type, data_description, data,
     Data:
     {data_text}
     
-    Output: Concise, scholarly markdown summary of semantic patterns and usage.
+    Instructions:
+    1. Base your analysis STRICTLY on the provided data.
+    2. Do NOT treat this as a hypothetical example or add disclaimers about fictional data. The data is real.
+    3. Output a concise, scholarly markdown summary of semantic patterns and usage.
     """
     
     try:
@@ -185,7 +188,10 @@ def interpret_results_gemini(target_word, analysis_type, data_description, data,
     Data:
     {data_text}
     
-    Output: Concise, scholarly markdown summary of semantic patterns and usage.
+    Instructions:
+    1. Base your analysis STRICTLY on the provided data.
+    2. Do NOT treat this as a hypothetical example or add disclaimers about fictional data. The data is real.
+    3. Output a concise, scholarly markdown summary of semantic patterns and usage.
     """
 
     payload = {
@@ -314,6 +320,7 @@ def app_guide_chat(user_query, chat_history=[], api_key=None, gemini_model=None)
     """
     Specialized chat for app usage assistance.
     """
+    
     system_context = """
     You are the CORTEX Assistant. CORTEX is a Corpus Query System.
     Core Modules:
@@ -330,8 +337,26 @@ def app_guide_chat(user_query, chat_history=[], api_key=None, gemini_model=None)
     - Supports XML files and plain text.
     - Uses DuckDB for storage.
     
-    Instructions: Help the user use the app. Be concise.
+    Features & How-Tos:
+    - Restricting searches to sub-corpora: Enter the desired module (e.g., Concordance, Collocation), make sure you are NOT in simple mode, find the "Restricted Searches" menu under query settings, select the relevant sub-corpora, and perform the search as usual. (Do NOT suggest using the Dictionary module for this).
     """
+    
+    # Try to load extended knowledge base if available
+    import os
+    kb_path = os.path.join("doc", "cortex_knowledge_base.txt")
+    if os.path.exists(kb_path):
+        try:
+            with open(kb_path, "r", encoding="utf-8") as f:
+                kb_text = f.read()
+                # Limit to 12000 chars to avoid overwhelming local models
+                if len(kb_text) > 12000:
+                    kb_text = kb_text[:12000] + "...(truncated)"
+                system_context += "\n\n--- EXTENDED CORTEX KNOWLEDGE BASE ---\n" + kb_text
+        except Exception:
+            pass
+            
+    system_context += "\n\nInstructions: Help the user use the app based on the knowledge above. Be concise and accurate."
+    
     settings = _resolve_ai_settings(gemini_api_key=api_key, gemini_model=gemini_model)
     return chat_with_llm(user_query, system_context, chat_history, ai_provider="Gemini" if settings["gemini_api_key"] else "Ollama", gemini_api_key=settings["gemini_api_key"], gemini_model=settings["gemini_model"])
 
