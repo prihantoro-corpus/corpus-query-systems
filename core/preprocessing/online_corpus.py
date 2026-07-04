@@ -151,6 +151,7 @@ class OnlineCorpusBuilder:
                         break
         return found_data
 
+
 def build_online_corpus(mode_type, params, progress_callback=None):
     """
     mode_type: 'youtube', 'links', 'keyword'
@@ -201,7 +202,208 @@ def build_online_corpus(mode_type, params, progress_callback=None):
         for i, (link, content) in enumerate(found):
             # Content already added in keyword_search for limit checking
             builder.downloaded_files.append({"filename": f"kw_{i}.txt", "content": f"<text url=\"{link}\" keywords=\"{','.join(keywords)}\">\n{content}\n</text>"})
+
+    elif mode_type == "mastodon":
+        urls = params.get('urls', [])
+        mode = params.get('mode', 'both')
+        for i, url in enumerate(urls[:50]):
+            if builder.is_limit_reached: break
+            if progress_callback: progress_callback(i/len(urls), f"Fetching Mastodon URL {i+1}/{len(urls)}...")
+            domain_match = re.search(r'https?://([^/]+)', url)
+            if not domain_match: continue
+            domain = domain_match.group(1)
             
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            
+            # Check if it is a specific status ID or a profile
+            id_match = re.search(r'/(?:statuses|@[\w.-]+)/(\d+)', url)
+            if not id_match:
+                id_match = re.search(r'/(\d+)/?$', url)
+                
+            status_ids = []
+            if id_match:
+                status_ids.append(id_match.group(1))
+            else:
+                # Check for profile URL, e.g. /@username
+                profile_match = re.search(r'/@([\w.-]+)', url)
+                if not profile_match: continue
+                username = profile_match.group(1)
+                
+                try:
+                    # 1. Lookup account ID
+                    lookup_url = f"https://{domain}/api/v1/accounts/lookup?acct={username}"
+                    lr = requests.get(lookup_url, headers=headers, timeout=10)
+                    if lr.status_code == 200:
+                        acct_id = lr.json().get('id')
+                        if acct_id:
+                            # 2. Get latest 10 statuses
+                            statuses_url = f"https://{domain}/api/v1/accounts/{acct_id}/statuses?limit=10"
+                            sr = requests.get(statuses_url, headers=headers, timeout=10)
+                            if sr.status_code == 200:
+                                status_ids = [s.get('id') for s in sr.json() if s.get('id')]
+                except Exception:
+                    continue
+                    
+            for status_id in status_ids:
+                if builder.is_limit_reached: break
+                try:
+                    r = requests.get(f"https://{domain}/api/v1/statuses/{status_id}", headers=headers, timeout=15)
+                    if r.status_code != 200: continue
+                    status_data = r.json()
+                    rc = requests.get(f"https://{domain}/api/v1/statuses/{status_id}/context", headers=headers, timeout=15)
+                    context_data = rc.json() if rc.status_code == 200 else {}
+                except Exception:
+                    continue
+                    
+                ancestors = context_data.get('ancestors', [])
+                descendants = context_data.get('descendants', [])
+                import html
+                
+                def clean_masto_html(html_content):
+                    if not html_content: return ""
+                    soup = BeautifulSoup(html_content, 'html.parser')
+                    for br in soup.find_all("br"): br.replace_with("\n")
+                    for p in soup.find_all("p"): p.append("\n")
+                    return soup.get_text().strip()
+                    
+                xml_parts = []
+                xml_parts.append(f'<text source="mastodon" thread_url="{html.escape(url)}" status_id="{status_id}">')
+                
+                def add_masto_status(status_obj, post_type):
+                    s_id = status_obj.get('id')
+                    parent_id = status_obj.get('in_reply_to_id') or "none"
+                    author = status_obj.get('account', {}).get('acct', 'unknown')
+                    content_html = status_obj.get('content', '')
+                    text = clean_masto_html(content_html)
+                    created_at = status_obj.get('created_at', '')[:10]
+                    likes = status_obj.get('favourites_count', 0)
+                    boosts = status_obj.get('reblogs_count', 0)
+                    xml_parts.append(f'  <u author="{html.escape(author)}" date="{created_at}" post_type="{post_type}" likes="{likes}" boosts="{boosts}" id="{s_id}" parent_id="{parent_id}">{html.escape(text)}</u>')
+                    
+                if mode in ('post', 'both'):
+                    for ancestor in ancestors:
+                        add_masto_status(ancestor, "ancestor")
+                    add_masto_status(status_data, "post")
+                if mode in ('replies', 'both'):
+                    for descendant in descendants:
+                        add_masto_status(descendant, "reply")
+                xml_parts.append('</text>')
+                xml_content = "\n".join(xml_parts)
+                builder.add_content(f"mastodon_{status_id}.xml", xml_content)
+ 
+    elif mode_type == "bluesky":
+        urls = params.get('urls', [])
+        mode = params.get('mode', 'both')
+        for i, url in enumerate(urls[:50]):
+            if builder.is_limit_reached: break
+            if progress_callback: progress_callback(i/len(urls), f"Fetching BlueSky URL {i+1}/{len(urls)}...")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            
+            # Check if it is a specific post or a profile
+            match_post = re.search(r'profile/([^/]+)/post/([^/]+)', url)
+            posts_to_fetch = []
+            
+            if match_post:
+                handle = match_post.group(1)
+                rkey = match_post.group(2)
+                posts_to_fetch.append((handle, rkey))
+            else:
+                match_profile = re.search(r'profile/([^/]+)', url)
+                if not match_profile: continue
+                handle = match_profile.group(1)
+                
+                try:
+                    # 1. Resolve handle to DID
+                    resolve_url = f"https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle={handle}"
+                    rr = requests.get(resolve_url, headers=headers, timeout=10)
+                    if rr.status_code == 200:
+                        did = rr.json().get('did')
+                        if did:
+                            # 2. Get latest 10 posts
+                            feed_url = f"https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor={did}&limit=10"
+                            fr = requests.get(feed_url, headers=headers, timeout=10)
+                            if fr.status_code == 200:
+                                for item in fr.json().get('feed', []):
+                                    post_obj = item.get('post', {})
+                                    uri = post_obj.get('uri', '')
+                                    uri_match = re.search(r'app\.bsky\.feed\.post/([^/]+)', uri)
+                                    if uri_match:
+                                        posts_to_fetch.append((handle, uri_match.group(1)))
+                except Exception:
+                    continue
+                    
+            for handle, rkey in posts_to_fetch:
+                if builder.is_limit_reached: break
+                at_uri = f"at://{handle}/app.bsky.feed.post/{rkey}"
+                api_url = f"https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri={at_uri}"
+                try:
+                    r = requests.get(api_url, headers=headers, timeout=15)
+                    if r.status_code != 200: continue
+                    thread_data = r.json()
+                except Exception:
+                    continue
+                    
+                thread_node = thread_data.get('thread', {})
+                def get_bsky_ancestors(node):
+                    ancestors = []
+                    current = node.get('parent')
+                    while current:
+                        post = current.get('post')
+                        if post: ancestors.append(post)
+                        current = current.get('parent')
+                    ancestors.reverse()
+                    return ancestors
+                    
+                def get_bsky_descendants(node):
+                    descendants = []
+                    replies = node.get('replies', [])
+                    for reply in replies:
+                        post = reply.get('post')
+                        if post:
+                            descendants.append(post)
+                            descendants.extend(get_bsky_descendants(reply))
+                    return descendants
+                    
+                ancestors = get_bsky_ancestors(thread_node)
+                main_post = thread_node.get('post')
+                descendants = get_bsky_descendants(thread_node)
+                
+                import html
+                xml_parts = []
+                xml_parts.append(f'<text source="bluesky" thread_url="{html.escape(url)}" rkey="{rkey}">')
+                
+                def add_bsky_post(post_obj, post_type):
+                    uri = post_obj.get('uri', '')
+                    record = post_obj.get('record', {})
+                    reply_info = record.get('reply', {})
+                    parent_uri = reply_info.get('parent', {}).get('uri') or "none"
+                    author = post_obj.get('author', {}).get('handle', 'unknown')
+                    text = record.get('text', '')
+                    created_at = record.get('createdAt', '')[:10]
+                    likes = post_obj.get('likeCount', 0)
+                    reposts = post_obj.get('repostCount', 0)
+                    
+                    post_id = uri.split('/')[-1] if uri else "unknown"
+                    parent_id = parent_uri.split('/')[-1] if parent_uri != "none" else "none"
+                    xml_parts.append(f'  <u author="{html.escape(author)}" date="{created_at}" post_type="{post_type}" likes="{likes}" reposts="{reposts}" id="{post_id}" parent_id="{parent_id}">{html.escape(text)}</u>')
+                    
+                if mode in ('post', 'both'):
+                    for ancestor in ancestors:
+                        add_bsky_post(ancestor, "ancestor")
+                    if main_post:
+                        add_bsky_post(main_post, "post")
+                if mode in ('replies', 'both'):
+                    for descendant in descendants:
+                        add_bsky_post(descendant, "reply")
+                xml_parts.append('</text>')
+                xml_content = "\n".join(xml_parts)
+                builder.add_content(f"bluesky_{rkey}.xml", xml_content)
+
     if builder.is_limit_reached:
         warning = "Experimental limit reached (max 100,000 words). Corpus built with partial content."
         

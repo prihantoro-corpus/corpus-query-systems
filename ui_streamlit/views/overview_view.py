@@ -1663,7 +1663,67 @@ def render_online_builder_ui():
                         auto_process_online_files(files)
                     else:
                         st.error(warn or "Failed to download. Ensure the video has a transcript and comments.")
+
+    elif mode == "Mastodon":
+        st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
+        st.caption("Paste Mastodon status or profile timeline URLs (one per line).")
+        urls_text = st.text_area("Mastodon URLs", height=200, placeholder="https://mastodon.social/@Mastodon/112702758163539123\nhttps://mastodon.social/@trendytoots", key="mastodon_urls_textarea")
+        opt = st.radio("Content to Download", ["Post only", "Replies only", "Both Post and Replies"], index=2, key="mastodon_download_opt")
+        
+        mode_map = {"Post only": "post", "Replies only": "replies", "Both Post and Replies": "both"}
+        
+        if st.button("Download Mastodon Data", type="primary"):
+            urls = [u.strip() for u in urls_text.split('\n') if u.strip()]
+            if not urls:
+                st.error("No links provided")
+            else:
+                from core.preprocessing.online_corpus import build_online_corpus
+                progress_bar = st.progress(0)
+                status = st.empty()
+                def up(p, m):
+                    progress_bar.progress(min(p, 1.0))
+                    status.caption(m)
+                
+                with st.spinner("Downloading..."):
+                    files, warn = build_online_corpus("mastodon", {"urls": urls, "mode": mode_map[opt]}, progress_callback=up)
+                    if files:
+                        set_state('downloaded_online_files', files)
+                        st.success(f"✅ Downloaded {len(files)} Mastodon components!")
+                        if warn: st.warning(warn)
+                        auto_process_online_files(files)
+                    else:
+                        st.error(warn or "Failed to download. Ensure the URLs are correct and public.")
  
+    elif mode == "BlueSky":
+        st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
+        st.caption("Paste BlueSky post or profile timeline URLs (one per line).")
+        urls_text = st.text_area("BlueSky URLs", height=200, placeholder="https://bsky.app/profile/bsky.app/post/3mpok7nkjtc2o\nhttps://bsky.app/profile/academic.oup.com", key="bluesky_urls_textarea")
+        opt = st.radio("Content to Download", ["Post only", "Replies only", "Both Post and Replies"], index=2, key="bluesky_download_opt")
+        
+        mode_map = {"Post only": "post", "Replies only": "replies", "Both Post and Replies": "both"}
+        
+        if st.button("Download BlueSky Data", type="primary"):
+            urls = [u.strip() for u in urls_text.split('\n') if u.strip()]
+            if not urls:
+                st.error("No links provided")
+            else:
+                from core.preprocessing.online_corpus import build_online_corpus
+                progress_bar = st.progress(0)
+                status = st.empty()
+                def up(p, m):
+                    progress_bar.progress(min(p, 1.0))
+                    status.caption(m)
+                
+                with st.spinner("Downloading..."):
+                    files, warn = build_online_corpus("bluesky", {"urls": urls, "mode": mode_map[opt]}, progress_callback=up)
+                    if files:
+                        set_state('downloaded_online_files', files)
+                        st.success(f"✅ Downloaded {len(files)} BlueSky components!")
+                        if warn: st.warning(warn)
+                        auto_process_online_files(files)
+                    else:
+                        st.error(warn or "Failed to download. Ensure the URLs are correct and public.")
+
     elif mode == "Link Collection":
         st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
         st.caption("Paste one URL per line.")
