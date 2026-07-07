@@ -41,17 +41,8 @@ def get_spacy_pipeline(lang_code):
         _SPACY_PIPELINES[lang_code] = nlp
         return nlp
     except (OSError, ImportError):
-        try:
-            print(f"SpaCy model '{model_name}' not found. Downloading dynamically...")
-            import spacy.cli
-            spacy.cli.download(model_name)
-            import spacy
-            nlp = spacy.load(model_name)
-            _SPACY_PIPELINES[lang_code] = nlp
-            return nlp
-        except Exception as e:
-            print(f"Failed to download/load SpaCy model '{model_name}': {e}")
-            return None
+        print(f"SpaCy model '{model_name}' not found locally. Skipping dynamic download on cloud.")
+        return None
 
 def tag_text_with_spacy(text, lang_code):
     """
@@ -120,18 +111,8 @@ def get_stanza_pipeline(lang_code):
         print(f"Local Stanza load failed for '{lang_code}' ({local_err}). Attempting download...")
         
     # 2. Fallback to download if local load fails
-    try:
-        stanza.download(lang_code, verbose=True)
-        try:
-            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,mwt,pos,lemma')
-        except Exception:
-            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize,pos,lemma')
-        _STANZA_PIPELINES[lang_code] = nlp
-        return nlp
-    except Exception as e:
-        error_msg = f"Error initializing Stanza for {lang_code}: {e}"
-        print(error_msg)
-        raise RuntimeError(error_msg)
+    print(f"Skipping dynamic Stanza download on cloud for '{lang_code}'.")
+    return None
 
 def tag_text_with_stanza(text, lang_code):
     """
@@ -213,11 +194,8 @@ def get_stanza_tokenizer_only(lang_code):
     try:
         nlp = stanza.Pipeline(lang=lang_code, processors='tokenize', download_method=None)
     except Exception:
-        try:
-            stanza.download(lang_code, verbose=False)
-            nlp = stanza.Pipeline(lang=lang_code, processors='tokenize')
-        except Exception:
-            return None
+        print(f"Skipping dynamic Stanza tokenizer download on cloud for '{lang_code}'.")
+        return None
     _STANZA_PIPELINES[key] = nlp
     return nlp
 
