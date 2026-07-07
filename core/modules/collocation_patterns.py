@@ -118,6 +118,7 @@ def split_patterns_by_union(pattern_str: str) -> List[str]:
 def parse_collocate_constraints(inner: str) -> List[Dict]:
     """
     Parse constraints inside collocate brackets like <_VB>, <are>, <[be]>, <are|is|am>, <_NN|_PP|_NNP>.
+    Also supports combined constraints like <left_V*>, <in*_N*>, <[be]_V*>.
     """
     parts = inner.split('|')
     constraints = []
@@ -125,12 +126,27 @@ def parse_collocate_constraints(inner: str) -> List[Dict]:
         p = p.strip()
         if not p:
             continue
+            
+        constraint = {'type': 'complex'}
+        
         if p.startswith('_'):
-            constraints.append({'type': 'pos', 'value': p[1:]})
-        elif p.startswith('[') and p.endswith(']'):
-            constraints.append({'type': 'lemma', 'value': p[1:-1].lower()})
+            constraint['pos'] = p[1:]
+        elif '_' in p:
+            word_part, pos_part = p.rsplit('_', 1)
+            if pos_part:
+                constraint['pos'] = pos_part
+            if word_part:
+                if word_part.startswith('[') and word_part.endswith(']'):
+                    constraint['lemma'] = word_part[1:-1].lower()
+                else:
+                    constraint['token'] = word_part.lower()
         else:
-            constraints.append({'type': 'token', 'value': p.lower()})
+            if p.startswith('[') and p.endswith(']'):
+                constraint['lemma'] = p[1:-1].lower()
+            else:
+                constraint['token'] = p.lower()
+                
+        constraints.append(constraint)
     return constraints
 
 
@@ -257,32 +273,32 @@ def _matches_collocate_constraints(t_dict: Dict, constraints: List[Dict]) -> boo
     """
     if not constraints:
         return True
+        
+    def _match_str(actual, expected):
+        if '*' in expected or '?' in expected:
+            return fnmatch.fnmatch(actual, expected)
+        return actual == expected
+
     for c in constraints:
-        if c['type'] == 'pos':
-            # Support wildcard in POS tag constraint
-            if '*' in c['value'] or '?' in c['value']:
-                if fnmatch.fnmatch(t_dict.get('pos', ''), c['value']):
+        if c.get('type') == 'complex':
+            matched = True
+            if c.get('pos') and not _match_str(t_dict.get('pos', ''), c['pos']):
+                matched = False
+            if matched and c.get('lemma') and not _match_str((t_dict.get('lemma') or '').lower(), c['lemma']):
+                matched = False
+            if matched and c.get('token') and not _match_str((t_dict.get('token') or '').lower(), c['token']):
+                matched = False
+            if matched:
+                return True
+        else:
+            if c['type'] == 'pos':
+                if _match_str(t_dict.get('pos', ''), c['value']):
                     return True
-            else:
-                if t_dict.get('pos', '') == c['value']:
+            elif c['type'] == 'lemma':
+                if _match_str((t_dict.get('lemma') or '').lower(), c['value']):
                     return True
-        elif c['type'] == 'lemma':
-            # Support wildcard in lemma constraint
-            lemma_val = (t_dict.get('lemma') or '').lower()
-            if '*' in c['value'] or '?' in c['value']:
-                if fnmatch.fnmatch(lemma_val, c['value']):
-                    return True
-            else:
-                if lemma_val == c['value']:
-                    return True
-        elif c['type'] == 'token':
-            # Support wildcard in token constraint
-            token_val = (t_dict.get('token') or '').lower()
-            if '*' in c['value'] or '?' in c['value']:
-                if fnmatch.fnmatch(token_val, c['value']):
-                    return True
-            else:
-                if token_val == c['value']:
+            elif c['type'] == 'token':
+                if _match_str((t_dict.get('token') or '').lower(), c['value']):
                     return True
     return False
 
