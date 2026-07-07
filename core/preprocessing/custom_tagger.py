@@ -119,10 +119,19 @@ class CustomDataDrivenTagger:
             if len(parts) >= 2:
                 word = parts[0]
                 tag = parts[1]
-                lemma = parts[2] if len(parts) >= 3 else word
+                
+                # If the corpus has a lemma, use it and update the dictionary
+                if len(parts) >= 3:
+                    lemma = parts[2]
+                    self.tag_lemmas[(word, tag)] = lemma
+                else:
+                    # If corpus has no lemma, try to use the one from the lexicon, or default to word
+                    lemma = self.tag_lemmas.get((word, tag), word)
+                    if (word, tag) not in self.tag_lemmas:
+                        self.tag_lemmas[(word, tag)] = lemma
+                        
                 current_sentence.append((word, tag, lemma))
                 self.known_words.add(word)
-                self.tag_lemmas[(word, tag)] = lemma
                 
         if current_sentence:
             sentences.append(current_sentence)
