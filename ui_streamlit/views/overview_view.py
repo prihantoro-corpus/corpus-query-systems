@@ -494,16 +494,42 @@ def render_full_overview(name, path, stats, structure, error):
     source_type = get_state('source_type')
     if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
         st.write("") # spacing
-        with open(path, "rb") as db_file:
-            st.download_button(
-                label="📥 Download Pre-compiled Database (.db)",
-                data=db_file,
-                file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
-                mime="application/octet-stream",
-                help="Download this corpus as a pre-compiled DuckDB database.",
-                use_container_width=True,
-                key="dl_btn_full"
-            )
+        
+        last_annotated_txt = get_state('last_annotated_corpus_text')
+        if last_annotated_txt:
+            col_db, col_txt = st.columns(2)
+            with col_db:
+                with open(path, "rb") as db_file:
+                    st.download_button(
+                        label="📥 Download Pre-compiled Database (.db)",
+                        data=db_file,
+                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
+                        mime="application/octet-stream",
+                        help="Download this corpus as a pre-compiled DuckDB database.",
+                        use_container_width=True,
+                        key="dl_btn_full"
+                    )
+            with col_txt:
+                st.download_button(
+                    label="📥 Download Annotated Corpus (.txt)",
+                    data=last_annotated_txt,
+                    file_name="annotated_corpus.txt",
+                    mime="text/plain",
+                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma).",
+                    use_container_width=True,
+                    key="dl_txt_btn_full"
+                )
+        else:
+            with open(path, "rb") as db_file:
+                st.download_button(
+                    label="📥 Download Pre-compiled Database (.db)",
+                    data=db_file,
+                    file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
+                    mime="application/octet-stream",
+                    help="Download this corpus as a pre-compiled DuckDB database.",
+                    use_container_width=True,
+                    key="dl_btn_full"
+                )
 
     # Language Confirmation removed
     # _render_language_confirmation(path, "full")
