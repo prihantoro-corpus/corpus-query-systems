@@ -243,31 +243,8 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
         st.write("") # spacing
         
-        last_annotated_txt = get_state('last_annotated_corpus_text')
-        if last_annotated_txt:
-            col_db, col_txt = st.columns(2)
-            with col_db:
-                with open(path, "rb") as db_file:
-                    st.download_button(
-                        label="📥 Download Database (.db)",
-                        data=db_file,
-                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
-                        mime="application/octet-stream",
-                        help="Download this corpus as a pre-compiled DuckDB database.",
-                        use_container_width=True,
-                        key=f"dl_btn_{key_suffix}"
-                    )
-            with col_txt:
-                st.download_button(
-                    label="📥 Download Annotated Corpus (.txt)",
-                    data=last_annotated_txt,
-                    file_name="annotated_corpus.txt",
-                    mime="text/plain",
-                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma).",
-                    use_container_width=True,
-                    key=f"dl_txt_btn_{key_suffix}"
-                )
-        else:
+        col_db, col_txt = st.columns(2)
+        with col_db:
             with open(path, "rb") as db_file:
                 st.download_button(
                     label="📥 Download Database (.db)",
@@ -278,6 +255,27 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
                     use_container_width=True,
                     key=f"dl_btn_{key_suffix}"
                 )
+        with col_txt:
+            xml_cache_key = f"xml_export_{key_suffix}"
+            if get_state(xml_cache_key):
+                st.download_button(
+                    label="📥 Download Annotated Corpus (.txt)",
+                    data=get_state(xml_cache_key),
+                    file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
+                    mime="text/plain",
+                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma) including XML tags for NER, Sentiment, etc.",
+                    use_container_width=True,
+                    key=f"dl_txt_btn_{key_suffix}"
+                )
+            else:
+                if st.button("⚙️ Generate Annotated Corpus (.txt)", key=f"gen_xml_btn_{key_suffix}", use_container_width=True, help="Compiles the current database (with all new annotations like NER and Sentiment) into a downloadable XML-tagged text file."):
+                    with st.spinner("Compiling database into XML format (this may take a moment for large corpora)..."):
+                        import sys
+                        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+                        from core.preprocessing.export_service import export_db_to_vertical_xml
+                        xml_data = export_db_to_vertical_xml(path)
+                        set_state(xml_cache_key, xml_data)
+                        st.rerun()
             
     # --- Corpus Narration ---
     _render_corpus_narration(name, path, display_stats, structure, condensed=True)
@@ -495,31 +493,8 @@ def render_full_overview(name, path, stats, structure, error):
     if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
         st.write("") # spacing
         
-        last_annotated_txt = get_state('last_annotated_corpus_text')
-        if last_annotated_txt:
-            col_db, col_txt = st.columns(2)
-            with col_db:
-                with open(path, "rb") as db_file:
-                    st.download_button(
-                        label="📥 Download Pre-compiled Database (.db)",
-                        data=db_file,
-                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
-                        mime="application/octet-stream",
-                        help="Download this corpus as a pre-compiled DuckDB database.",
-                        use_container_width=True,
-                        key="dl_btn_full"
-                    )
-            with col_txt:
-                st.download_button(
-                    label="📥 Download Annotated Corpus (.txt)",
-                    data=last_annotated_txt,
-                    file_name="annotated_corpus.txt",
-                    mime="text/plain",
-                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma).",
-                    use_container_width=True,
-                    key="dl_txt_btn_full"
-                )
-        else:
+        col_db, col_txt = st.columns(2)
+        with col_db:
             with open(path, "rb") as db_file:
                 st.download_button(
                     label="📥 Download Pre-compiled Database (.db)",
@@ -530,6 +505,27 @@ def render_full_overview(name, path, stats, structure, error):
                     use_container_width=True,
                     key="dl_btn_full"
                 )
+        with col_txt:
+            xml_cache_key = "xml_export_full"
+            if get_state(xml_cache_key):
+                st.download_button(
+                    label="📥 Download Annotated Corpus (.txt)",
+                    data=get_state(xml_cache_key),
+                    file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
+                    mime="text/plain",
+                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma) including XML tags for NER, Sentiment, etc.",
+                    use_container_width=True,
+                    key="dl_txt_btn_full"
+                )
+            else:
+                if st.button("⚙️ Generate Annotated Corpus (.txt)", key="gen_xml_btn_full", use_container_width=True, help="Compiles the current database (with all new annotations like NER and Sentiment) into a downloadable XML-tagged text file."):
+                    with st.spinner("Compiling database into XML format (this may take a moment for large corpora)..."):
+                        import sys
+                        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+                        from core.preprocessing.export_service import export_db_to_vertical_xml
+                        xml_data = export_db_to_vertical_xml(path)
+                        set_state(xml_cache_key, xml_data)
+                        st.rerun()
 
     # Language Confirmation removed
     # _render_language_confirmation(path, "full")
