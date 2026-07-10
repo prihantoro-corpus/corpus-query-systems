@@ -242,16 +242,42 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     source_type = get_state('source_type')
     if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
         st.write("") # spacing
-        with open(path, "rb") as db_file:
-            st.download_button(
-                label="📥 Download Database (.db)",
-                data=db_file,
-                file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
-                mime="application/octet-stream",
-                help="Download this corpus as a pre-compiled DuckDB database.",
-                use_container_width=True,
-                key=f"dl_btn_{key_suffix}"
-            )
+        
+        last_annotated_txt = get_state('last_annotated_corpus_text')
+        if last_annotated_txt:
+            col_db, col_txt = st.columns(2)
+            with col_db:
+                with open(path, "rb") as db_file:
+                    st.download_button(
+                        label="📥 Download Database (.db)",
+                        data=db_file,
+                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
+                        mime="application/octet-stream",
+                        help="Download this corpus as a pre-compiled DuckDB database.",
+                        use_container_width=True,
+                        key=f"dl_btn_{key_suffix}"
+                    )
+            with col_txt:
+                st.download_button(
+                    label="📥 Download Annotated Corpus (.txt)",
+                    data=last_annotated_txt,
+                    file_name="annotated_corpus.txt",
+                    mime="text/plain",
+                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma).",
+                    use_container_width=True,
+                    key=f"dl_txt_btn_{key_suffix}"
+                )
+        else:
+            with open(path, "rb") as db_file:
+                st.download_button(
+                    label="📥 Download Database (.db)",
+                    data=db_file,
+                    file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
+                    mime="application/octet-stream",
+                    help="Download this corpus as a pre-compiled DuckDB database.",
+                    use_container_width=True,
+                    key=f"dl_btn_{key_suffix}"
+                )
             
     # --- Corpus Narration ---
     _render_corpus_narration(name, path, display_stats, structure, condensed=True)
@@ -1388,17 +1414,7 @@ def render_upload_ui():
                         except Exception as e:
                             st.error(f"Error loading model file: {e}")
                             
-                # Download button for annotated raw corpus (shown in both modes if available)
-                last_annotated_txt = get_state('last_annotated_corpus_text')
-                if last_annotated_txt:
-                    st.write("") # spacer
-                    st.download_button(
-                        label="📥 Download Annotated Corpus (.txt)",
-                        data=last_annotated_txt,
-                        file_name="annotated_corpus.txt",
-                        mime="text/plain",
-                        key="download_annotated_corpus_btn"
-                    )
+
     
     if uploaded_files:
         st.write("") # spacing
