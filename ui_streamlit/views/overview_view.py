@@ -1570,13 +1570,13 @@ def render_upload_ui():
                                 import pickle
                                 model_bytes = pickle.dumps(result['trained_tagger'])
                                 set_state('last_trained_tagger_bytes', model_bytes)
-                                
-                                # Extract and save annotated corpus text
-                                tagger_inst = result['trained_tagger']
-                                if hasattr(tagger_inst, 'annotated_corpus_text') and tagger_inst.annotated_corpus_text:
-                                    set_state('last_annotated_corpus_text', tagger_inst.annotated_corpus_text)
                             except Exception as e:
-                                print(f"Error pickling model or saving annotated text: {e}")
+                                print(f"Error pickling model: {e}")
+                                
+                        # Extract and save annotated corpus text
+                        if result.get('annotated_corpus_text'):
+                            set_state('last_annotated_corpus_text', result['annotated_corpus_text'])
+                        
                         if result.get('warning'):
                             st.warning(result['warning'])
                             
