@@ -287,7 +287,7 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
 
 
     # Show classification for ALL languages now (via Translation)
-    tabs_list = ["XML", "Sub-corpus Stats", "Freq", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "🏷️ Named Entities", "🔱 Dependency Parsing", "📖 Reading Ease", "📖 Lexical Complexity"]
+    tabs_list = ["XML", "Sub-corpus Stats", "Frequency List", "POS", "Cloud", "Metadata", "🏷️ Sentiment & Topic", "🏷️ Named Entities", "🔱 Dependency Parsing", "📖 Reading Ease", "📖 Lexical Complexity"]
     
     selected_tab = render_custom_button_tabs(tabs_list, key_suffix)
     
@@ -301,13 +301,19 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     elif selected_tab == "Sub-corpus Stats":
         _render_subcorpus_stats(path, key_suffix)
         
-    elif selected_tab == "Freq":
+    elif selected_tab == "Frequency List":
         df = ov.get_top_frequencies_v2(path, limit=50, xml_where_clause=xml_where, xml_params=xml_params)
         if not df.empty:
             # Use restricted total for PMW calculation
             total = display_stats.get('total_tokens', 1)
             df['Rel. Freq'] = (df['frequency'] / total * 1_000_000).round(2)
+            st.caption("Displaying top 50 tokens.")
             st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            with st.spinner("Compiling full frequency list for download..."):
+                full_df = ov.get_top_frequencies_v2(path, limit=None, xml_where_clause=xml_where, xml_params=xml_params)
+                full_df['Rel. Freq'] = (full_df['frequency'] / total * 1_000_000).round(2)
+                st.download_button("⬇ Download Full Frequency List", data=df_to_excel_bytes(full_df), file_name=f"{name}_full_freq.xlsx", key=f"dl_freq_{key_suffix}")
         else: st.caption("No frequencies.")
         
     elif selected_tab == "POS":
@@ -540,7 +546,7 @@ def render_full_overview(name, path, stats, structure, error):
     current_lang = ov.get_corpus_language(path)
     show_classification = True
     
-    tabs_list = ["XML Structure", "Sub-corpus Stats", "Top Frequencies", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "🏷️ Named Entity Recognition (NER)", "🔱 Dependency Parsing", "📖 Reading Ease", "📖 Lexical Complexity"]
+    tabs_list = ["XML Structure", "Sub-corpus Stats", "Frequency List", "Unique POS Tags", "Word Cloud", "Metadata Annotation", "🏷️ Sentiment & Topic Analysis", "🏷️ Named Entity Recognition (NER)", "🔱 Dependency Parsing", "📖 Reading Ease", "📖 Lexical Complexity"]
 
     selected_tab = render_custom_button_tabs(tabs_list, "full")
     
@@ -585,15 +591,20 @@ def render_full_overview(name, path, stats, structure, error):
         elif selected_tab == "Sub-corpus Stats":
             _render_subcorpus_stats(path, "full")
 
-        elif selected_tab == "Top Frequencies":
-            st.subheader("Top Frequency Tokens")
+        elif selected_tab == "Frequency List":
+            st.subheader("Frequency List")
             df = ov.get_top_frequencies_v2(path, limit=100, xml_where_clause=xml_where, xml_params=xml_params)
             if not df.empty:
                 # Use restricted total for PMW calculation
                 total = display_stats.get('total_tokens', 1)
                 df['Rel. Freq (per M)'] = (df['frequency'] / total * 1_000_000).round(2)
+                st.caption("Displaying top 100 tokens. Use the button below to download the full frequency list.")
                 st.dataframe(df, use_container_width=True, hide_index=True)
-                st.download_button("⬇ Download Top 100", data=df_to_excel_bytes(df), file_name=f"{name}_top_freq.xlsx")
+                
+                with st.spinner("Compiling full frequency list for download..."):
+                    full_df = ov.get_top_frequencies_v2(path, limit=None, xml_where_clause=xml_where, xml_params=xml_params)
+                    full_df['Rel. Freq (per M)'] = (full_df['frequency'] / total * 1_000_000).round(2)
+                    st.download_button("⬇ Download Full Frequency List", data=df_to_excel_bytes(full_df), file_name=f"{name}_full_freq.xlsx")
             else: st.info("No frequency data.")
 
         elif selected_tab == "Unique POS Tags":
