@@ -131,5 +131,22 @@ STANZA_LANG_MAP = {
     "Korean": "ko",
     "Spanish": "es",
     "German": "de",
-    "French": "fr"
+    "French": "fr",
+    "Portuguese": "pt",
+    "Italian": "it",
+    "Dutch": "nl",
+    "Greek": "el",
+    "Russian": "ru",
+    "Polish": "pl",
+    "Ukrainian": "uk",
+    "Romanian": "ro",
+    "Swedish": "sv",
+    "Danish": "da",
+    "Norwegian": "nb",
+    "Finnish": "fi",
+    "Catalan": "ca",
+    "Croatian": "hr",
+    "Lithuanian": "lt",
+    "Macedonian": "mk",
+    "Slovenian": "sl"
 }
