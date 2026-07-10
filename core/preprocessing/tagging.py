@@ -21,6 +21,20 @@ SPACY_MODEL_MAP = {
     'it': 'it_core_news_sm',
     'ru': 'ru_core_news_sm',
     'pt': 'pt_core_news_sm',
+    'nl': 'nl_core_news_sm',
+    'el': 'el_core_news_sm',
+    'pl': 'pl_core_news_sm',
+    'uk': 'uk_core_news_sm',
+    'ro': 'ro_core_news_sm',
+    'sv': 'sv_core_news_sm',
+    'da': 'da_core_news_sm',
+    'nb': 'nb_core_news_sm',
+    'fi': 'fi_core_news_sm',
+    'ca': 'ca_core_news_sm',
+    'hr': 'hr_core_news_sm',
+    'lt': 'lt_core_news_sm',
+    'mk': 'mk_core_news_sm',
+    'sl': 'sl_core_news_sm',
 }
 
 def get_spacy_pipeline(lang_code):
