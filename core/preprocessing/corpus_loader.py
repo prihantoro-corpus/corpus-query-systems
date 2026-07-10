@@ -310,6 +310,16 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         _load_local_tagset(db_path, fname)
         # break # Maybe load all? Just one is probably safer to avoid mixing definitions blindly
     
+    # Generate universal annotated corpus text for download
+    annotated_lines = []
+    current_sent_id = None
+    for row in all_df_data:
+        if current_sent_id is not None and current_sent_id != row.get('sent_id'):
+            annotated_lines.append("")
+        current_sent_id = row.get('sent_id')
+        annotated_lines.append(f"{row.get('token', '')}\t{row.get('pos', '')}\t{row.get('lemma', '')}")
+    annotated_text = "\n".join(annotated_lines) + "\n"
+    
     return {
         'db_path': db_path,
         'stats': corpus_stats,
@@ -317,7 +327,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         'lang_code': final_lang_code,
         'error': None,
         'warning': stanza_warning if 'stanza_warning' in locals() else None,
-        'trained_tagger': custom_tagger
+        'trained_tagger': custom_tagger,
+        'annotated_corpus_text': annotated_text
     }
 
 @profile_func
