@@ -77,7 +77,10 @@ class CustomDataDrivenTagger:
                     continue
                 if line_strip.startswith('#'):
                     continue
-                parts = line_strip.split()
+                if '\t' in line_strip:
+                    parts = [p.strip() for p in line_strip.split('\t') if p.strip()]
+                else:
+                    parts = line_strip.split()
                 yield parts
 
     def parse_lexicon(self, lexicon_file_content):
