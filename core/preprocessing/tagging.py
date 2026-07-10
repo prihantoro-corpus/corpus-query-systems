@@ -190,15 +190,8 @@ def tag_text_with_stanza(text, lang_code):
             return results, None
         except Exception as e:
             print(f"Failed to load/tag with {lang_code}-hmm.pkl: {e}")
-    except Exception as e:
-        # Log error for debugging
-        try:
-            with open("stanza_error.log", "a") as f:
-                f.write(f"Stanza error for {lang_code}: {str(e)}\n")
-        except:
-            pass
-        results, _ = tag_text_simple_fallback(text)
-        return results, str(e)
+    # 4. Fallback to Simple Regex Tokenizer
+    return tag_text_simple_fallback(text)
 
 def tag_text_simple_fallback(text):
     """
