@@ -92,10 +92,12 @@ def get_top_frequencies_v2(db_path, limit=100, xml_where_clause="", xml_params=[
         if xml_where_clause:
             filter_clause += xml_where_clause
             
+        limit_clause = f" LIMIT {limit}" if limit is not None else ""
+        
         if has_pos:
-            query = f"SELECT token, pos, count(*) as frequency FROM corpus {filter_clause} GROUP BY token, pos ORDER BY frequency DESC LIMIT {limit}"
+            query = f"SELECT token, pos, count(*) as frequency FROM corpus {filter_clause} GROUP BY token, pos ORDER BY frequency DESC{limit_clause}"
         else:
-            query = f"SELECT token, count(*) as frequency FROM corpus {filter_clause} GROUP BY token ORDER BY frequency DESC LIMIT {limit}"
+            query = f"SELECT token, count(*) as frequency FROM corpus {filter_clause} GROUP BY token ORDER BY frequency DESC{limit_clause}"
             
         df = con.execute(query, xml_params).fetch_df()
         return df
