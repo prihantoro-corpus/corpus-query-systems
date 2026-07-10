@@ -141,54 +141,55 @@ def tag_text_with_stanza(text, lang_code):
         
     print(f"SpaCy not available/failed for '{lang_code}' (Error: {spacy_err}). Falling back to Stanza...")
     
-    # 2. Try Custom PKL Model for Indonesian if it exists
-    if lang_code == 'id':
-        import os, pickle
-        pkl_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'model', 'id-hmm.pkl')
-        if os.path.exists(pkl_path):
-            print("Found custom id-hmm.pkl model. Using it for Indonesian tagging...")
-            try:
-                with open(pkl_path, 'rb') as f:
-                    custom_tagger = pickle.load(f)
-                sentences_tokens = tokenize_text_only(text, lang_code)
-                results = []
-                sent_id = 0
-                for sent_tokens in sentences_tokens:
-                    sent_id += 1
-                    tagged_tokens = custom_tagger.tag(sent_tokens)
-                    for i, token_str in enumerate(sent_tokens):
-                        item = tagged_tokens[i]
-                        results.append({
-                            'token': token_str,
-                            'pos': item['pos'],
-                            'lemma': item['lemma'],
-                            'sent_id': sent_id,
-                            'ent_type': ""
-                        })
-                return results, None
-            except Exception as e:
-                print(f"Failed to load/tag with id-hmm.pkl: {e}")
-                
-    # 3. Stanza Fallback
+    # 2. Try Stanza First (User requested priority)
     try:
         nlp = get_stanza_pipeline(lang_code)
-        if not nlp:
-            return tag_text_simple_fallback(text)
+        if nlp:
+            # Use Stanza's native sentence splitting for better results
+            doc = nlp(text)
             
-        # Use Stanza's native sentence splitting for better results
-        doc = nlp(text)
+            results = []
+            for sent_id, stanza_sent in enumerate(doc.sentences, 1):
+                for word in stanza_sent.words:
+                    results.append({
+                        'token': word.text,
+                        'pos': word.upos, 
+                        'lemma': word.lemma if word.lemma else word.text,
+                        'sent_id': sent_id,
+                        'ent_type': ""
+                    })
+            print(f"Text tagged successfully using Stanza for '{lang_code}'.")
+            return results, None
+    except Exception as e:
+        print(f"Stanza error for {lang_code}: {str(e)}")
         
-        results = []
-        for sent_id, stanza_sent in enumerate(doc.sentences, 1):
-            for word in stanza_sent.words:
-                results.append({
-                    'token': word.text,
-                    'pos': word.upos, 
-                    'lemma': word.lemma if word.lemma else word.text,
-                    'sent_id': sent_id,
-                    'ent_type': ""
-                })
-        return results, None
+    # 3. Try Custom PKL Model as Last Resort if Stanza fails/is disabled
+    import os
+    pkl_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'model', f'{lang_code}-hmm.pkl')
+    if os.path.exists(pkl_path):
+        print(f"Found custom {lang_code}-hmm.pkl model. Using it as last resort fallback...")
+        try:
+            import pickle
+            with open(pkl_path, 'rb') as f:
+                custom_tagger = pickle.load(f)
+            sentences_tokens = tokenize_text_only(text, lang_code)
+            results = []
+            sent_id = 0
+            for sent_tokens in sentences_tokens:
+                sent_id += 1
+                tagged_tokens = custom_tagger.tag(sent_tokens)
+                for i, token_str in enumerate(sent_tokens):
+                    item = tagged_tokens[i]
+                    results.append({
+                        'token': token_str,
+                        'pos': item['pos'],
+                        'lemma': item['lemma'],
+                        'sent_id': sent_id,
+                        'ent_type': ""
+                    })
+            return results, None
+        except Exception as e:
+            print(f"Failed to load/tag with {lang_code}-hmm.pkl: {e}")
     except Exception as e:
         # Log error for debugging
         try:
