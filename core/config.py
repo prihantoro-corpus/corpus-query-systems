@@ -123,12 +123,13 @@ BUILT_IN_CORPUS_DETAILS = {
 
 }
 
-# Language codes for Stanza integration
 STANZA_LANG_MAP = {
     "English": "en",
     "Indonesian": "id",
     "Japanese": "ja",
     "Chinese": "zh",
-    "Arabic": "ar",
-    "Korean": "ko"
+    "Korean": "ko",
+    "Spanish": "es",
+    "German": "de",
+    "French": "fr"
 }
