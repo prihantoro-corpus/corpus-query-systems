@@ -151,28 +151,36 @@ class OnlineCorpusBuilder:
         query_words = keywords.copy()
         query = " ".join(query_words)
         
-        # Build language params for Google News
-        lang_param = ""
+        # Build language params for Bing News
+        lang_param = "&mkt=en-US"
         if language:
             if language.lower() == "indonesian":
-                lang_param = "&hl=id&gl=ID&ceid=ID:id"
+                lang_param = "&mkt=id-ID"
             elif language.lower() == "english":
-                lang_param = "&hl=en&gl=US&ceid=US:en"
+                lang_param = "&mkt=en-US"
                 
-        url = f"https://news.google.com/rss/search?q={query}{lang_param}"
+        url = f"https://www.bing.com/news/search?q={query}&format=rss{lang_param}"
         links = set()
         
         try:
-            if progress_callback: progress_callback(0.5, "Searching Google News RSS...")
+            if progress_callback: progress_callback(0.5, "Searching Bing News RSS...")
             headers = {'User-Agent': 'Mozilla/5.0'}
             resp = requests.get(url, headers=headers, timeout=10)
             if resp.status_code == 200:
                 import xml.etree.ElementTree as ET
+                import urllib.parse
                 root = ET.fromstring(resp.content)
                 for item in root.findall('.//item'):
                     link = item.find('link').text
                     if link:
-                        links.add(link)
+                        # Extract the actual URL from Bing's redirect link
+                        parsed = urllib.parse.urlparse(link)
+                        qs = urllib.parse.parse_qs(parsed.query)
+                        if 'url' in qs:
+                            clean_url = qs['url'][0]
+                            links.add(clean_url)
+                        elif 'bing.com' not in link:
+                            links.add(link)
         except Exception as e:
             print(f"RSS Search error: {e}")
 
