@@ -153,35 +153,32 @@ class OnlineCorpusBuilder:
             query_words.append(language)
         
         query = " ".join(query_words)
-        headers = {'User-Agent': 'Mozilla/5.0'}
         links = set()
         
-        # DuckDuckGo HTML pagination (using 'dc' parameter or just multiple requests)
-        # DDG HTML usually gives ~30 results. We'll make up to 4 requests if needed.
-        for page in range(4):
-            if len(links) >= num_links:
-                break
-                
-            if progress_callback: progress_callback((page+1)/4, f"Searching page {page+1}...")
+        try:
+            from duckduckgo_search import DDGS
+            if progress_callback: progress_callback(0.2, "Searching DuckDuckGo via DDGS...")
             
-            url = f"https://html.duckduckgo.com/html/?q={query}"
-            if page > 0:
-                url += f"&s={page*30}" # Approximation of pagination
-                
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=num_links * 2))  # Fetch extra for filtering
+                for r in results:
+                    if 'href' in r:
+                        links.add(r['href'])
+        except Exception as e:
+            print(f"DDGS Search error: {e}")
+            
+        # Fallback to duckduckgo_search library's old name if needed
+        if not links:
             try:
-                resp = requests.get(url, headers=headers, timeout=10)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    for a in soup.find_all('a', class_='result__a'):
-                        link = a.get('href')
-                        if link and link.startswith('http'):
-                            links.add(link)
-                else:
-                    break # Stop if rate limited or error
-            except Exception as e:
-                print(f"Search error: {e}")
-                break
-            time.sleep(1) # Be nice to DDG
+                from ddgs import DDGS
+                with DDGS() as ddgs:
+                    results = [r for r in ddgs.text(query, max_results=num_links * 2)]
+                    for r in results:
+                        if 'href' in r:
+                            links.add(r['href'])
+            except Exception:
+                pass
+
             
         # Score and sort links
         scored_links = [(link, self.score_domain(link)) for link in links]
