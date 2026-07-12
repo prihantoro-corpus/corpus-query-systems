@@ -1801,33 +1801,84 @@ def render_online_builder_ui():
                         st.error(warn or "Failed to scrape.")
  
     elif mode == "Keyword Search":
-        st.info("💡 **Experimental:** Max 5 keywords and 100,000 words limit.")
-        st.caption("Find pages containing at least **n-2** of your keywords (minimum 2).")
-        kw_input = st.text_input("Keywords (comma separated)", placeholder="detik, celeb, jokes, kisruh, gosip")
+        from core.preprocessing.online_corpus import OnlineCorpusBuilder
+        st.info("💡 **Experimental:** Find links first, then select which to scrape (Max 500,000 words limit).")
+        st.caption("Search DuckDuckGo, score domains for text-richness, and scrape complete sentences.")
         
-        if st.button("Search and Scrape", type="primary"):
+        col1, col2 = st.columns(2)
+        with col1:
+            lang_options = ["Any", "Indonesian", "English", "Javanese", "Sundanese", "Malay"]
+            selected_lang = st.selectbox("Focus Language", lang_options)
+        with col2:
+            num_links = st.selectbox("Number of Links to Fetch", [25, 50, 75, 100], index=1)
+            
+        kw_input = st.text_input("Keywords (comma separated)", placeholder="LRT, Jabodebek, presiden, peresmian")
+        
+        if st.button("🔍 Find Links", type="primary"):
             keywords = [k.strip() for k in kw_input.split(',') if k.strip()]
             if not keywords:
                 st.error("No keywords provided")
             elif len(keywords) > 5:
-                st.error("Max 5 keywords allowed for this experimental feature.")
+                st.error("Max 5 keywords allowed.")
             else:
-                from core.preprocessing.online_corpus import build_online_corpus
                 progress_bar = st.progress(0)
                 status = st.empty()
                 def up(p, m):
                     progress_bar.progress(min(p, 1.0))
                     status.caption(m)
                 
-                with st.spinner("Searching and scraping..."):
-                    files, warn = build_online_corpus("keyword", {"keywords": keywords}, progress_callback=up)
-                    if files:
-                        set_state('downloaded_online_files', files)
-                        st.success(f"✅ Built corpus with {len(files)} matching pages!")
-                        if warn: st.warning(warn)
-                        auto_process_online_files(files)
+                st.info(f"⏳ Please wait, searching for {num_links} links may take up to a minute...")
+                with st.spinner("Searching DuckDuckGo..."):
+                    builder = OnlineCorpusBuilder()
+                    # Append language to keywords as requested if not Any
+                    links = builder.find_keyword_links(keywords, num_links=num_links, language=selected_lang, progress_callback=up)
+                    if links:
+                        import pandas as pd
+                        df = pd.DataFrame({"Select": [True]*len(links), "URL": links})
+                        set_state('found_keyword_links', df)
+                        set_state('current_keywords', keywords)
+                        st.success(f"✅ Found {len(links)} links!")
                     else:
-                        st.error(warn or "No matching pages found or search limit exceeded.")
+                        st.error("No matching links found or search blocked by DuckDuckGo.")
+                        
+        found_links_df = get_state('found_keyword_links')
+        if found_links_df is not None:
+            st.write("### Review and Select Links")
+            st.caption("Uncheck any links you do not want to scrape. Known easy-to-scrape domains are pushed to the top.")
+            
+            edited_df = st.data_editor(
+                found_links_df,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Select": st.column_config.CheckboxColumn("Scrape?", default=True),
+                    "URL": st.column_config.LinkColumn("Website URL")
+                }
+            )
+            
+            if st.button("📥 Load Corpus", type="primary", use_container_width=True):
+                selected_urls = edited_df[edited_df['Select']]['URL'].tolist()
+                keywords = get_state('current_keywords', [])
+                if not selected_urls:
+                    st.warning("No links selected!")
+                else:
+                    from core.preprocessing.online_corpus import build_online_corpus
+                    progress_bar = st.progress(0)
+                    status = st.empty()
+                    def up(p, m):
+                        progress_bar.progress(min(p, 1.0))
+                        status.caption(m)
+                    
+                    st.info(f"⏳ Scraping {len(selected_urls)} links... This may take a few minutes.")
+                    with st.spinner("Scraping clean sentences..."):
+                        files, warn = build_online_corpus("keyword_scrape_selected", {"links": selected_urls, "keywords": keywords}, progress_callback=up)
+                        if files:
+                            set_state('downloaded_online_files', files)
+                            st.success(f"✅ Scraped and built corpus with {len(files)} pages!")
+                            if warn: st.warning(warn)
+                            auto_process_online_files(files)
+                        else:
+                            st.error("Failed to scrape any content from the selected links.")
 
 def _render_metadata_annotation_tab(db_path, key_suffix):
     import duckdb
