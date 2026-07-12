@@ -53,3 +53,5 @@ https://github.com/explosion/spacy-models/releases/download/sl_core_news_sm-3.8.
 youtube-transcript-api
 youtube-comment-downloader
 beautifulsoup4
+duckduckgo-search
+
