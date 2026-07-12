@@ -11,7 +11,7 @@ def count_words(text):
     return len(re.findall(r'\w+', text))
 
 class OnlineCorpusBuilder:
-    def __init__(self, limit_words=100000):
+    def __init__(self, limit_words=500000):
         self.limit_words = limit_words
         self.current_words = 0
         self.is_limit_reached = False
@@ -95,69 +95,129 @@ class OnlineCorpusBuilder:
                 break
         return "".join(results)
 
+    def is_likely_sentence(self, text):
+        text = text.strip()
+        if len(text) < 15:
+            return False
+        if not re.search(r'[.!?]$', text):
+            return False
+        words = text.split()
+        if len(words) < 3:
+            return False
+        return True
+
     def scrape_url(self, url):
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
             resp = requests.get(url, headers=headers, timeout=10)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
-                # Remove scripts and styles
-                for script in soup(["script", "style"]):
-                    script.extract()
-                text = soup.get_text(separator=' ')
-                # Basic cleaning
-                lines = (line.strip() for line in text.splitlines())
-                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-                text = '\n'.join(chunk for chunk in chunks if chunk)
-                return text
+                # Remove scripts, styles, headers, footers, navs
+                for element in soup(["script", "style", "nav", "header", "footer", "aside", "noscript"]):
+                    element.extract()
+                
+                paragraphs = soup.find_all('p')
+                clean_text = []
+                for p in paragraphs:
+                    text = p.get_text(separator=' ').strip()
+                    text = re.sub(r'\s+', ' ', text)
+                    if self.is_likely_sentence(text):
+                        clean_text.append(text)
+                
+                if clean_text:
+                    return '\n'.join(clean_text)
+                else:
+                    # Fallback to basic cleaning if no paragraphs found
+                    text = soup.get_text(separator=' ')
+                    lines = (line.strip() for line in text.splitlines())
+                    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                    return '\n'.join(chunk for chunk in chunks if chunk)
         except Exception as e:
             print(f"Scrape error for {url}: {e}")
         return None
 
-    def keyword_search(self, keywords, min_match=2):
-        # Using DuckDuckGo HTML version for simplicity
-        query = " ".join(keywords)
-        url = f"https://html.duckduckgo.com/html/?q={query}"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        links = []
-        try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                # DDG HTML results are in links with class 'result__a'
-                for a in soup.find_all('a', class_='result__a'):
-                    link = a.get('href')
-                    if link and link.startswith('http'):
-                        links.append(link)
-        except Exception as e:
-            print(f"Search error: {e}")
+    def score_domain(self, url):
+        score = 0
+        url_lower = url.lower()
+        # High priority (text rich)
+        if any(d in url_lower for d in ['wikipedia.org', 'medium.com', 'wordpress.com', 'bbc.com', 'cnn.com', 'nytimes.com', 'kompas.com', 'detik.com', 'tribunnews.com']):
+            score += 10
+        # Low priority (PDFs, JS heavy, sparse text)
+        if any(d in url_lower for d in ['academia.edu', 'scribd.com', 'researchgate.net', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'tiktok.com', 'youtube.com']):
+            score -= 10
+        return score
+
+    def find_keyword_links(self, keywords, num_links=25, language=None, progress_callback=None):
+        query_words = keywords.copy()
+        if language and language.lower() != "any":
+            query_words.append(language)
         
-        # Filter links and scrape
-        found_data = []
-        for link in links[:20]: # Check first 20 links
+        query = " ".join(query_words)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        links = set()
+        
+        # DuckDuckGo HTML pagination (using 'dc' parameter or just multiple requests)
+        # DDG HTML usually gives ~30 results. We'll make up to 4 requests if needed.
+        for page in range(4):
+            if len(links) >= num_links:
+                break
+                
+            if progress_callback: progress_callback((page+1)/4, f"Searching page {page+1}...")
+            
+            url = f"https://html.duckduckgo.com/html/?q={query}"
+            if page > 0:
+                url += f"&s={page*30}" # Approximation of pagination
+                
+            try:
+                resp = requests.get(url, headers=headers, timeout=10)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    for a in soup.find_all('a', class_='result__a'):
+                        link = a.get('href')
+                        if link and link.startswith('http'):
+                            links.add(link)
+                else:
+                    break # Stop if rate limited or error
+            except Exception as e:
+                print(f"Search error: {e}")
+                break
+            time.sleep(1) # Be nice to DDG
+            
+        # Score and sort links
+        scored_links = [(link, self.score_domain(link)) for link in links]
+        scored_links.sort(key=lambda x: x[1], reverse=True) # Highest score first
+        
+        return [link for link, score in scored_links][:num_links]
+
+    def scrape_selected_links(self, links, keywords, progress_callback=None):
+        success_logs = []
+        for i, link in enumerate(links):
             if self.is_limit_reached: break
+            if progress_callback: progress_callback(i/len(links), f"Scraping {link[:50]}...")
             
             content = self.scrape_url(link)
             if content:
-                # Count matches
-                matches = sum(1 for kw in keywords if kw.lower() in content.lower())
-                if matches >= min_match:
-                    found_data.append((link, content))
-                    
-                    words = count_words(content)
-                    self.current_words += words
-                    if self.current_words >= self.limit_words:
-                        self.is_limit_reached = True
-                        break
-        return found_data
+                # We could filter by keyword match here, but since the user explicitly selected them,
+                # we just scrape and add.
+                self.downloaded_files.append({
+                    "filename": f"kw_{i}.txt", 
+                    "content": f"<text url=\"{link}\" keywords=\"{','.join(keywords)}\">\n{content}\n</text>"
+                })
+                words = count_words(content)
+                self.current_words += words
+                success_logs.append(link)
+                if self.current_words >= self.limit_words:
+                    self.is_limit_reached = True
+                    break
+        return success_logs
 
 
 def build_online_corpus(mode_type, params, progress_callback=None):
     """
-    mode_type: 'youtube', 'links', 'keyword'
+    mode_type: 'youtube', 'links', 'keyword_scrape_selected'
     params: dict with necessary parameters
     """
-    builder = OnlineCorpusBuilder(limit_words=100000)
+    builder = OnlineCorpusBuilder(limit_words=500000)
     warning = None
     
     if mode_type == "youtube":
@@ -194,14 +254,14 @@ def build_online_corpus(mode_type, params, progress_callback=None):
             if content:
                 builder.add_content(f"link_{i}.txt", f"<text url=\"{link}\" source=\"link_collection\">\n{content}\n</text>")
     
-    elif mode_type == "keyword":
+    elif mode_type == "keyword_scrape_selected":
         keywords = params.get('keywords', [])
-        min_match = max(2, len(keywords) - 2)
-        if progress_callback: progress_callback(0.1, "Searching for links...")
-        found = builder.keyword_search(keywords, min_match)
-        for i, (link, content) in enumerate(found):
-            # Content already added in keyword_search for limit checking
-            builder.downloaded_files.append({"filename": f"kw_{i}.txt", "content": f"<text url=\"{link}\" keywords=\"{','.join(keywords)}\">\n{content}\n</text>"})
+        links = params.get('links', [])
+        success_logs = builder.scrape_selected_links(links, keywords, progress_callback)
+        warning = f"Successfully scraped {len(success_logs)} out of {len(links)} selected links."
+        if builder.is_limit_reached:
+            warning += " Experimental limit reached (max 500,000 words)."
+        return builder.downloaded_files, warning
 
     elif mode_type == "mastodon":
         urls = params.get('urls', [])
