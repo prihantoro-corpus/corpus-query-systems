@@ -159,34 +159,52 @@ class OnlineCorpusBuilder:
             elif language.lower() == "english":
                 lang_param = "&mkt=en-US"
                 
-        url = f"https://www.bing.com/news/search?q={query}&format=rss{lang_param}"
         links = set()
+        headers = {'User-Agent': 'Mozilla/5.0'}
         
-        try:
-            if progress_callback: progress_callback(0.5, "Searching Bing News RSS...")
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                import xml.etree.ElementTree as ET
-                import urllib.parse
-                root = ET.fromstring(resp.content)
-                for item in root.findall('.//item'):
-                    link = item.find('link').text
-                    if link:
-                        # Extract the actual URL from Bing's redirect link
-                        parsed = urllib.parse.urlparse(link)
-                        qs = urllib.parse.parse_qs(parsed.query)
-                        if 'url' in qs:
-                            clean_url = qs['url'][0]
-                            links.add(clean_url)
-                        elif 'bing.com' not in link:
-                            links.add(link)
-        except Exception as e:
-            print(f"RSS Search error: {e}")
-
+        # Bing News RSS returns ~10 links per page. Paginate to get up to num_links.
+        page = 0
+        while len(links) < num_links and page < 10:  # Max 10 pages to avoid infinite loop
+            first_param = f"&first={page * 10 + 1}" if page > 0 else ""
+            url = f"https://www.bing.com/news/search?q={query}&format=rss{lang_param}{first_param}"
             
+            try:
+                if progress_callback: progress_callback((page + 1) / 10.0, f"Searching Bing News (Page {page + 1})...")
+                resp = requests.get(url, headers=headers, timeout=10)
+                if resp.status_code == 200:
+                    import xml.etree.ElementTree as ET
+                    import urllib.parse
+                    root = ET.fromstring(resp.content)
+                    items = root.findall('.//item')
+                    
+                    if not items:
+                        break # No more results
+                        
+                    for item in items:
+                        link = item.find('link').text
+                        if link:
+                            # Extract the actual URL from Bing's redirect link
+                            parsed = urllib.parse.urlparse(link)
+                            qs = urllib.parse.parse_qs(parsed.query)
+                            if 'url' in qs:
+                                clean_url = qs['url'][0]
+                                links.add(clean_url)
+                            elif 'bing.com' not in link:
+                                links.add(link)
+                else:
+                    break # Stop on error
+            except Exception as e:
+                print(f"RSS Search error: {e}")
+                break
+                
+            page += 1
+            import time
+            time.sleep(1) # Be nice to Bing
+            
+        # If we got more than requested, truncate
+        links_list = list(links)
         # Score and sort links
-        scored_links = [(link, self.score_domain(link)) for link in links]
+        scored_links = [(link, self.score_domain(link)) for link in links_list]
         scored_links.sort(key=lambda x: x[1], reverse=True) # Highest score first
         
         return [link for link, score in scored_links][:num_links]
