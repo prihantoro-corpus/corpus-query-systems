@@ -149,35 +149,32 @@ class OnlineCorpusBuilder:
 
     def find_keyword_links(self, keywords, num_links=25, language=None, progress_callback=None):
         query_words = keywords.copy()
-        if language and language.lower() != "any":
-            query_words.append(language)
-        
         query = " ".join(query_words)
+        
+        # Build language params for Google News
+        lang_param = ""
+        if language:
+            if language.lower() == "indonesian":
+                lang_param = "&hl=id&gl=ID&ceid=ID:id"
+            elif language.lower() == "english":
+                lang_param = "&hl=en&gl=US&ceid=US:en"
+                
+        url = f"https://news.google.com/rss/search?q={query}{lang_param}"
         links = set()
         
         try:
-            from duckduckgo_search import DDGS
-            if progress_callback: progress_callback(0.2, "Searching DuckDuckGo via DDGS...")
-            
-            with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=num_links * 2))  # Fetch extra for filtering
-                for r in results:
-                    if 'href' in r:
-                        links.add(r['href'])
+            if progress_callback: progress_callback(0.5, "Searching Google News RSS...")
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(resp.content)
+                for item in root.findall('.//item'):
+                    link = item.find('link').text
+                    if link:
+                        links.add(link)
         except Exception as e:
-            print(f"DDGS Search error: {e}")
-            
-        # Fallback to duckduckgo_search library's old name if needed
-        if not links:
-            try:
-                from ddgs import DDGS
-                with DDGS() as ddgs:
-                    results = [r for r in ddgs.text(query, max_results=num_links * 2)]
-                    for r in results:
-                        if 'href' in r:
-                            links.add(r['href'])
-            except Exception:
-                pass
+            print(f"RSS Search error: {e}")
 
             
         # Score and sort links

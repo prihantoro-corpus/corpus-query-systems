@@ -1803,7 +1803,7 @@ def render_online_builder_ui():
     elif mode == "Keyword Search":
         from core.preprocessing.online_corpus import OnlineCorpusBuilder
         st.info("💡 **Experimental:** Find links first, then select which to scrape (Max 500,000 words limit).")
-        st.caption("Search DuckDuckGo, score domains for text-richness, and scrape complete sentences.")
+        st.caption("Search for text-rich webpages and scrape complete sentences.")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -1828,7 +1828,7 @@ def render_online_builder_ui():
                     status.caption(m)
                 
                 st.info(f"⏳ Please wait, searching for {num_links} links may take up to a minute...")
-                with st.spinner("Searching DuckDuckGo..."):
+                with st.spinner("Searching for related news and articles..."):
                     builder = OnlineCorpusBuilder()
                     # Append language to keywords as requested if not Any
                     links = builder.find_keyword_links(keywords, num_links=num_links, language=selected_lang, progress_callback=up)
@@ -1839,7 +1839,7 @@ def render_online_builder_ui():
                         set_state('current_keywords', keywords)
                         st.success(f"✅ Found {len(links)} links!")
                     else:
-                        st.error("No matching links found or search blocked by DuckDuckGo.")
+                        st.error("No matching links found.")
                         
         found_links_df = get_state('found_keyword_links')
         if found_links_df is not None:
