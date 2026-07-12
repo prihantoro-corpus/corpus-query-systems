@@ -50,3 +50,4 @@ https://github.com/explosion/spacy-models/releases/download/hr_core_news_sm-3.8.
 https://github.com/explosion/spacy-models/releases/download/lt_core_news_sm-3.8.0/lt_core_news_sm-3.8.0.tar.gz
 https://github.com/explosion/spacy-models/releases/download/mk_core_news_sm-3.8.0/mk_core_news_sm-3.8.0.tar.gz
 https://github.com/explosion/spacy-models/releases/download/sl_core_news_sm-3.8.0/sl_core_news_sm-3.8.0.tar.gz
+youtube-transcript-api
