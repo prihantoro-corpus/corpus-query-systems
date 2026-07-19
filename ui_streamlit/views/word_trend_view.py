@@ -127,29 +127,33 @@ def render_word_trend_view():
         
     st.markdown("Analyze how vocabulary changes over time.")
     
-    # Render the global tabs at the top
-    tab_tracker, tab_excl, tab_emerge = st.tabs(["📈 Word Tracker (Custom)", "💎 Exclusive Words (Unique to Period)", "🌱 Emerging Words (Chronological)"])
+    from ui_streamlit.components.guidelines import render_guidelines
+    col_main = render_guidelines("Word Trend")
     
-    with tab_tracker:
-        render_word_tracker_tab(corpus_path)
-
-    with tab_excl:
-        render_trend_tab(
-            corpus_path=corpus_path,
-            mode='exclusive',
-            title="Exclusive Words (Unique to Period)",
-            description="Identify words that **only appear** in one specific period and are completely absent from all other selected periods.",
-            key_prefix="exclusive"
-        )
+    with col_main:
+        # Render the global tabs at the top
+        tab_tracker, tab_excl, tab_emerge = st.tabs(["📈 Word Tracker (Custom)", "💎 Exclusive Words (Unique to Period)", "🌱 Emerging Words (Chronological)"])
         
-    with tab_emerge:
-        render_trend_tab(
-            corpus_path=corpus_path,
-            mode='chronological',
-            title="Emerging Words (Chronological)",
-            description="Identify words that **emerge for the first time** in the corpus over a chronological timeline.",
-            key_prefix="emerge"
-        )
+        with tab_tracker:
+            render_word_tracker_tab(corpus_path)
+    
+        with tab_excl:
+            render_trend_tab(
+                corpus_path=corpus_path,
+                mode='exclusive',
+                title="Exclusive Words (Unique to Period)",
+                description="Identify words that **only appear** in one specific period and are completely absent from all other selected periods.",
+                key_prefix="exclusive"
+            )
+            
+        with tab_emerge:
+            render_trend_tab(
+                corpus_path=corpus_path,
+                mode='chronological',
+                title="Emerging Words (Chronological)",
+                description="Identify words that **emerge for the first time** in the corpus over a chronological timeline.",
+                key_prefix="emerge"
+            )
 
 def render_trend_tab(corpus_path, mode, title, description, key_prefix):
     st.markdown(description)
