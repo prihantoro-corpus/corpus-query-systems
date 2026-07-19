@@ -327,7 +327,7 @@ GUIDELINES = {
             1. **Metadata Configuration:** Select a temporal metadata column (e.g., Year, Decade, Date) from the **Time Attribute** dropdown.
             2. **Search Modes:**
                 *   **Simple Mode:** Perfect for quick tracking. Select the **Simple** radio button, then type your target words into the input box separated by commas (e.g., `technology, computer, internet`).
-                *   **Advanced Mode:** Allows for highly specific linguistic queries. Select the **Advanced** radio button. Click the **➕ Add Query** button to dynamically stack multiple query boxes. The syntax mirrors the Advanced Concordance:
+                *   **Advanced Mode:** Allows for highly specific linguistic queries. Select the **Advanced** radio button. Click the **+ Add Query** button to dynamically stack multiple query boxes. The syntax mirrors the Advanced Concordance:
                     *   **POS Tags:** `can_NN` (finds "can" used strictly as a noun).
                     *   **Lemmas:** `[be]` (finds all inflections like is, am, are, was, were).
                     *   **Wildcards:** `*ing` (finds any token ending in "ing").
