@@ -150,9 +150,12 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                  p_val = comp['pos']
                  
                  # Token SQL
-                 if '*' in t_val:
+                 if '*' in t_val or '|' in t_val:
+                     parts = [p.strip() for p in t_val.split('|') if p.strip()]
+                     regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                     regex_pat = '(?i)^(' + '|'.join(regex_parts) + ')$'
                      query_where.append(f"regexp_matches({alias}._token_low, ?)")
-                     query_params.append('^' + re.escape(t_val).replace(r'\*', '.*') + '$')
+                     query_params.append(regex_pat)
                  else:
                      query_where.append(f"{alias}._token_low = ?")
                      query_params.append(t_val)
@@ -207,8 +210,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
 
             elif comp['type'] == 'word':
                 val = comp['val']
-                if '*' in val:
-                    regex_pat = '^' + re.escape(val).replace(r'\*', '.*') + '$'
+                if '*' in val or '|' in val:
+                    parts = [p.strip() for p in val.split('|') if p.strip()]
+                    regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                    regex_pat = '(?i)^(' + '|'.join(regex_parts) + ')$'
                     query_where.append(f"regexp_matches({alias}._token_low, ?)")
                     query_params.append(regex_pat)
                 else:
@@ -216,8 +221,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     query_params.append(val)
             elif comp['type'] == 'lemma' and not is_raw_mode:
                 val = comp['val']
-                if '*' in val:
-                    regex_pat = '^' + re.escape(val).replace(r'\*', '.*') + '$'
+                if '*' in val or '|' in val:
+                    parts = [p.strip() for p in val.split('|') if p.strip()]
+                    regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                    regex_pat = '(?i)^(' + '|'.join(regex_parts) + ')$'
                     query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                     query_params.append(regex_pat)
                 else:
@@ -227,16 +234,20 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                  l_val = comp['lemma']
                  p_val = comp['pos']
                  if not is_raw_mode:
-                     if '*' in l_val:
-                         regex_pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                     if '*' in l_val or '|' in l_val:
+                         parts = [p.strip() for p in l_val.split('|') if p.strip()]
+                         regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                         regex_pat = '(?i)^(' + '|'.join(regex_parts) + ')$'
                          query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                          query_params.append(regex_pat)
                      else:
                          query_where.append(f"lower({alias}.lemma) = ?")
                          query_params.append(l_val)
                  else:
-                     if '*' in l_val:
-                         regex_pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                     if '*' in l_val or '|' in l_val:
+                         parts = [p.strip() for p in l_val.split('|') if p.strip()]
+                         regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                         regex_pat = '(?i)^(' + '|'.join(regex_parts) + ')$'
                          query_where.append(f"regexp_matches({alias}._token_low, ?)")
                          query_params.append(regex_pat)
                      else:
@@ -278,8 +289,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 if cp['type'] == 'token_pos':
                     t_val = cp['token']
                     p_val = cp['pos']
-                    if '*' in t_val:
-                        regex = '(?i)^' + re.escape(t_val).replace(r'\*', '.*') + '$'
+                    if '*' in t_val or '|' in t_val:
+                        parts = [p.strip() for p in t_val.split('|') if p.strip()]
+                        regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                        regex = '(?i)^(' + '|'.join(regex_parts) + ')$'
                         coll_filter_parts.append("regexp_matches(c_coll._token_low, ?)")
                         coll_filter_params.append(regex)
                     else:
@@ -327,8 +340,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     else:
                         val = cp.get('val', '')
                         if cp['type'] == 'word':
-                            if '*' in val:
-                                regex = '(?i)^' + re.escape(val).replace(r'\*', '.*') + '$'
+                            if '*' in val or '|' in val:
+                                parts = [p.strip() for p in val.split('|') if p.strip()]
+                                regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                                regex = '(?i)^(' + '|'.join(regex_parts) + ')$'
                                 coll_filter_parts.append("regexp_matches(c_coll._token_low, ?)")
                                 coll_filter_params.append(regex)
                             else:
@@ -336,13 +351,23 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                                 coll_filter_params.append(val)
                         elif cp['type'] == 'lemma':
                             # Use (?i) for lemmas to be safe
-                            regex = '(?i)^' + re.escape(val).replace(r'\*', '.*') + '$'
+                            if '*' in val or '|' in val:
+                                parts = [p.strip() for p in val.split('|') if p.strip()]
+                                regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                                regex = '(?i)^(' + '|'.join(regex_parts) + ')$'
+                            else:
+                                regex = '(?i)^' + re.escape(val).replace(r'\*', '.*') + '$'
                             coll_filter_parts.append("regexp_matches(c_coll.lemma, ?)")
                             coll_filter_params.append(regex)
                         elif cp['type'] == 'lemma_pos':
                             l_val = cp['lemma']
                             p_val = cp['pos']
-                            regex = '(?i)^' + re.escape(l_val).replace(r'\*', '.*') + '$'
+                            if '*' in l_val or '|' in l_val:
+                                parts = [p.strip() for p in l_val.split('|') if p.strip()]
+                                regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                                regex = '(?i)^(' + '|'.join(regex_parts) + ')$'
+                            else:
+                                regex = '(?i)^' + re.escape(l_val).replace(r'\*', '.*') + '$'
                             coll_filter_parts.append("regexp_matches(c_coll.lemma, ?)")
                             coll_filter_params.append(regex)
                             pats = [p.strip() for p in p_val.split('|') if p.strip()]

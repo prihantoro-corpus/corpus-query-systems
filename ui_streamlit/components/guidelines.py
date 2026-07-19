@@ -62,6 +62,10 @@ GUIDELINES = {
         * **Wildcard (`*`)**: Use `*` to match prefix, suffix, or parts of words.
           * Example: `run*` matches *run*, *runs*, *running*, *runner*.
           * Example: `*ing` matches *sing*, *playing*, *jumping*.
+        * **Union Search (`|`)**: Use the pipe symbol `|` to search for multiple strings simultaneously (OR logic).
+          * Example: `can|could|will|would` matches any of those literal words.
+          * Example: `[be|have|do]` matches all inflected forms of those base lemmas.
+          * Example: `can|could_MD` matches those specific words, restricted to the `MD` part-of-speech tag.
         * **Lemma Unit**: Wrap the base form in square brackets to match all inflected forms.
           * Example: `[run]` matches *run*, *ran*, *running*, *runs*.
         * **POS Restricted Tokens**: Search for words with specific Part-of-Speech tags.
