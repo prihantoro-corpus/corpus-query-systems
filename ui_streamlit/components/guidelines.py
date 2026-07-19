@@ -319,6 +319,9 @@ GUIDELINES = {
         * Select question structures: **Multiple Choice**, **Fill in the Blanks**, or **Matching Definitions**.
         
         #### 2. Vocabulary & PASSAGE Selection
+        * Define target words or choose source reading passages. The system automatically extracts distractors from the corpus vocabulary to build options.
+        * **Export Quizzes**: Save questions and answer keys to text files or PDFs.
+    """,
     "Word Trend": {
         "Word Tracker": """
             ### 📈 Word Tracker Guidelines
