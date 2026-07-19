@@ -127,17 +127,19 @@ def render_word_trend_view():
         
     st.markdown("Analyze how vocabulary changes over time.")
     
-    from ui_streamlit.components.guidelines import render_guidelines
-    col_main = render_guidelines("Word Trend")
+    # Render the global tabs at the top
+    tab_tracker, tab_excl, tab_emerge = st.tabs(["📈 Word Tracker (Custom)", "💎 Exclusive Words (Unique to Period)", "🌱 Emerging Words (Chronological)"])
     
-    with col_main:
-        # Render the global tabs at the top
-        tab_tracker, tab_excl, tab_emerge = st.tabs(["📈 Word Tracker (Custom)", "💎 Exclusive Words (Unique to Period)", "🌱 Emerging Words (Chronological)"])
-        
-        with tab_tracker:
+    from ui_streamlit.components.guidelines import render_guidelines
+    
+    with tab_tracker:
+        col_main = render_guidelines("Word Trend", sub_tab="Word Tracker", key_prefix="tracker")
+        with col_main:
             render_word_tracker_tab(corpus_path)
     
-        with tab_excl:
+    with tab_excl:
+        col_main = render_guidelines("Word Trend", sub_tab="Exclusive Words", key_prefix="exclusive")
+        with col_main:
             render_trend_tab(
                 corpus_path=corpus_path,
                 mode='exclusive',
@@ -146,7 +148,9 @@ def render_word_trend_view():
                 key_prefix="exclusive"
             )
             
-        with tab_emerge:
+    with tab_emerge:
+        col_main = render_guidelines("Word Trend", sub_tab="Emerging Words", key_prefix="emerge")
+        with col_main:
             render_trend_tab(
                 corpus_path=corpus_path,
                 mode='chronological',

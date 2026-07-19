@@ -319,52 +319,52 @@ GUIDELINES = {
         * Select question structures: **Multiple Choice**, **Fill in the Blanks**, or **Matching Definitions**.
         
         #### 2. Vocabulary & PASSAGE Selection
-        * Define target words or choose source reading passages. The system automatically extracts distractors from the corpus vocabulary to build options.
-        * **Export Quizzes**: Save questions and answer keys to text files or PDFs.
-    """,
-    "Word Trend": """
-        ### 📈 Word Trend Module Guidelines
-        
-        The **Word Trend** module allows you to track and analyze vocabulary changes across different periods. 
-        
-        #### 1. Word Tracker (Custom)
-        This tab allows you to visualize and statically analyze the trajectory of specific words over time.
-        1. **Metadata Configuration:** Select a temporal metadata column (e.g., Year, Decade, Date) from the **Time Attribute** dropdown.
-        2. **Search Modes:**
-            *   **Simple Mode:** Perfect for quick tracking. Select the **Simple** radio button, then type your target words into the input box separated by commas (e.g., `technology, computer, internet`).
-            *   **Advanced Mode:** Allows for highly specific linguistic queries. Select the **Advanced** radio button. Click the **➕ Add Query** button to dynamically stack multiple query boxes. The syntax mirrors the Advanced Concordance:
-                *   **POS Tags:** `can_NN` (finds "can" used strictly as a noun).
-                *   **Lemmas:** `[be]` (finds all inflections like is, am, are, was, were).
-                *   **Wildcards:** `*ing` (finds any token ending in "ing").
-                *   **Unions:** `can|could` (finds instances of either word).
-        3. **Output Basis (Advanced Only):**
-            *   **Word:** Click the **Word** radio button to explode your query into its individual matched tokens. For example, querying `[see]` will plot separate lines for `see`, `saw`, `seen`, and `seeing`.
-            *   **Lemma:** Click the **Lemma** radio button to group all matched tokens into a single aggregated line representing your core query (e.g., one line for `[see]`).
-        4. **Statistics & Interpretation:**
-            *   Scroll down to the **Inferential Statistics & Interpretation** section.
-            *   Select an analysis type from the radio buttons (e.g., Correlation, Trend Comparison).
-            *   Click the **Generate Chart & Analysis** button to calculate the results and generate AI interpretation.
-        
-        #### 2. Exclusive Words (Unique to Period)
-        This tab identifies vocabulary that is **entirely unique** to one specific metadata period and completely absent from all others.
-        *   **Usage:** Useful for finding highly specialized terminology or jargon isolated to a specific genre, author, or era.
-        *   **Configuration:** 
-            1. Select a **Time Attribute** from the dropdown. 
-            2. Review the detected chronological order in the box below it.
-        *   **Part-of-Speech Filter (Optional):** You can apply POS filters to narrow down the results. 
-            1. Click the **Include** radio button if you only want to analyze words that match your selected tags (e.g., Select Nouns and Verbs in the dropdown below).
-            2. Click the **Exclude** radio button if you want to analyze everything *except* your selected tags (e.g., Select punctuation tags in the dropdown below to ignore them).
-        
-        #### 3. Emerging Words (Chronological)
-        This tab tracks the **first appearance** of words in your corpus across an ordered timeline. 
-        *   **Usage:** Ideal for neologism research and tracking language evolution. It highlights when a word was introduced into the corpus and measures its relative frequency at the time of emergence.
-        *   **Configuration:** 
-            1. Select a **Time Attribute** from the dropdown. 
-            2. Review the detected chronological order in the box below it.
-        *   **Part-of-Speech Filter (Optional):** You can apply POS filters to narrow down the results. 
-            1. Click the **Include** radio button if you only want to analyze words that match your selected tags (e.g., Select Nouns and Verbs in the dropdown below).
-            2. Click the **Exclude** radio button if you want to analyze everything *except* your selected tags (e.g., Select punctuation tags in the dropdown below to ignore them).
-    """
+    "Word Trend": {
+        "Word Tracker": """
+            ### 📈 Word Tracker Guidelines
+            
+            This tab allows you to visualize and statically analyze the trajectory of specific words over time.
+            1. **Metadata Configuration:** Select a temporal metadata column (e.g., Year, Decade, Date) from the **Time Attribute** dropdown.
+            2. **Search Modes:**
+                *   **Simple Mode:** Perfect for quick tracking. Select the **Simple** radio button, then type your target words into the input box separated by commas (e.g., `technology, computer, internet`).
+                *   **Advanced Mode:** Allows for highly specific linguistic queries. Select the **Advanced** radio button. Click the **➕ Add Query** button to dynamically stack multiple query boxes. The syntax mirrors the Advanced Concordance:
+                    *   **POS Tags:** `can_NN` (finds "can" used strictly as a noun).
+                    *   **Lemmas:** `[be]` (finds all inflections like is, am, are, was, were).
+                    *   **Wildcards:** `*ing` (finds any token ending in "ing").
+                    *   **Unions:** `can|could` (finds instances of either word).
+            3. **Output Basis (Advanced Only):**
+                *   **Word:** Click the **Word** radio button to explode your query into its individual matched tokens. For example, querying `[see]` will plot separate lines for `see`, `saw`, `seen`, and `seeing`.
+                *   **Lemma:** Click the **Lemma** radio button to group all matched tokens into a single aggregated line representing your core query (e.g., one line for `[see]`).
+            4. **Statistics & Interpretation:**
+                *   Scroll down to the **Inferential Statistics & Interpretation** section.
+                *   Select an analysis type from the radio buttons (e.g., Correlation, Trend Comparison).
+                *   Click the **Generate Chart & Analysis** button to calculate the results and generate AI interpretation.
+        """,
+        "Exclusive Words": """
+            ### 💎 Exclusive Words Guidelines
+            
+            This tab identifies vocabulary that is **entirely unique** to one specific metadata period and completely absent from all others.
+            *   **Usage:** Useful for finding highly specialized terminology or jargon isolated to a specific genre, author, or era.
+            *   **Configuration:** 
+                1. Select a **Time Attribute** from the dropdown. 
+                2. Review the detected chronological order in the box below it.
+            *   **Part-of-Speech Filter (Optional):** You can apply POS filters to narrow down the results. 
+                1. Click the **Include** radio button if you only want to analyze words that match your selected tags (e.g., Select Nouns and Verbs in the dropdown below).
+                2. Click the **Exclude** radio button if you want to analyze everything *except* your selected tags (e.g., Select punctuation tags in the dropdown below to ignore them).
+        """,
+        "Emerging Words": """
+            ### 🌱 Emerging Words Guidelines
+            
+            This tab tracks the **first appearance** of words in your corpus across an ordered timeline. 
+            *   **Usage:** Ideal for neologism research and tracking language evolution. It highlights when a word was introduced into the corpus and measures its relative frequency at the time of emergence.
+            *   **Configuration:** 
+                1. Select a **Time Attribute** from the dropdown. 
+                2. Review the detected chronological order in the box below it.
+            *   **Part-of-Speech Filter (Optional):** You can apply POS filters to narrow down the results. 
+                1. Click the **Include** radio button if you only want to analyze words that match your selected tags (e.g., Select Nouns and Verbs in the dropdown below).
+                2. Click the **Exclude** radio button if you want to analyze everything *except* your selected tags (e.g., Select punctuation tags in the dropdown below to ignore them).
+        """
+    }
 }
 
 def render_guidelines(module_name, sub_tab=None, key_prefix=""):
@@ -397,8 +397,8 @@ def render_guidelines(module_name, sub_tab=None, key_prefix=""):
             """, unsafe_allow_html=True)
             with st.container(border=True):
                 # Retrieve the markdown content
-                if module_name == "Overview" and sub_tab:
-                    content = GUIDELINES.get("Overview", {}).get(sub_tab, "No instructions available.")
+                if module_name in ["Overview", "Word Trend"] and sub_tab:
+                    content = GUIDELINES.get(module_name, {}).get(sub_tab, "No instructions available.")
                 else:
                     content = GUIDELINES.get(module_name, "No instructions available.")
                 st.markdown(content)
