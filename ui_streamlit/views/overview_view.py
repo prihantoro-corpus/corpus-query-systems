@@ -4,8 +4,6 @@ import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
 from ui_streamlit.utils import notify_timing
 import core.modules.overview as ov
-import importlib
-importlib.reload(ov)
 from core.ai_service import interpret_results_llm, guess_pos_definitions
 from core.preprocessing.xml_parser import format_structure_data_hierarchical, apply_xml_restrictions
 from ui_streamlit.components.filters import render_xml_restriction_filters
@@ -21,9 +19,6 @@ from core.modules.classification import (
 )
 import core.modules.readability as rd
 import core.modules.lexical_complexity as lc
-import importlib
-importlib.reload(rd)
-importlib.reload(lc)
 
 get_sentence_stats = rd.get_sentence_stats
 compute_readability_metrics = rd.compute_readability_metrics

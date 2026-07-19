@@ -61,10 +61,12 @@ def calculate_corpus_statistics(corpus_stats, db_path=None):
     if db_path and (total_tokens == 0 or type_count == 0):
         try:
             con = duckdb.connect(db_path, read_only=True)
-            res = con.execute("SELECT count(*), count(DISTINCT _token_low) FROM corpus").fetchone()
-            total_tokens = res[0]
-            type_count = res[1]
-            con.close()
+            try:
+                res = con.execute("SELECT count(*), count(DISTINCT _token_low) FROM corpus").fetchone()
+                total_tokens = res[0]
+                type_count = res[1]
+            finally:
+                con.close()
         except:
             pass
 

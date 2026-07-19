@@ -51,11 +51,17 @@ def get_spacy_pipeline(lang_code):
     model_name = SPACY_MODEL_MAP[lang_code]
     try:
         import spacy
-        nlp = spacy.load(model_name)
+        try:
+            nlp = spacy.load(model_name)
+        except OSError:
+            print(f"SpaCy model '{model_name}' not found locally. Downloading on demand...")
+            from spacy.cli import download
+            download(model_name)
+            nlp = spacy.load(model_name)
         _SPACY_PIPELINES[lang_code] = nlp
         return nlp
-    except (OSError, ImportError):
-        print(f"SpaCy model '{model_name}' not found locally. Skipping dynamic download on cloud.")
+    except Exception as e:
+        print(f"SpaCy model '{model_name}' download or load failed: {e}")
         return None
 
 def tag_text_with_spacy(text, lang_code):

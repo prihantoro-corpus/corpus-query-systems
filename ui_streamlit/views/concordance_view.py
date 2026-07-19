@@ -306,6 +306,12 @@ def render_concordance_view():
                 if not comp_mode:
                     xml_filters = render_xml_restriction_filters(corpus_path, "concordance", corpus_name=corpus_name)
                     xml_where, xml_params = apply_xml_restrictions(xml_filters)
+                    
+                    forced_where = get_state('concordance_forced_xml_where', '')
+                    if forced_where:
+                        xml_where += forced_where
+                        # Clear it so it doesn't persist across arbitrary searches
+                        set_state('concordance_forced_xml_where', '')
                 else:
                     col_f1, col_f2 = st.columns(2)
                     with col_f1:
