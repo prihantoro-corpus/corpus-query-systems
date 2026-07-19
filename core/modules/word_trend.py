@@ -274,7 +274,7 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
     finally:
         con.close()
 
-def get_word_tracker_data(db_path, time_attr, words):
+def get_word_tracker_data(db_path, time_attr, words, is_advanced=False, basis='word'):
     """
     Computes relative frequency (per million words) over time for a specific list of words.
     Returns a pivot table DataFrame suitable for line charting: 
@@ -290,29 +290,164 @@ def get_word_tracker_data(db_path, time_attr, words):
 
     con = duckdb.connect(db_path, read_only=True)
     try:
-        # Escape strings for SQL IN clause
-        words_sql = ", ".join([f"'{w.replace(chr(39), chr(39)+chr(39))}'" for w in clean_words])
-        
-        query = f"""
-        WITH period_totals AS (
-            SELECT CAST({time_attr} AS VARCHAR) as time_val, CAST(COUNT(*) AS DOUBLE) as total_tokens
-            FROM corpus
-            WHERE {time_attr} IS NOT NULL
-            GROUP BY CAST({time_attr} AS VARCHAR)
-        ),
-        word_counts AS (
-            SELECT CAST({time_attr} AS VARCHAR) as time_val, _token_low, CAST(COUNT(*) AS DOUBLE) as freq
-            FROM corpus
-            WHERE _token_low IN ({words_sql}) AND {time_attr} IS NOT NULL
-            GROUP BY CAST({time_attr} AS VARCHAR), _token_low
-        )
-        SELECT p.time_val, w._token_low, 
-               (COALESCE(w.freq, 0) / p.total_tokens * 1000000) as rel_freq
-        FROM period_totals p
-        JOIN word_counts w ON p.time_val = w.time_val
-        """
-        
-        df = con.execute(query).fetch_df()
+        # Check raw mode
+        is_raw_mode = False
+        try:
+            cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
+            if 'pos' in cols:
+                raw_count = con.execute("SELECT count(*) FROM corpus WHERE pos LIKE '##%'").fetchone()[0]
+                total_rows = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+                is_raw_mode = (raw_count / total_rows) > 0.99
+        except: pass
+
+        if not is_advanced:
+            # Simple Mode
+            words_sql = ", ".join([f"'{w.replace(chr(39), chr(39)+chr(39))}'" for w in clean_words])
+            
+            query = f"""
+            WITH period_totals AS (
+                SELECT CAST({time_attr} AS VARCHAR) as time_val, CAST(COUNT(*) AS DOUBLE) as total_tokens
+                FROM corpus
+                WHERE {time_attr} IS NOT NULL
+                GROUP BY CAST({time_attr} AS VARCHAR)
+            ),
+            word_counts AS (
+                SELECT CAST({time_attr} AS VARCHAR) as time_val, _token_low as word_label, CAST(COUNT(*) AS DOUBLE) as freq
+                FROM corpus
+                WHERE _token_low IN ({words_sql}) AND {time_attr} IS NOT NULL
+                GROUP BY CAST({time_attr} AS VARCHAR), _token_low
+            )
+            SELECT p.time_val, w.word_label as _token_low, 
+                   (COALESCE(w.freq, 0) / p.total_tokens * 1000000) as rel_freq
+            FROM period_totals p
+            JOIN word_counts w ON p.time_val = w.time_val
+            """
+            df = con.execute(query).fetch_df()
+        else:
+            # Advanced Mode
+            import re
+            def parse_term_to_sql(term):
+                lemma_match = re.search(r"\[(.*?)\]", term)
+                bracket_idx = term.find('[')
+                if lemma_match:
+                    inner_val = lemma_match.group(1).strip()
+                    if '_' in inner_val and not inner_val.startswith('_'):
+                        parts = inner_val.rsplit('_', 1)
+                        if len(parts) == 2 and parts[1]:
+                            return build_sql('lemma_pos', parts[0].lower(), parts[1])
+                    val = inner_val.lower()
+                    return build_sql('lemma', val, None)
+                    
+                if '_' in term and not term.startswith('_') and not lemma_match:
+                    parts = term.rsplit('_', 1)
+                    if len(parts) == 2 and parts[1]:
+                        return build_sql('token_pos', parts[0].lower(), parts[1])
+
+                pos_match = re.search(r"\_([A-Za-z0-9\*|\\-]+)", term)
+                if pos_match: 
+                    return build_sql('pos', pos_match.group(1).strip(), None)
+                    
+                # If plain text, check basis
+                if basis.lower() == 'lemma':
+                    return build_sql('lemma', term.lower(), None)
+                return build_sql('word', term.lower(), None)
+
+            def build_sql(ttype, val1, val2):
+                def val_to_regex(v):
+                    parts = [p.strip() for p in v.split('|') if p.strip()]
+                    regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                    return '(?i)^(' + '|'.join(regex_parts) + ')$'
+                    
+                conds = []
+                params = []
+                if ttype == 'word':
+                    if '*' in val1 or '|' in val1:
+                        conds.append("regexp_matches(_token_low, ?)")
+                        params.append(val_to_regex(val1))
+                    else:
+                        conds.append("_token_low = ?")
+                        params.append(val1)
+                elif ttype == 'lemma':
+                    if '*' in val1 or '|' in val1:
+                        conds.append("regexp_matches(lower(lemma), ?)")
+                        params.append(val_to_regex(val1))
+                    else:
+                        conds.append("lower(lemma) = ?")
+                        params.append(val1)
+                elif ttype == 'pos':
+                    conds.append("regexp_matches(pos, ?)")
+                    params.append(val_to_regex(val1))
+                elif ttype == 'token_pos':
+                    if '*' in val1 or '|' in val1:
+                        conds.append("regexp_matches(_token_low, ?)")
+                        params.append(val_to_regex(val1))
+                    else:
+                        conds.append("_token_low = ?")
+                        params.append(val1)
+                    conds.append("regexp_matches(pos, ?)")
+                    params.append(val_to_regex(val2))
+                elif ttype == 'lemma_pos':
+                    if '*' in val1 or '|' in val1:
+                        conds.append("regexp_matches(lower(lemma), ?)")
+                        params.append(val_to_regex(val1))
+                    else:
+                        conds.append("lower(lemma) = ?")
+                        params.append(val1)
+                    conds.append("regexp_matches(pos, ?)")
+                    params.append(val_to_regex(val2))
+                    
+                return " AND ".join(conds), params
+
+            ctes = []
+            all_params = []
+            union_selects = []
+            
+            ctes.append(f"""
+                period_totals AS (
+                    SELECT CAST({time_attr} AS VARCHAR) as time_val, CAST(COUNT(*) AS DOUBLE) as total_tokens
+                    FROM corpus
+                    WHERE {time_attr} IS NOT NULL
+                    GROUP BY CAST({time_attr} AS VARCHAR)
+                )
+            """)
+            
+            for i, word in enumerate(clean_words):
+                sql_cond, params = parse_term_to_sql(word)
+                all_params.extend(params)
+                
+                cte_name = f"q{i}_counts"
+                if basis.lower() == 'word':
+                    ctes.append(f"""
+                    {cte_name} AS (
+                        SELECT CAST({time_attr} AS VARCHAR) as time_val, _token_low as word_label, CAST(COUNT(*) AS DOUBLE) as freq
+                        FROM corpus
+                        WHERE {time_attr} IS NOT NULL AND ({sql_cond})
+                        GROUP BY CAST({time_attr} AS VARCHAR), _token_low
+                    )
+                    """)
+                else:
+                    safe_word = word.replace("'", "''")
+                    ctes.append(f"""
+                    {cte_name} AS (
+                        SELECT CAST({time_attr} AS VARCHAR) as time_val, '{safe_word}' as word_label, CAST(COUNT(*) AS DOUBLE) as freq
+                        FROM corpus
+                        WHERE {time_attr} IS NOT NULL AND ({sql_cond})
+                        GROUP BY CAST({time_attr} AS VARCHAR)
+                    )
+                    """)
+                union_selects.append(f"SELECT time_val, word_label, freq FROM {cte_name}")
+            
+            query = "WITH " + ",\n".join(ctes) + "\n"
+            query += ",\nall_counts AS (\n" + "\nUNION ALL\n".join(union_selects) + "\n)\n"
+            query += f"""
+            SELECT p.time_val, w.word_label as _token_low, 
+                   (COALESCE(SUM(w.freq), 0) / p.total_tokens * 1000000) as rel_freq
+            FROM period_totals p
+            JOIN all_counts w ON p.time_val = w.time_val
+            GROUP BY p.time_val, w.word_label, p.total_tokens
+            """
+            df = con.execute(query, all_params).fetch_df()
+
         if df.empty:
             return pd.DataFrame()
             
