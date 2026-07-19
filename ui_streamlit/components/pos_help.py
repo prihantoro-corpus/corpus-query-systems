@@ -200,10 +200,12 @@ def get_pos_tag_examples(db_path, tag):
     if examples_str:
         try:
             con_write = duckdb.connect(db_path, read_only=False)
-            con_write.execute("CREATE TABLE IF NOT EXISTS pos_examples (tag VARCHAR PRIMARY KEY, examples VARCHAR)")
-            con_write.execute("DELETE FROM pos_examples WHERE tag = ?", [tag])
-            con_write.execute("INSERT INTO pos_examples VALUES (?, ?)", [tag, examples_str])
-            con_write.close()
+            try:
+                con_write.execute("CREATE TABLE IF NOT EXISTS pos_examples (tag VARCHAR PRIMARY KEY, examples VARCHAR)")
+                con_write.execute("DELETE FROM pos_examples WHERE tag = ?", [tag])
+                con_write.execute("INSERT INTO pos_examples VALUES (?, ?)", [tag, examples_str])
+            finally:
+                con_write.close()
         except Exception:
             pass
             

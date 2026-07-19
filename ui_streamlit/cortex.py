@@ -10,7 +10,6 @@ if architecture_root not in sys.path:
 
 # Force reload logic removed to improve performance. 
 # Streamlit handles module reloading natively in development mode.
-import importlib
 import core.config
 import core.ai_service
 import core.modules.concordance
@@ -18,26 +17,13 @@ import core.modules.collocation
 import core.modules.distribution
 import core.modules.statistical_testing
 import core.modules.ngram
+import core.modules.word_trend
 import ui_streamlit.state_manager
 import ui_streamlit.caching
 import ui_streamlit.components.sidebar
 import ui_streamlit.components.corpus_selection
 import ui_streamlit.views.overview_view
 import ui_streamlit.views.concordance_view
-
-importlib.reload(core.config)
-importlib.reload(core.ai_service)
-importlib.reload(core.modules.concordance)
-importlib.reload(core.modules.collocation)
-importlib.reload(core.modules.distribution)
-importlib.reload(core.modules.statistical_testing)
-importlib.reload(core.modules.ngram)
-importlib.reload(ui_streamlit.state_manager)
-importlib.reload(ui_streamlit.caching)
-importlib.reload(ui_streamlit.components.sidebar)
-importlib.reload(ui_streamlit.components.corpus_selection)
-importlib.reload(ui_streamlit.views.overview_view)
-importlib.reload(ui_streamlit.views.concordance_view)
 
 # Debug Imports
 try:
@@ -54,6 +40,7 @@ try:
     from ui_streamlit.views.word_profiler_view import render_word_profiler_view
     from ui_streamlit.views.summarisation_view import render_summarisation_view
     from ui_streamlit.views.quiz_creation_view import render_quiz_creation_view
+    from ui_streamlit.views.word_trend_view import render_word_trend_view
 except ImportError as e:
     st.error(f"Import Error: {e}")
     st.stop()
@@ -71,6 +58,14 @@ st.set_page_config(
 
 # Initialize State
 init_session_state()
+
+# Handle Query Params for URL-based Routing (e.g. from Word Trend)
+if 'word' in st.query_params and 'time' in st.query_params and 'attr' in st.query_params:
+    ui_streamlit.state_manager.set_state('kwic_search_term', st.query_params['word'])
+    ui_streamlit.state_manager.set_state('concordance_forced_xml_where', f" AND CAST({st.query_params['attr']} AS VARCHAR) = '{st.query_params['time']}'")
+    ui_streamlit.state_manager.set_state('current_module', 'Concordance')
+    st.query_params.clear()
+    st.rerun()
 
 # CSS Styling for Premium Dark Blue Theme
 PRIMARY_COLOR = "#00ADB5"
@@ -308,6 +303,9 @@ def main():
         render_collocation_view()
     elif current_view == "Dictionary":
         render_dictionary_view()
+    elif current_view == "Word Trend":
+        from ui_streamlit.views.word_trend_view import render_word_trend_view
+        render_word_trend_view()
     elif current_view == "Word Profiler":
         render_word_profiler_view()
     elif current_view == "Keyword":

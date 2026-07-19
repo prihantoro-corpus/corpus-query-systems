@@ -61,15 +61,19 @@ def render_sidebar():
         except ImportError:
             pass
 
-    env_badge = "💻 Local Installation" if is_local else "🌐 Server Instance"
-    st.sidebar.markdown(f"<div style='font-size:1.0em; color:#FFFFFF; font-weight:500; margin-bottom:10px;'>{env_badge}</div>", unsafe_allow_html=True)
-    view = st.sidebar.radio(
-        "Modules", 
-        ["Overview", "Concordance", "N-Gram", "Collocation", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
-    )
+    module_list = ["Overview", "Concordance", "N-Gram", "Collocation", "Word Trend", "Word Profiler", "Dictionary", "Keyword", "Distribution", "Statistical Testing", "Summarisation", "Quiz Creation"]
     
+    current_module = get_state('current_module', 'Overview')
+    if current_module not in module_list:
+        current_module = 'Overview'
+        
+    index = module_list.index(current_module)
+    view = st.sidebar.radio("Modules", module_list, index=index)
     
-    # 4. AI Interpretation Settings
+    if view != current_module:
+        set_state('current_module', view)
+        st.rerun()
+    
     st.sidebar.title("AI Interpretation")
     
     # AI Provider Selection
