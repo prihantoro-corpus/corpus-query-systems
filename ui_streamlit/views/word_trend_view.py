@@ -108,6 +108,16 @@ def render_results_section(df_display, df_full, selected_attr, key_prefix):
         st.markdown(ai_res)
 
 def render_word_trend_view():
+    import importlib
+    import core.modules.word_trend
+    importlib.reload(core.modules.word_trend)
+    global get_available_metadata_attributes, get_metadata_values, get_emerging_words, get_word_tracker_data, compute_tracker_statistics
+    get_available_metadata_attributes = core.modules.word_trend.get_available_metadata_attributes
+    get_metadata_values = core.modules.word_trend.get_metadata_values
+    get_emerging_words = core.modules.word_trend.get_emerging_words
+    get_word_tracker_data = core.modules.word_trend.get_word_tracker_data
+    compute_tracker_statistics = core.modules.word_trend.compute_tracker_statistics
+    
     st.header("Word Trend")
     
     corpus_path = get_state('current_corpus_path')
@@ -118,8 +128,11 @@ def render_word_trend_view():
     st.markdown("Analyze how vocabulary changes over time.")
     
     # Render the global tabs at the top
-    tab_excl, tab_emerge, tab_tracker = st.tabs(["💎 Exclusive Words (Unique to Period)", "🌱 Emerging Words (Chronological)", "📈 Word Tracker (Custom)"])
+    tab_tracker, tab_excl, tab_emerge = st.tabs(["📈 Word Tracker (Custom)", "💎 Exclusive Words (Unique to Period)", "🌱 Emerging Words (Chronological)"])
     
+    with tab_tracker:
+        render_word_tracker_tab(corpus_path)
+
     with tab_excl:
         render_trend_tab(
             corpus_path=corpus_path,
@@ -137,9 +150,6 @@ def render_word_trend_view():
             description="Identify words that **emerge for the first time** in the corpus over a chronological timeline.",
             key_prefix="emerge"
         )
-        
-    with tab_tracker:
-        render_word_tracker_tab(corpus_path)
 
 def render_trend_tab(corpus_path, mode, title, description, key_prefix):
     st.markdown(description)
@@ -242,8 +252,36 @@ def render_word_tracker_tab(corpus_path):
     if selected_attr:
         # Word Input
         st.subheader("2. Words to Track")
-        st.info("Input words separated by a comma. (e.g. technology, computer, internet, smartphone, digital)")
-        tracked_words_input = st.text_input("Enter words", key="tracker_words_input")
+        tracker_mode = st.radio("Search Mode", ["Simple", "Advanced"], horizontal=True, key="tracker_search_mode")
+        
+        if tracker_mode == "Simple":
+            st.info("Input words separated by a comma. (e.g. technology, computer, internet, smartphone, digital)")
+            tracked_words_input = st.text_input("Enter words", key="tracker_words_input_simple")
+            words_to_track = [w.strip() for w in tracked_words_input.split(',')] if tracked_words_input else []
+            tracker_basis = "Word"
+        else:
+            st.info("Advanced query. Use POS, tag, lemma, wildcard like you use in advanced concordance. Use the ➕ button to add more queries to compare. (e.g. can_NN or [go]_V*)")
+            
+            tracker_basis = st.radio("Output Basis", ["Word", "Lemma"], horizontal=True, key="tracker_basis_adv")
+            
+            if 'tracker_adv_queries' not in st.session_state:
+                st.session_state['tracker_adv_queries'] = [""]
+                
+            for i, q in enumerate(st.session_state['tracker_adv_queries']):
+                col_input, col_btn = st.columns([10, 1])
+                with col_input:
+                    st.session_state['tracker_adv_queries'][i] = st.text_input(f"Query {i+1}", value=q, key=f"tracker_adv_query_{i}", label_visibility="collapsed")
+                with col_btn:
+                    if i > 0:
+                        if st.button("✖", key=f"btn_rem_adv_{i}"):
+                            st.session_state['tracker_adv_queries'].pop(i)
+                            st.rerun()
+                            
+            if st.button("➕ Add Query", key="btn_add_adv"):
+                st.session_state['tracker_adv_queries'].append("")
+                st.rerun()
+                
+            words_to_track = [q.strip() for q in st.session_state['tracker_adv_queries'] if q.strip()]
         
         st.subheader("3. Inferential Statistics & Interpretation")
         stat_options = {
@@ -265,13 +303,13 @@ def render_word_tracker_tab(corpus_path):
                                  captions=captions)
         
         if st.button("Generate Chart & Analysis", type="primary", key="btn_tracker"):
-            if not tracked_words_input:
-                st.error("Please enter at least one word to track.")
+            if not words_to_track:
+                st.error("Please enter at least one word or query to track.")
             else:
-                words = [w.strip() for w in tracked_words_input.split(',')]
+                is_advanced = (tracker_mode == "Advanced")
                 
                 with st.spinner("Generating chart and computing statistics..."):
-                    df_chart = get_word_tracker_data(corpus_path, selected_attr, words)
+                    df_chart = get_word_tracker_data(corpus_path, selected_attr, words_to_track, is_advanced=is_advanced, basis=tracker_basis)
                     
                     if df_chart.empty:
                         st.warning("None of the tracked words were found in the corpus across the time periods.")
@@ -314,7 +352,9 @@ def render_word_tracker_tab(corpus_path):
             st.info("Showing individual trends (Relative Frequency per million words) for each tracked word.")
             for word in plot_df.columns:
                 st.markdown(f"#### 📈 {word.capitalize()}")
-                word_df = plot_df[[word]]
+                word_df = plot_df[[word]].copy()
+                # Rename the column to avoid Altair/Vega-Lite parsing errors with bracketed column names like '[see]'
+                word_df.columns = ["Relative Frequency"]
                 st.line_chart(word_df, use_container_width=True)
                 
             # 3. Statistical Interpretation (Rubric Based)
