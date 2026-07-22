@@ -159,9 +159,9 @@ def tag_text_with_treetagger(text, lang_code):
     # OS Detection
     system = platform.system().lower()
     if system == 'windows':
-        executable = os.path.join(tt_dir, 'windows', 'tree-tagger.exe')
+        executable = os.path.join(tt_dir, '_Windows', 'tree-tagger.exe')
     else:
-        executable = os.path.join(tt_dir, 'linux', 'tree-tagger')
+        executable = os.path.join(tt_dir, '_Linux', 'tree-tagger')
         
     param_file = os.path.join(tt_dir, 'language_model', TREETAGGER_LANG_MAP[lang_code].replace('/', os.sep))
     
