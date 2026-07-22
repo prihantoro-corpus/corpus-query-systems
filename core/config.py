@@ -148,5 +148,6 @@ STANZA_LANG_MAP = {
     "Croatian": "hr",
     "Lithuanian": "lt",
     "Macedonian": "mk",
-    "Slovenian": "sl"
+    "Slovenian": "sl",
+    "Malagasy": "mg"
 }

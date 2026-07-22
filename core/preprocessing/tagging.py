@@ -134,20 +134,139 @@ def get_stanza_pipeline(lang_code):
     print(f"Skipping dynamic Stanza download on cloud for '{lang_code}'.")
     return None
 
+import subprocess
+import tempfile
+import os
+import platform
+
+# Map stanza lang codes to treetagger parameter files
+TREETAGGER_LANG_MAP = {
+    'id': 'indonesian/indonesian_v311225.par',
+    'mg': 'malagasy/malagasy.par' # Replace with actual if name is different
+}
+
+def tag_text_with_treetagger(text, lang_code):
+    """
+    Process text with TreeTagger. Detects OS and uses correct binary.
+    Returns (list of dicts, error_msg)
+    """
+    if lang_code not in TREETAGGER_LANG_MAP:
+        return None, f"Language '{lang_code}' not supported by local TreeTagger."
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    tt_dir = os.path.join(base_dir, 'treetagger')
+    
+    # OS Detection
+    system = platform.system().lower()
+    if system == 'windows':
+        executable = os.path.join(tt_dir, 'windows', 'tree-tagger.exe')
+    else:
+        executable = os.path.join(tt_dir, 'linux', 'tree-tagger')
+        
+    param_file = os.path.join(tt_dir, 'language_model', TREETAGGER_LANG_MAP[lang_code].replace('/', os.sep))
+    
+    # Look for any .par file in the directory if the specific one is not found
+    if not os.path.exists(param_file):
+        lang_folder = os.path.join(tt_dir, 'language_model', TREETAGGER_LANG_MAP[lang_code].split('/')[0])
+        if os.path.exists(lang_folder):
+            for f in os.listdir(lang_folder):
+                if f.endswith('.par'):
+                    param_file = os.path.join(lang_folder, f)
+                    break
+    
+    if not os.path.exists(executable):
+        return None, f"TreeTagger executable not found at {executable}."
+    if not os.path.exists(param_file):
+        return None, f"TreeTagger parameter file not found at {param_file}."
+        
+    # Check if executable can be run (Linux might need chmod +x, or wrong arch)
+    if system != 'windows' and not os.access(executable, os.X_OK):
+        try:
+            os.chmod(executable, 0o755)
+        except Exception:
+            pass
+
+    try:
+        # TreeTagger expects one token per line for input (or just raw text for some configurations, but we'll use regex to split)
+        # We will let TreeTagger tokenize if it can, but it's usually better to feed it tokens. 
+        # Wait, the user command is: ./tree-tagger file.par input.txt output.txt -token -lemma
+        # This implies it takes raw text and tokenizes it itself because of the -token flag!
+        
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False) as f_in:
+            f_in.write(text)
+            input_path = f_in.name
+            
+        with tempfile.NamedTemporaryFile(mode='r', encoding='utf-8', delete=False) as f_out:
+            output_path = f_out.name
+
+        cmd = [executable, param_file, input_path, output_path, '-token', '-lemma']
+        
+        # Run subprocess
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        
+        # Read output
+        with open(output_path, 'r', encoding='utf-8') as f:
+            output_text = f.read()
+            
+        os.remove(input_path)
+        os.remove(output_path)
+        
+        # Parse vertical output: token \t pos \t lemma
+        results = []
+        sent_id = 1
+        lines = [l.strip() for l in output_text.split('\n') if l.strip()]
+        
+        for line in lines:
+            parts = line.split('\t')
+            if not parts or not parts[0]:
+                continue
+            token = parts[0]
+            pos = parts[1] if len(parts) > 1 else 'TAG'
+            lemma = parts[2] if len(parts) > 2 else token
+            
+            results.append({
+                'token': token,
+                'pos': pos,
+                'lemma': lemma,
+                'sent_id': sent_id,
+                'ent_type': ""
+            })
+            
+            # Simple sentence splitting heuristic based on punctuation
+            if token in ['.', '!', '?']:
+                sent_id += 1
+                
+        return results, None
+        
+    except subprocess.CalledProcessError as e:
+        return None, f"TreeTagger execution failed: {e.stderr}"
+    except Exception as e:
+        return None, f"TreeTagger error: {str(e)}"
+
 def tag_text_with_stanza(text, lang_code):
     """
-    Process text. Tries SpaCy first for massive speedups, falls back to Stanza if unavailable.
+    Process text. Tries TreeTagger first, then SpaCy, then Stanza.
     Returns a tuple (list of dicts, error_msg)
     """
-    # 1. Try SpaCy first
+    # 1. Try TreeTagger first (Highest Priority)
+    tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
+    if tt_results is not None:
+        print(f"Text tagged successfully using TreeTagger for '{lang_code}'.")
+        return tt_results, None
+        
+    print(f"TreeTagger not available/failed for '{lang_code}' (Error: {tt_err}). Falling back to SpaCy/Stanza...")
+
+    # 2. Try SpaCy
     spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
     if spacy_results is not None:
         print(f"Text tagged successfully using SpaCy for '{lang_code}'.")
-        return spacy_results, None
+        # If TreeTagger failed but was attempted, we could pass the warning. 
+        # But we must return the result. We'll return the error string as warning.
+        return spacy_results, f"treetagger fail, switching to SpaCy. {tt_err}"
         
     print(f"SpaCy not available/failed for '{lang_code}' (Error: {spacy_err}). Falling back to Stanza...")
     
-    # 2. Try Stanza First (User requested priority)
+    # 3. Try Stanza
     try:
         nlp = get_stanza_pipeline(lang_code)
         if nlp:
@@ -165,7 +284,7 @@ def tag_text_with_stanza(text, lang_code):
                         'ent_type': ""
                     })
             print(f"Text tagged successfully using Stanza for '{lang_code}'.")
-            return results, None
+            return results, f"treetagger fail, switching to Stanza. {tt_err}" if tt_err else None
     except Exception as e:
         print(f"Stanza error for {lang_code}: {str(e)}")
         
@@ -197,7 +316,8 @@ def tag_text_with_stanza(text, lang_code):
         except Exception as e:
             print(f"Failed to load/tag with {lang_code}-hmm.pkl: {e}")
     # 4. Fallback to Simple Regex Tokenizer
-    return tag_text_simple_fallback(text)
+    fallback_res, fallback_err = tag_text_simple_fallback(text)
+    return fallback_res, f"treetagger fail, switching to fallback. {tt_err}" if tt_err else fallback_err
 
 def tag_text_simple_fallback(text):
     """
