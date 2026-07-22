@@ -440,6 +440,11 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
                 elif re_score >= 30: re_label = "moderately complex"
                 else: re_label = "very difficult"
 
+        # --- 8. Tagger Information ---
+        from ui_streamlit.components.pos_help import infer_tagger_and_tagset
+        tagger, tagset = infer_tagger_and_tagset(path)
+        tagger_text = f"This corpus was part-of-speech tagged using {tagger} ({tagset})."
+
         con.close()
         
         # --- Constructing the Final Template ---
@@ -451,13 +456,13 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
                 f"The lexical diversity is {div_label} with STTR (100) = {sttr_100:.4f}. "
                 f"The lexical density is {ld_label} ({ld_score:.4f}). "
                 f"The reading ease is {re_label} with an average grade/score of {re_score:.1f}. "
-                f"{status_text}"
+                f"{status_text} {tagger_text}"
             )
         else:
             # Condensed remains narrative but follows the logic
             narration_text = (
                 f"A {full_lang} corpus of {total_tokens:,} tokens with {attr_count} metadata facets. "
-                f"Lexically {div_label} (STTR: {sttr_100:.4f}). {status_text}"
+                f"Lexically {div_label} (STTR: {sttr_100:.4f}). {status_text} {tagger_text}"
             )
 
         # Render Narration

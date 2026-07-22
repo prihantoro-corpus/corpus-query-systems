@@ -373,6 +373,21 @@ def set_corpus_language(db_path, language):
     finally:
         con.close()
 
+def set_corpus_metadata(db_path, key, value):
+    """Saves arbitrary key-value metadata to the corpus_metadata table."""
+    if not db_path or not key: return False
+    con = duckdb.connect(db_path)
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
+        con.execute("INSERT INTO corpus_metadata VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [key, str(value)])
+        return True
+    except Exception as e:
+        print(f"Error setting metadata {key}: {e}")
+        return False
+    finally:
+        con.close()
+
+
 def set_xml_structure(db_path, structure):
     """Saves the XML structure dictionary (converting sets to lists) to database metadata."""
     if not db_path or not structure: return False
