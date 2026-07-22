@@ -142,7 +142,8 @@ import platform
 # Map stanza lang codes to treetagger parameter files
 TREETAGGER_LANG_MAP = {
     'id': 'indonesian/indonesian_v311225.par',
-    'mg': 'malagasy/malagasy.par' # Replace with actual if name is different
+    'mg': 'malagasy/malagasy.par', # Replace with actual if name is different
+    'en': 'english/english.par'
 }
 
 def tag_text_with_treetagger(text, lang_code):
