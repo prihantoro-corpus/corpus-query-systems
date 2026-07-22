@@ -532,7 +532,8 @@ FOLDER_TO_LANG_MAP = {
     'japanese': 'Japanese',
     'korean': 'Korean',
     'javanese': 'Javanese',
-    'hindi': 'Hindi'
+    'hindi': 'Hindi',
+    'malagasy': 'Malagasy'
 }
 
 @profile_func
