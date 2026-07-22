@@ -295,8 +295,36 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     final_lang_code = xml_detected_lang_code if xml_detected_lang_code else source_lang_code
     
     # Save Language to Metadata
-    from core.modules.overview import set_corpus_language
+    from core.modules.overview import set_corpus_language, set_corpus_metadata
     set_corpus_language(db_path, final_lang_code)
+    
+    # Determine actual tagger used
+    actual_tagger = "Pre-tagged"
+    actual_tagset = "Unknown"
+    
+    if 'current_is_tagged' in locals() and current_is_tagged or 'Vertical' in selected_format:
+        actual_tagger = "Pre-tagged (User Provided)"
+    elif custom_tagger:
+        actual_tagger = "Custom Data-Driven Tagger"
+    else:
+        if 'stanza_warning' in locals() and stanza_warning and 'switching to SpaCy' in stanza_warning:
+            actual_tagger = "SpaCy (Fallback from TreeTagger)"
+        elif 'stanza_warning' in locals() and stanza_warning and 'switching to Stanza' in stanza_warning:
+            actual_tagger = "Stanza (Fallback)"
+        elif final_lang_code in ['id', 'mg']:
+            actual_tagger = "TreeTagger"
+            if final_lang_code == 'id':
+                actual_tagset = "ID-BPPT Indonesian Tagset"
+            elif final_lang_code == 'mg':
+                actual_tagset = "TreeTagger (Malagasy)"
+        elif 'stanza_warning' in locals() and stanza_warning:
+            actual_tagger = "Simple Fallback Tagger"
+        else:
+            actual_tagger = "SpaCy/Stanza Pipeline"
+            
+    set_corpus_metadata(db_path, 'tagger', actual_tagger)
+    if actual_tagset != "Unknown":
+        set_corpus_metadata(db_path, 'tagset', actual_tagset)
     
     # Save XML structure to Metadata if present
     if combined_structure:
