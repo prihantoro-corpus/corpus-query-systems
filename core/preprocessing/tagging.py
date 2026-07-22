@@ -188,13 +188,22 @@ def tag_text_with_treetagger(text, lang_code):
             pass
 
     try:
-        # TreeTagger expects one token per line for input (or just raw text for some configurations, but we'll use regex to split)
-        # We will let TreeTagger tokenize if it can, but it's usually better to feed it tokens. 
-        # Wait, the user command is: ./tree-tagger file.par input.txt output.txt -token -lemma
-        # This implies it takes raw text and tokenizes it itself because of the -token flag!
+        # Tokenize text safely first
+        sentences_tokens = tokenize_text_only(text, lang_code)
         
+        # Apply Indonesian Clitic Splitter if ID
+        if lang_code == 'id':
+            from core.preprocessing.indonesian_tokenizer import tokenize_indonesian_clitics
+            processed_sentences = []
+            for sent in sentences_tokens:
+                processed_sentences.append(tokenize_indonesian_clitics(sent))
+            sentences_tokens = processed_sentences
+            
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False) as f_in:
-            f_in.write(text)
+            for sent in sentences_tokens:
+                for token in sent:
+                    if token.strip():
+                        f_in.write(token.strip() + "\n")
             input_path = f_in.name
             
         with tempfile.NamedTemporaryFile(mode='r', encoding='utf-8', delete=False) as f_out:
