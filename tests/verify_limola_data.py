@@ -14,7 +14,7 @@ def check_limola_values():
         result = load_monolingual_corpus_files([f], 'id', 'XML (Tagged)')
         
     db_path = result['db_path']
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     
     cols = ['speaker', 'year', 'location', 'language']
     

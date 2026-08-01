@@ -13,7 +13,7 @@ def simulate_filters_logic():
         result = load_monolingual_corpus_files([f], 'id', 'XML (Tagged)')
     
     db_path = result['db_path']
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     
     print(f"DB Path: {db_path}")
     

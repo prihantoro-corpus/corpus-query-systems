@@ -21,7 +21,7 @@ else:
     print(f"Success! DB Path: {db_path}")
     
     # Check token count
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     count = con.execute("SELECT COUNT(*) FROM corpus").fetchone()[0]
     print(f"Total tokens: {count}")
     

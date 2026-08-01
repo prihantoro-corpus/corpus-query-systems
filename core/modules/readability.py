@@ -113,7 +113,7 @@ def get_sentence_stats(db_path):
     if not db_path:
         return pd.DataFrame(columns=['filename', 'sent_id', 'words', 'syllables', 'characters', 'complex_words'])
         
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         # Determine columns in corpus table
         cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
@@ -409,7 +409,7 @@ def get_chunk_readability_stats(db_path, chunk_size=1000):
     import pandas as pd
     import re
     
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         # Fetch tokens in order of ID
         df = con.execute("SELECT id, token, filename, sent_id FROM corpus ORDER BY id").fetch_df()

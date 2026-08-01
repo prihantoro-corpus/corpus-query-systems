@@ -28,7 +28,7 @@ def test_limola_db_schema():
     print(f"DB created at: {db_path}")
     
     try:
-        con = duckdb.connect(db_path, read_only=True)
+        con = duckdb.connect(db_path)
         cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
         col_names = [c[1] for c in cols_info]
         print(f"DB Columns: {col_names}")

@@ -345,7 +345,7 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
     strictly following the user's requested template.
     """
     try:
-        con = duckdb.connect(path, read_only=True)
+        con = duckdb.connect(path)
         
         # --- 1. Basic corpus size ---
         total_tokens = display_stats.get('total_tokens', 0)
@@ -570,7 +570,7 @@ def render_full_overview(name, path, stats, structure, error):
                     import duckdb
                     st.write(f"DB Path: `{path}`")
                     try:
-                        c = duckdb.connect(path, read_only=True)
+                        c = duckdb.connect(path)
                         info = c.execute("PRAGMA table_info(corpus)").fetch_df()
                         st.write("Table Schema:", info)
 
@@ -830,7 +830,7 @@ def _render_classification_tab(db_path, key_suffix):
     
     # Check Columns
     try:
-        con = duckdb.connect(db_path, read_only=True)
+        con = duckdb.connect(db_path)
         cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
         has_topic = 'topic' in cols
         has_sent = 'sentiment' in cols
@@ -931,7 +931,7 @@ def _render_classification_tab(db_path, key_suffix):
     if st.button("🚀 Run Labeling", key=f"run_cls_{key_suffix}", disabled=not (do_sent or do_topic)):
         with st.spinner("Processing sentences..."):
             try:
-                con = duckdb.connect(db_path, read_only=True)
+                con = duckdb.connect(db_path)
                 df_sents = con.execute("""
                     SELECT filename, sent_id, string_agg(token, ' ' ORDER BY id) as text 
                     FROM corpus 
@@ -1083,7 +1083,7 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
     
     st.subheader("Sub-Corpus Statistics")
     
-    conn = duckdb.connect(db_path, read_only=True)
+    conn = duckdb.connect(db_path)
     try:
         # 1. By File Name
         st.markdown("##### 📂 By File Name")
@@ -1476,7 +1476,7 @@ def render_upload_ui():
                             f.write(first_file.read())
                             
                         # Query metadata
-                        con = duckdb.connect(db_path, read_only=True)
+                        con = duckdb.connect(db_path)
                         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
                         
                         if 'corpus' not in tables:
@@ -1894,7 +1894,7 @@ def _render_metadata_annotation_tab(db_path, key_suffix):
             st.warning("No files found in corpus.")
         else:
             # Get current metadata columns
-            conn = duckdb.connect(db_path, read_only=True)
+            conn = duckdb.connect(db_path)
             cols_info = conn.execute("PRAGMA table_info(corpus)").fetch_df()
             conn.close()
             
@@ -1905,7 +1905,7 @@ def _render_metadata_annotation_tab(db_path, key_suffix):
             state_key = f"meta_editor_df_{db_path}_{key_suffix}"
             
             if get_state(state_key) is None:
-                conn = duckdb.connect(db_path, read_only=True)
+                conn = duckdb.connect(db_path)
                 # Fetch one sample value per filename for each metadata column
                 if meta_cols:
                     select_cols = ", ".join([f"MAX({c}) as {c}" for c in meta_cols])
@@ -2371,7 +2371,7 @@ def _render_reading_ease_tab(db_path, key_suffix=""):
     st.markdown("#### 🚀 Database Readability Annotation")
     st.caption("Annotate the corpus database with Reading Ease difficulty levels. Once annotated, the levels will appear as sub-corpora, and you can restrict searches to specific difficulty ranges using the filter panels.")
     
-    conn = duckdb.connect(db_path, read_only=True)
+    conn = duckdb.connect(db_path)
     cols = [c[1] for c in conn.execute("PRAGMA table_info(corpus)").fetchall()]
     conn.close()
     
@@ -2662,7 +2662,7 @@ def _render_lexical_complexity_tab(db_path, key_suffix=""):
     # Scan for sub-corpus XML attributes
     from core.preprocessing.xml_parser import get_xml_attribute_columns
     
-    conn = duckdb.connect(db_path, read_only=True)
+    conn = duckdb.connect(db_path)
     attr_cols = get_xml_attribute_columns(conn)
     conn.close()
     

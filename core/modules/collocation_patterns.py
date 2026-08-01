@@ -487,7 +487,7 @@ def group_collocates_by_patterns(
     
     # 1. Fetch a significant sample of the node's concordance
     try:
-        con = duckdb.connect(corpus_db_path, read_only=True)
+        con = duckdb.connect(corpus_db_path)
         concordance_data = _fetch_node_concordance_sample(
             con, node_word, window, limit=10000, 
             xml_where_clause=xml_where_clause, xml_params=xml_params

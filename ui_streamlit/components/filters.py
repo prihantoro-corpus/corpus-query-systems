@@ -10,7 +10,7 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
     if not db_path:
         return None
         
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         attr_cols = get_xml_attribute_columns(con)
         

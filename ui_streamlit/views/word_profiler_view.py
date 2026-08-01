@@ -40,7 +40,7 @@ def render_word_profiler_view():
             metadata_col = None
             if basis == "By Metadata":
                 import duckdb
-                con = duckdb.connect(corpus_path, read_only=True)
+                con = duckdb.connect(corpus_path)
                 attr_cols = get_xml_attribute_columns(con)
                 con.close()
                 if attr_cols:

@@ -7,7 +7,7 @@ def mock_generate_grouped_keyword_list(db_path, ref_db_path, group_by_col):
     """
     Prototype logic for generating grouped keywords.
     """
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     
     # 1. Get List of Groups
     groups = [r[0] for r in con.execute(f"SELECT DISTINCT {group_by_col} FROM corpus WHERE {group_by_col} IS NOT NULL").fetchall()]

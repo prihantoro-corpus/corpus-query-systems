@@ -622,7 +622,7 @@ def load_built_in_corpus(name, url, progress_callback=None):
                     shutil.copy(local_path, temp_db_path)
                     
                     # Read metadata directly from the pre-built database
-                    con = duckdb.connect(temp_db_path, read_only=True)
+                    con = duckdb.connect(temp_db_path)
                     try:
                         # 1. Get language
                         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
@@ -654,6 +654,12 @@ def load_built_in_corpus(name, url, progress_callback=None):
                         
                     except Exception as e:
                         con.close()
+                        if "IO Error" in str(e) or "read enough bytes" in str(e):
+                            try:
+                                os.remove(local_path)
+                            except:
+                                pass
+                            return {'error': f"Failed to load corpus (corrupted file). The corrupted file has been deleted. Please try loading it again to trigger a fresh download. (Details: {e})"}
                         return {'error': f"Failed to read database metadata: {e}"}
                     
                     con.close()
