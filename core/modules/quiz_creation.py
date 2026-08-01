@@ -39,7 +39,7 @@ def get_corpus_sentences(db_path, xml_where_clause="", xml_params=[]):
     Returns a list of dicts: [{'sent_id': int, 'filename': str, 'tokens': [str], 'pos': [str], 'lemmas': [str]}]
     """
     try:
-        con = duckdb.connect(db_path, read_only=True)
+        con = duckdb.connect(db_path)
         # Check if table is empty
         count = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
         if count == 0:
@@ -745,7 +745,7 @@ def generate_section_c(sentences, used_texts, num_questions=5):
 def extract_collocations(db_path, xml_where_clause="", xml_params=[]):
     """Runs high-performance POS-based collocation query on DuckDB database with optional filters."""
     try:
-        con = duckdb.connect(db_path, read_only=True)
+        con = duckdb.connect(db_path)
         # Verify POS tags in database to check if they are verticalised empty placeholders or filled
         sample_pos = con.execute("SELECT pos FROM corpus WHERE pos IS NOT NULL LIMIT 5").fetchall()
         pos_is_empty = all(row[0] in {'##', '###', '', None} for row in sample_pos)

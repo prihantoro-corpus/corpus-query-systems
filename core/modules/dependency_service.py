@@ -100,7 +100,7 @@ def get_dependency_stats(db_path):
     """
     Returns high-level statistics about dependency relations in the corpus.
     """
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         # Check if column exists
         cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]

@@ -7,7 +7,7 @@ def export_db_to_vertical_xml(db_path):
     Dynamically discovers and includes advanced annotations (sentiment, NER, readability, etc).
     """
     try:
-        con = duckdb.connect(db_path, read_only=True)
+        con = duckdb.connect(db_path)
         # Get column names
         cols_info = con.execute("DESCRIBE corpus").fetchall()
         cols = [c[0] for c in cols_info]

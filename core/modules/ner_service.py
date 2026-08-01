@@ -22,7 +22,7 @@ def run_spacy_ner(db_path, model_name="en_core_web_sm"):
     """
     nlp = ensure_spacy_model(model_name)
     
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         df_sents = con.execute("""
             SELECT filename, sent_id, string_agg(token, ' ' ORDER BY id) as text
@@ -47,7 +47,12 @@ def run_spacy_ner(db_path, model_name="en_core_web_sm"):
         if not text or not text.strip():
             continue
             
-        doc = nlp(text)
+        try:
+            doc = nlp(text)
+        except ValueError as e:
+            if "[E088]" in str(e):
+                raise ValueError(f"Text length {len(text):,} exceeds the maximum limit for Named Entity Recognition. This usually happens if the corpus lacks proper sentence segmentation, resulting in massive text chunks. Please segment your corpus into sentences before processing.") from e
+            raise
         for ent in doc.ents:
             all_entities.append({
                 'Entity': ent.text.strip(),
@@ -65,7 +70,7 @@ def run_regex_ner(db_path, patterns_dict):
     patterns_dict: {Category_Label: regex_pattern_string}
     Returns (df_flat, df_matrix_files, df_matrix_top, all_entities)
     """
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         df_sents = con.execute("""
             SELECT filename, sent_id, string_agg(token, ' ' ORDER BY id) as text

@@ -37,7 +37,7 @@ db_path = result['db_path']
 print(f"Corpus loaded: {db_path}")
 
 # Test queries
-con = duckdb.connect(db_path, read_only=True)
+con = duckdb.connect(db_path)
 
 print("\n=== Test 1: Query <PN> (all person/place names) ===")
 query1 = "SELECT token FROM corpus WHERE in_PN = TRUE"

@@ -62,7 +62,7 @@ def render_statistical_testing_view():
             with col_s1:
                 st.markdown("### Slicing")
                 # Reuse grouping logic
-                con = duckdb.connect(corpus_path, read_only=True)
+                con = duckdb.connect(corpus_path)
                 cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
                 con.close()
 
@@ -77,7 +77,7 @@ def render_statistical_testing_view():
                 )
 
                 # Get unique values and count
-                con = duckdb.connect(corpus_path, read_only=True)
+                con = duckdb.connect(corpus_path)
                 try:
                     unique_vals = [r[0] for r in con.execute(
                         f"SELECT DISTINCT {grouping_key} FROM corpus WHERE {grouping_key} IS NOT NULL ORDER BY {grouping_key}"
@@ -167,7 +167,7 @@ def render_statistical_testing_view():
             st.caption("Each point in the scatter plot represents one document.")
 
             # --- Grouping Key Selection ---
-            con = duckdb.connect(corpus_path, read_only=True)
+            con = duckdb.connect(corpus_path)
             cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
             con.close()
 
@@ -199,7 +199,7 @@ def render_statistical_testing_view():
                 if type_x == "Word Frequency":
                     x_config['query'] = st.text_input("Query X", value="good", key="corr_q_x", help="Any CORTEX query")
                 elif type_x == "Metadata (Numeric)":
-                    con = duckdb.connect(corpus_path, read_only=True)
+                    con = duckdb.connect(corpus_path)
                     attr_cols = get_xml_attribute_columns(con)
                     con.close()
                     x_config['attr'] = st.radio("Attribute X", attr_cols, horizontal=True, key="corr_attr_x")
@@ -215,7 +215,7 @@ def render_statistical_testing_view():
                 if type_y == "Word Frequency":
                     y_config['query'] = st.text_input("Query Y", value="bad", key="corr_q_y", help="Any CORTEX query")
                 elif type_y == "Metadata (Numeric)":
-                    con = duckdb.connect(corpus_path, read_only=True)
+                    con = duckdb.connect(corpus_path)
                     attr_cols = get_xml_attribute_columns(con)
                     con.close()
                     y_config['attr'] = st.radio("Attribute Y", attr_cols, horizontal=True, key="corr_attr_y")
@@ -684,7 +684,7 @@ def render_statistical_testing_view():
                 st.markdown("---")
 
                 # Get metadata columns
-                con = duckdb.connect(corpus_path, read_only=True)
+                con = duckdb.connect(corpus_path)
                 cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
                 all_files = [r[0] for r in con.execute("SELECT DISTINCT filename FROM corpus ORDER BY filename").fetchall()]
                 con.close()
@@ -726,7 +726,7 @@ def render_statistical_testing_view():
 
                 if selection_method == "By Filename":
                     # Get unique values for identifier
-                    con = duckdb.connect(corpus_path, read_only=True)
+                    con = duckdb.connect(corpus_path)
                     all_ids = [r[0] for r in con.execute(f"SELECT DISTINCT {aa_grouping_key} FROM corpus ORDER BY {aa_grouping_key}").fetchall()]
                     con.close()
 
@@ -741,7 +741,7 @@ def render_statistical_testing_view():
 
                     # Show author mapping
                     if known_texts:
-                        con = duckdb.connect(corpus_path, read_only=True)
+                        con = duckdb.connect(corpus_path)
                         author_map = con.execute(
                             f"SELECT {aa_grouping_key} as id, {author_col} FROM corpus WHERE {aa_grouping_key} IN ({','.join(['?']*len(known_texts))}) GROUP BY {aa_grouping_key}, {author_col}",
                             known_texts
@@ -769,7 +769,7 @@ def render_statistical_testing_view():
                     st.caption(f"Select author values from '{author_col}' that represent Known texts")
 
                     # Get unique author values
-                    con = duckdb.connect(corpus_path, read_only=True)
+                    con = duckdb.connect(corpus_path)
                     all_authors = [r[0] for r in con.execute(
                         f"SELECT DISTINCT {author_col} FROM corpus WHERE {author_col} IS NOT NULL ORDER BY {author_col}"
                     ).fetchall()]
@@ -784,7 +784,7 @@ def render_statistical_testing_view():
 
                     # Preview Known texts
                     if known_authors:
-                        con = duckdb.connect(corpus_path, read_only=True)
+                        con = duckdb.connect(corpus_path)
                         known_preview = con.execute(
                             f"SELECT DISTINCT {aa_grouping_key}, {author_col} FROM corpus WHERE {author_col} IN ({','.join(['?']*len(known_authors))}) ORDER BY {aa_grouping_key}",
                             known_authors
@@ -813,7 +813,7 @@ def render_statistical_testing_view():
 
                     # Preview Questioned texts
                     if questioned_authors:
-                        con = duckdb.connect(corpus_path, read_only=True)
+                        con = duckdb.connect(corpus_path)
                         questioned_preview = con.execute(
                             f"SELECT DISTINCT {aa_grouping_key}, {author_col} FROM corpus WHERE {author_col} IN ({','.join(['?']*len(questioned_authors))}) ORDER BY {aa_grouping_key}",
                             questioned_authors
@@ -877,7 +877,7 @@ def render_statistical_testing_view():
                             else:
                                 # 2. Get Metadata for the restricted list only
                                 status_placeholder.info("🏷️ Fetching author labels for selected docs...")
-                                con = duckdb.connect(corpus_path, read_only=True)
+                                con = duckdb.connect(corpus_path)
                                 placeholders = ', '.join(['?'] * len(all_selected))
                                 # Crucial: Use MAX() or similar to ensure 1 label per ID if duplicates exist
                                 meta_df = con.execute(
@@ -1206,7 +1206,7 @@ def render_statistical_testing_view():
                 st.markdown("### Grouping Variable (Independent)")
 
                 # Get XML attributes for grouping
-                con = duckdb.connect(corpus_path, read_only=True)
+                con = duckdb.connect(corpus_path)
                 try:
                     attr_cols = get_xml_attribute_columns(con)
                 finally:
@@ -1224,7 +1224,7 @@ def render_statistical_testing_view():
                 )
 
                 # Get unique values for selected attribute
-                con = duckdb.connect(corpus_path, read_only=True)
+                con = duckdb.connect(corpus_path)
                 try:
                     unique_vals = [r[0] for r in con.execute(
                         f"SELECT DISTINCT {grouping_attr} FROM corpus WHERE {grouping_attr} IS NOT NULL ORDER BY {grouping_attr}"

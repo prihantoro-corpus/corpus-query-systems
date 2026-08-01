@@ -13,7 +13,7 @@ if not db_files:
 else:
     db_path = db_files[0]
     print(f"Inspecting database: {db_path}")
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path)
     try:
         cols = con.execute("PRAGMA table_info(corpus)").fetch_df()
         print("Columns in 'corpus' table:")
