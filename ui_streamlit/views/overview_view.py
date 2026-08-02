@@ -1263,14 +1263,13 @@ def render_upload_ui():
             
         # Custom Tagger Section
         st.markdown("---")
-        st.markdown("**Tagging Tool**")
         tagger_tool = st.radio(
-            "Select Tagging Tool",
-            ["Default (Stanza / SpaCy)", "Custom Tagger"],
+            "**Tagging Tool**",
+            ["Default (TreeTagger/Stanza/Spacy)", "Custom Tagger"],
             index=0,
             horizontal=True,
             key="upload_tagger_tool_select",
-            label_visibility="collapsed"
+            help="They are based on priority. e.g. if a language is chosen and not found in TreeTagger, we switch to Stanza, and if still not found, to Spacy."
         )
         
         custom_config = None
@@ -1833,14 +1832,13 @@ def render_online_builder_ui():
         )
         
         # Tagging Tool
-        st.markdown("**Tagging Tool**")
         tagger_tool = st.radio(
-            "Select Tagging Tool",
-            ["Default (Stanza / SpaCy)", "Custom Tagger"],
+            "**Tagging Tool**",
+            ["Default (TreeTagger/Stanza/Spacy)", "Custom Tagger"],
             index=0,
             horizontal=True,
             key="online_tagger_tool_select",
-            label_visibility="collapsed"
+            help="They are based on priority. e.g. if a language is chosen and not found in TreeTagger, we switch to Stanza, and if still not found, to Spacy."
         )
         
         if tagger_tool == "Custom Tagger":
