@@ -206,7 +206,7 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
         for i in range(1, n_size + 1):
             pos_basis = positional_bases.get(str(i), basis) if positional_bases else basis
             col_prefix = "t"
-            if pos_basis == "POS Tag": col_prefix = "p"
+            if pos_basis in ["POS Tag", "Part-of-Speech"]: col_prefix = "p"
             elif pos_basis == "Lemma": col_prefix = "l"
             elif pos_basis == "Named Entity Recognition (NER)": col_prefix = "n"
             elif pos_basis == "Dependency Parsing": col_prefix = "d"
