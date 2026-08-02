@@ -1,0 +1,75 @@
+UNique POS tags
+
+_duckdb.ConnectionException: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).
+Traceback:
+File "/mount/src/cortex/ui_streamlit/cortex.py", line 327, in <module>
+    main()
+File "/mount/src/cortex/ui_streamlit/cortex.py", line 297, in main
+    render_overview()
+File "/mount/src/cortex/ui_streamlit/views/overview_view.py", line 161, in render_overview
+    render_full_overview(name, corpus_path, stats, structure, error)
+File "/mount/src/cortex/ui_streamlit/views/overview_view.py", line 478, in render_full_overview
+    xml_filters = render_xml_restriction_filters(path, "overview_full")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/mount/src/cortex/ui_streamlit/components/filters.py", line 13, in render_xml_restriction_filters
+    con = duckdb.connect(db_path, read_only=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Wordcloud display differs for some users
+
+How to search dependency parsing?
+
+
+issues in cortex
+
+-can`t run the unique postag (streamlit) sdh dicatat pak pri
+-cant`t run sentiment: (ruang pendidik)
+
+_duckdb.ConnectionException: Connection Error: Can't open a connection to same database file with a different configuration than existing connections
+Traceback:
+File "/var/www/cortex/ui_streamlit/cortex.py", line 327, in <module>
+    main()
+File "/var/www/cortex/ui_streamlit/cortex.py", line 297, in main
+    render_overview()
+File "/var/www/cortex/ui_streamlit/views/overview_view.py", line 161, in render_overview
+    render_full_overview(name, corpus_path, stats, structure, error)
+File "/var/www/cortex/ui_streamlit/views/overview_view.py", line 478, in render_full_overview
+    xml_filters = render_xml_restriction_filters(path, "overview_full")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/var/www/cortex/ui_streamlit/components/filters.py", line 13, in render_xml_restriction_filters
+    con = duckdb.connect(db_path, read_only=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		  
+Error: (streamlit) processing NER
+NER failed: [E088] Text of length 33813587 exceeds maximum of 1000000. The parser and NER models require roughly 1GB of temporary memory per 100,000 characters in the input. This means long texts may cause memory allocation errors. If you're not using the parser or NER, it's probably safe to increase the nlp.max_length limit. The limit is in number of characters, so you can check whether your inputs are too long by checking len(text).
+
+Traceback (most recent call last):
+  File "/mount/src/cortex/ui_streamlit/views/overview_view.py", line 2483, in _render_ner_tab
+    df_flat, df_matrix_files, df_matrix_top, raw_ents = ner.run_spacy_ner(db_path, model_name=model_name)
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mount/src/cortex/core/modules/ner_service.py", line 50, in run_spacy_ner
+    doc = nlp(text)
+          ^^^^^^^^^
+  File "/home/adminuser/venv/lib/python3.11/site-packages/spacy/language.py", line 1041, in __call__
+    doc = self._ensure_doc(text)
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adminuser/venv/lib/python3.11/site-packages/spacy/language.py", line 1132, in _ensure_doc
+    return self.make_doc(doc_like)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adminuser/venv/lib/python3.11/site-packages/spacy/language.py", line 1121, in make_doc
+    raise ValueError(
+ValueError: [E088] Text of length 33813587 exceeds maximum of 1000000. The parser and NER models require roughly 1GB of temporary memory per 100,000 characters in the input. This means long texts may cause memory allocation errors. If you're not using the parser or NER, it's probably safe to increase the `nlp.max_length` limit. The limit is in number of characters, so you can check whether your inputs are too long by checking `len(text)`.
+
+ERROR FROM YUNANI’S:
+BAGIAN SENTIMENT & TOPIC ANALYSIS 
+(MUNCUL BAGIAN POSITIVE SENTENCES AFTER CLICK RUN LABELING, TAPI ERROR WAKTU KLIK I AGREE RUN WITH CORPUS)
+Muncul No data is sent to external AI servers. All processing happens locally:
+Sentiment Analysis: Uses NLTK VADER (Rule-based).
+Multi-language: Non-English text is automatically translated to English for sentiment analysis.
+Topic Classification: Uses Scikit-learn TF-IDF with pre-defined keyword categories.
+Lexical complecity analysis only for English data
+Waktu load BAWE SAMPLE, muncul Failed to load built-in corpora: IO Error: Could not read enough bytes from file "/tmp/corpus_a4a099f578b14fdead21cd786ce24e5d.duckdb": attempted to read 262144 bytes from location 127676416
+It didn’t work before, it works after it refreshed.
+It keeps loading when I changed to tabular view to bar graph view-unbearable (but it’s finally working) 
+
+

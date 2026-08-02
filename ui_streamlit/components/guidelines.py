@@ -71,8 +71,9 @@ GUIDELINES = {
         * **POS Restricted Tokens**: Search for words with specific Part-of-Speech tags.
           * Example: `light_V*` matches *light* when used as a verb.
           * Example: `_NN` matches any singular noun.
-        * **XML Tags**: Match structural XML tags directly.
-          * Example: `<PN type="human">`
+        * **XML Tags**: Match structural XML tags and token-level metadata (like dependency tags) directly.
+          * Example: `<PN type="human">` matches specific XML elements.
+          * Example: `<dep_rel="nsubj">` matches token dependency relations (e.g. nominal subjects).
           
         #### 2. Context Window & Max Lines
         * **Context Window**: Adjusts how many words are retrieved to the left and right of the node word (e.g., 5 words on each side).
