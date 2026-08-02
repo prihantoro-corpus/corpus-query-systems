@@ -30,11 +30,20 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
         cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
         db_cols = [c[1].lower() for c in cols_info]
 
+
+        requested_bases = set([basis])
+        if positional_bases:
+            requested_bases.update(positional_bases.values())
+            
+        needs_ner = "Named Entity Recognition (NER)" in requested_bases
+        needs_dep = "Dependency Parsing" in requested_bases
+
         cols = ["_token_low as t1"]
+
         if not is_raw_mode:
             cols.extend(["pos as p1", "lemma as l1"])
-            if "ent_type" in db_cols: cols.append("ent_type as n1")
-            if "dep_rel" in db_cols: cols.append("dep_rel as d1")
+            if "ent_type" in db_cols and needs_ner: cols.append("ent_type as n1")
+            if "dep_rel" in db_cols and needs_dep: cols.append("dep_rel as d1")
         
         # Build LEAD clauses for 2..N
         for i in range(2, n_size + 1):
@@ -43,8 +52,8 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
             if not is_raw_mode:
                 cols.append(f"LEAD(pos, {offset}) OVER (ORDER BY id) as p{i}")
                 cols.append(f"LEAD(lemma, {offset}) OVER (ORDER BY id) as l{i}")
-                if "ent_type" in db_cols: cols.append(f"LEAD(ent_type, {offset}) OVER (ORDER BY id) as n{i}")
-                if "dep_rel" in db_cols: cols.append(f"LEAD(dep_rel, {offset}) OVER (ORDER BY id) as d{i}")
+                if "ent_type" in db_cols and needs_ner: cols.append(f"LEAD(ent_type, {offset}) OVER (ORDER BY id) as n{i}")
+                if "dep_rel" in db_cols and needs_dep: cols.append(f"LEAD(dep_rel, {offset}) OVER (ORDER BY id) as d{i}")
         
         subquery_select = ", ".join(cols)
         
