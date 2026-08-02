@@ -126,6 +126,10 @@ GUIDELINES = {
         * **Save & Resume**: You do not have to complete your annotations all at once. Click **💾 Save Annotation Progress** to save your annotations to a JSON file on your machine.
         * **Upload & Restore**: When you are ready to resume, click **📁 Continue Annotation** and upload your saved JSON file to instantly restore your annotation progress.
         * **Index & Retrieve**: Once you are happy with the labels, click **🏛️ Apply to Session** to index and save these annotations directly into the corpus database. They are then fully retrieved and searchable across other views (like Overview and Restricted Search).
+
+        #### 8. Annotation Tags Guide
+        * In the **Search Controls** (or Advanced Settings), you can click the **❓ Annotation Tags Guide** popover to explore the active tags in your corpus.
+        * Use the dropdown menu to view definitions and random corpus examples for **Part-of-Speech (POS)** tags, as well as other annotations you might have added from the Overview module (such as **Named Entity Recognition (NER)**, **Dependency Parsing**, or **Sentiment Analysis**).
     """,
     "N-Gram": """
         ### 📖 N-Gram Analysis User Guide
