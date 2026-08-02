@@ -143,6 +143,7 @@ GUIDELINES = {
           * **Token**: Matches raw, literal words (e.g., *went*, *running*).
           * **Lemma**: Matches base dictionary forms (e.g., *go*, *run*).
           * **POS Tag**: Matches part-of-speech categories (e.g., *VBD*, *VBG*).
+          * **NER / Dependency Parsing**: If your corpus is annotated, you can select these layers as a basis to retrieve N-Grams of named entities or syntactic dependencies.
         
         #### 2. Advanced Positional Filters
         In **Advanced** mode, you can customize the **Basis** and specify **Filters** for *each position* in the N-gram sequence separately:

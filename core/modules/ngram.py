@@ -27,8 +27,14 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
         
         # --- Build Dynamic SQL Query ---
         
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+        db_cols = [c[1].lower() for c in cols_info]
+
         cols = ["_token_low as t1"]
-        if not is_raw_mode: cols.extend(["pos as p1", "lemma as l1"])
+        if not is_raw_mode:
+            cols.extend(["pos as p1", "lemma as l1"])
+            if "ent_type" in db_cols: cols.append("ent_type as n1")
+            if "dep_rel" in db_cols: cols.append("dep_rel as d1")
         
         # Build LEAD clauses for 2..N
         for i in range(2, n_size + 1):
@@ -37,6 +43,8 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
             if not is_raw_mode:
                 cols.append(f"LEAD(pos, {offset}) OVER (ORDER BY id) as p{i}")
                 cols.append(f"LEAD(lemma, {offset}) OVER (ORDER BY id) as l{i}")
+                if "ent_type" in db_cols: cols.append(f"LEAD(ent_type, {offset}) OVER (ORDER BY id) as n{i}")
+                if "dep_rel" in db_cols: cols.append(f"LEAD(dep_rel, {offset}) OVER (ORDER BY id) as d{i}")
         
         subquery_select = ", ".join(cols)
         
@@ -144,6 +152,12 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
                     if default_basis == 'POS Tag' and not is_raw:
                         target_col = f"p{idx}"
                         regex_pat = "(?i)" + regex_pat
+                    elif default_basis == 'Named Entity Recognition (NER)' and not is_raw:
+                        target_col = f"n{idx}"
+                        regex_pat = "(?i)" + regex_pat
+                    elif default_basis == 'Dependency Parsing' and not is_raw:
+                        target_col = f"d{idx}"
+                        regex_pat = "(?i)" + regex_pat
                     elif default_basis == 'Lemma' and not is_raw:
                         target_col = f"lower(l{idx})"
                         regex_pat = regex_pat.lower()
@@ -185,6 +199,8 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
             col_prefix = "t"
             if pos_basis == "POS Tag": col_prefix = "p"
             elif pos_basis == "Lemma": col_prefix = "l"
+            elif pos_basis == "Named Entity Recognition (NER)": col_prefix = "n"
+            elif pos_basis == "Dependency Parsing": col_prefix = "d"
             display_cols.append(f"{col_prefix}{i}")
             
         tokens_grp = ', '.join(display_cols)
