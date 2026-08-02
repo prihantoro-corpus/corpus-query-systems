@@ -5,50 +5,71 @@ GUIDELINES = {
     "Overview": {
         "XML Structure": """
             ### 📖 XML Structure Guide
-            * **Structure & Attributes**: View the XML tag hierarchy and document/token attributes extracted from the source files.
-            * **Raw Python Data**: Explores the raw parsed dictionary representation for troubleshooting.
-            * **Database Diagnostics**: Checks the active DuckDB table schema and detected metadata columns.
+            * See the structure of the corpus from XML annotations (if any). Useful for searching.
+            * (Note: XML structure will update if you choose to annotate).
         """,
         "Sub-corpus Stats": """
             ### 📖 Sub-Corpus Statistics Guide
-            * **Metadata Breakdown**: View token, type, and document distributions partitioned by metadata attributes (e.g. year, genre, author).
-            * **TTR by Sub-corpus**: Analyze type/token ratio variations across sub-corpora to compare lexical diversity.
+            * See the corpus structure in a chart and table. Useful for searching.
+            * (Note: Sub-corpus stats will update if you choose to annotate).
         """,
-        "Top Frequencies": """
-            ### 📖 Top Frequencies Guide
-            * **Vocabulary Ranking**: Lists the most frequent tokens, lemmas, and POS tags in the corpus.
-            * **PMW Frequency**: Displays normalized relative frequencies (Parts Per Million / PMW) for standard comparison.
-            * **Excel Export**: Download the full frequency table as a spreadsheet.
+        "Frequency List": """
+            ### 📖 Frequency List Guide
+            * See the frequency list and download it.
         """,
         "Unique POS Tags": """
             ### 📖 Unique POS Tags Guide
-            * **Grammatical Distribution**: Lists all unique Part-of-Speech tags detected in the corpus.
-            * **Language-Specific Mapping**: Explains what each tag stands for (e.g., *NN* for noun, *VB* for verb) under the confirmed language standard.
+            * See all POS tags used in the corpus and their definitions (if any).
         """,
         "Word Cloud": """
             ### 📖 Word Cloud Guide
-            * **Visual Vocabulary**: Displays a word cloud of the top frequent terms in the corpus.
-            * **Parameters**: Adjust size, colors, and maximum words to display. Larger font sizes correspond to higher frequencies.
+            * See a word cloud generated from the corpus.
         """,
         "Metadata Annotation": """
             ### 📖 Metadata Annotation Guide
-            * **Custom Tagging**: Add or edit document-level attributes directly within the system interface.
-            * **Import/Export**: Export metadata profiles to local files or load external annotations.
+            * Annotate metadata (e.g., gender, sex, education, etc.).
+            * **File Level:** Annotate each text. Add attributes (e.g., text_type, author_sex, etc.). In the table, write the values for each file (e.g., male or female for author_sex), then apply metadata annotation.
+            * **Segmental Level:** Annotate at a level lower than the text (parts of the text). Select a file, then choose to annotate word by word or by sentence.
+               * If by word, drag from the word grid to select.
+               * If by sentence, use the checkmarks.
+               * Then, in "Annotate Selection", write the attribute and values.
         """,
         "🏷️ Sentiment & Topic Analysis": """
             ### 📖 Sentiment & Topic Analysis Guide
-            * **VADER Sentiment**: Computes positive, neutral, and negative sentiment distribution across your texts.
-            * **Topic Modeling**: Automatically extracts topic clusters using BERTTopic (semantic embeddings) or Keyword-Weighted algorithms.
+            * **Topic Analysis:** (Under construction)
+            * **Sentiment Analysis:** (Note: Only works for English corpus)
+               * Choose TF/IDF or BERTopic > configure Sentiment > run labelling.
+               * **Note:** Check the Sub-corpus Stats to see the XML changes after running!
         """,
         "🏷️ Named Entity Recognition (NER)": """
             ### 📖 Named Entity Recognition (NER) Guide
-            * **Entity Classification**: Automatically extracts and labels proper nouns into categories (e.g. *Person*, *Organization*, *Location*, *Date*).
-            * **Frequency Rankings**: Lists the most prominent entities found across the corpus.
+            *(Note: Only works for English corpus)*
+            * **Entity Classification:** Automatically extracts and labels proper nouns into categories (e.g., Person, Organization, Location, Date).
+            * **NER extraction method:** Choose between Dependency-based or Regex (you need to write the regex manually).
+            * **Spacy Pipeline model:** Choose your preferred model.
+            * **RUN:** Annotates the corpus with XML tags. (**Note:** Check the Sub-corpus Stats to see the XML changes after running!)
+        """,
+        "🔱 Dependency Parsing": """
+            ### 📖 Dependency Parsing Guide
+            *(Note: Only works for English corpus)*
+            * Annotate with dependency parsing (e.g., nsubj for noun subject, agent, relcl for relative clause).
+            * **Spacy pipeline model:** Choose your preferred model > Run dependency parsing.
         """,
         "📖 Reading Ease": """
             ### 📖 Reading Ease Guide
-            * **Readability Metrics**: Evaluates texts using standard indexes (Flesch Reading Ease, Flesch-Kincaid Grade Level, LIX, RIX).
-            * **Text Complexity**: Evaluates average sentence lengths, syllable counts, and chunk readability to assess difficulty.
+            * Evaluates texts using standard indexes (Flesch Reading Ease, Flesch-Kincaid Grade Level, LIX, RIX).
+            * **Chunk Readability:** Useful if 1 text has multiple difficulties segments.
+               * **By segment:** e.g., 10, 100, 1000.
+               * **By subcorpora:** Choose attributes from the radio button.
+            * **Readability annotation:** Annotate by sentence (if chosen, chunk will automatically be disabled) or by chunk > annotate.
+        """,
+        "📖 Lexical Complexity": """
+            ### 📖 Lexical Complexity Guide
+            *(Generic works for all languages; Lu's LCA only for English corpus)*
+            * **Generic:** Automatically computed.
+            * **Lu's LCA:** Choose wordlist (for lexical sophistication e.g., NGSL, AWL etc.) > Choose analysis level.
+               * Default is by file.
+               * If by sub-corpus, choose sub-corpus then choose attribute (e.g., choosing sentiment will display 3 segments: positive, negative, and neutral complexity in the table).
         """
     },
     "Concordance": """
