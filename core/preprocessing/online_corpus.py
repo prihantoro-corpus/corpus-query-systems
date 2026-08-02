@@ -294,6 +294,43 @@ class OnlineCorpusBuilder:
                     self.is_limit_reached = True
                     break
         return success_logs
+def apply_selection_strategy(items, max_items, strategy, keywords, extract_text_func, extract_likes_func):
+    """
+    Applies the selection strategy (random, likes, keyword, etc) to a list of items.
+    """
+    if not items:
+        return []
+    
+    items = list(items)
+    
+    if strategy == 'From top (Fastest)':
+        return items[:max_items]
+        
+    if strategy == 'From bottom':
+        return list(reversed(items))[:max_items]
+        
+    if strategy == 'Random':
+        import random
+        random.shuffle(items)
+        return items[:max_items]
+        
+    if strategy == 'By likes':
+        items.sort(key=lambda x: extract_likes_func(x) or 0, reverse=True)
+        return items[:max_items]
+        
+    if strategy == 'By keyword' and keywords:
+        kws = [k.lower() for k in keywords if k.strip()]
+        if not kws:
+            return items[:max_items]
+            
+        def score_item(item):
+            text = extract_text_func(item).lower()
+            return sum(1 for kw in kws if kw in text)
+            
+        items.sort(key=score_item, reverse=True)
+        return items[:max_items]
+        
+    return items[:max_items]
 
 
 def build_online_corpus(mode_type, params, progress_callback=None):
@@ -438,7 +475,16 @@ def build_online_corpus(mode_type, params, progress_callback=None):
                         add_masto_status(ancestor, "ancestor")
                     add_masto_status(status_data, "post")
                 if mode in ('replies', 'both'):
-                    for descendant in descendants:
+                    max_comments = params.get('max_comments', 100)
+                    selection_strategy = params.get('selection_strategy', 'From top (Fastest)')
+                    keywords = params.get('keywords', [])
+                    
+                    filtered_desc = apply_selection_strategy(
+                        descendants, max_comments, selection_strategy, keywords,
+                        extract_text_func=lambda x: clean_masto_html(x.get('content', '')),
+                        extract_likes_func=lambda x: x.get('favourites_count', 0)
+                    )
+                    for descendant in filtered_desc:
                         add_masto_status(descendant, "reply")
                 xml_parts.append('</text>')
                 xml_content = "\n".join(xml_parts)
@@ -549,7 +595,16 @@ def build_online_corpus(mode_type, params, progress_callback=None):
                     if main_post:
                         add_bsky_post(main_post, "post")
                 if mode in ('replies', 'both'):
-                    for descendant in descendants:
+                    max_comments = params.get('max_comments', 100)
+                    selection_strategy = params.get('selection_strategy', 'From top (Fastest)')
+                    keywords = params.get('keywords', [])
+                    
+                    filtered_desc = apply_selection_strategy(
+                        descendants, max_comments, selection_strategy, keywords,
+                        extract_text_func=lambda x: x.get('record', {}).get('text', ''),
+                        extract_likes_func=lambda x: x.get('likeCount', 0)
+                    )
+                    for descendant in filtered_desc:
                         add_bsky_post(descendant, "reply")
                 xml_parts.append('</text>')
                 xml_content = "\n".join(xml_parts)

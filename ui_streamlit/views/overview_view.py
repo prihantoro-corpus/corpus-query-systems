@@ -1702,6 +1702,28 @@ def render_online_builder_ui():
         urls_text = st.text_area("Mastodon URLs", height=200, placeholder="https://mastodon.social/@Mastodon/112702758163539123\nhttps://mastodon.social/@trendytoots", key="mastodon_urls_textarea")
         opt = st.radio("Content to Download", ["Post only", "Replies only", "Both Post and Replies"], index=2, key="mastodon_download_opt")
         
+        max_comments_val = 100
+        strategy_val = "From top (Fastest)"
+        keywords_val = []
+        
+        if opt in ["Replies only", "Both Post and Replies"]:
+            col1, col2 = st.columns(2)
+            with col1:
+                max_comments_val = st.selectbox("Max Replies", [10, 50, 100, 250], index=2, key="masto_max")
+            with col2:
+                strategy_val = st.selectbox("Reply Selection", ["From top (Fastest)", "From bottom", "Random", "By likes", "By keyword"], key="masto_strat")
+                
+            if strategy_val != "From top (Fastest)":
+                st.warning("⚠️ Using this strategy requires fetching the entire thread first. This will take extra time.")
+                
+            if strategy_val == "By keyword":
+                kw_input = st.text_input("Enter 1-5 keywords (comma separated)", key="masto_kw")
+                if kw_input:
+                    keywords_val = [k.strip() for k in kw_input.split(',') if k.strip()]
+                    if len(keywords_val) > 5:
+                        st.warning("Only the first 5 keywords will be used.")
+                        keywords_val = keywords_val[:5]
+        
         mode_map = {"Post only": "post", "Replies only": "replies", "Both Post and Replies": "both"}
         
         if st.button("Download Mastodon Data", type="primary"):
@@ -1717,7 +1739,14 @@ def render_online_builder_ui():
                     status.caption(m)
                 
                 with st.spinner("Downloading..."):
-                    files, warn = build_online_corpus("mastodon", {"urls": urls, "mode": mode_map[opt]}, progress_callback=up)
+                    params = {
+                        "urls": urls, 
+                        "mode": mode_map[opt],
+                        "max_comments": max_comments_val,
+                        "selection_strategy": strategy_val,
+                        "keywords": keywords_val
+                    }
+                    files, warn = build_online_corpus("mastodon", params, progress_callback=up)
                     if files:
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Downloaded {len(files)} Mastodon components!")
@@ -1730,6 +1759,28 @@ def render_online_builder_ui():
         st.caption("Paste BlueSky post or profile timeline URLs (one per line).")
         urls_text = st.text_area("BlueSky URLs", height=200, placeholder="https://bsky.app/profile/bsky.app/post/3mpok7nkjtc2o\nhttps://bsky.app/profile/academic.oup.com", key="bluesky_urls_textarea")
         opt = st.radio("Content to Download", ["Post only", "Replies only", "Both Post and Replies"], index=2, key="bluesky_download_opt")
+        
+        max_comments_val = 100
+        strategy_val = "From top (Fastest)"
+        keywords_val = []
+        
+        if opt in ["Replies only", "Both Post and Replies"]:
+            col1, col2 = st.columns(2)
+            with col1:
+                max_comments_val = st.selectbox("Max Replies", [10, 50, 100, 250], index=2, key="bsky_max")
+            with col2:
+                strategy_val = st.selectbox("Reply Selection", ["From top (Fastest)", "From bottom", "Random", "By likes", "By keyword"], key="bsky_strat")
+                
+            if strategy_val != "From top (Fastest)":
+                st.warning("⚠️ Using this strategy requires fetching the entire thread first. This will take extra time.")
+                
+            if strategy_val == "By keyword":
+                kw_input = st.text_input("Enter 1-5 keywords (comma separated)", key="bsky_kw")
+                if kw_input:
+                    keywords_val = [k.strip() for k in kw_input.split(',') if k.strip()]
+                    if len(keywords_val) > 5:
+                        st.warning("Only the first 5 keywords will be used.")
+                        keywords_val = keywords_val[:5]
         
         mode_map = {"Post only": "post", "Replies only": "replies", "Both Post and Replies": "both"}
         
@@ -1746,7 +1797,14 @@ def render_online_builder_ui():
                     status.caption(m)
                 
                 with st.spinner("Downloading..."):
-                    files, warn = build_online_corpus("bluesky", {"urls": urls, "mode": mode_map[opt]}, progress_callback=up)
+                    params = {
+                        "urls": urls, 
+                        "mode": mode_map[opt],
+                        "max_comments": max_comments_val,
+                        "selection_strategy": strategy_val,
+                        "keywords": keywords_val
+                    }
+                    files, warn = build_online_corpus("bluesky", params, progress_callback=up)
                     if files:
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Downloaded {len(files)} BlueSky components!")
