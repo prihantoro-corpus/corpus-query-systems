@@ -68,31 +68,78 @@ class OnlineCorpusBuilder:
                 except:
                     return None
 
-    def get_youtube_comments(self, video_url, max_comments=None):
+    def get_youtube_comments(self, video_url, max_comments=100, selection_strategy="From top (Fastest)", keywords=None):
         downloader = YoutubeCommentDownloader()
-        comments = downloader.get_comments_from_url(video_url, sort_by=1) # 1 = sorted by newest
-        results = []
-        count = 0
-        for comment in comments:
+        
+        sort_by = 1 # 1 = newest
+        is_fast_mode = selection_strategy.startswith("From top")
+        comments_generator = downloader.get_comments_from_url(video_url, sort_by=sort_by)
+        
+        fetched_comments = []
+        buffer_size = max_comments if is_fast_mode else min(max_comments * 4, 1000)
+        
+        for comment in comments_generator:
             if self.is_limit_reached:
                 break
-            if max_comments is not None and count >= max_comments:
+            fetched_comments.append(comment)
+            if len(fetched_comments) >= buffer_size:
+                break
+                
+        if selection_strategy.startswith("From top"):
+            selected_comments = fetched_comments[:max_comments]
+        elif selection_strategy == "From bottom":
+            selected_comments = list(reversed(fetched_comments))[:max_comments]
+        elif selection_strategy == "Random":
+            import random
+            if len(fetched_comments) <= max_comments:
+                selected_comments = fetched_comments
+            else:
+                selected_comments = random.sample(fetched_comments, max_comments)
+        elif selection_strategy == "By likes":
+            def get_votes(c):
+                v = c.get('votes', '0')
+                if isinstance(v, str):
+                    v = v.replace(',', '').replace('.', '')
+                    if v.endswith('K'): v = float(v[:-1]) * 1000
+                    elif v.endswith('M'): v = float(v[:-1]) * 1000000
+                    try: return int(float(v))
+                    except: return 0
+                return int(v)
+            selected_comments = sorted(fetched_comments, key=get_votes, reverse=True)[:max_comments]
+        elif selection_strategy == "By keyword":
+            if not keywords:
+                selected_comments = fetched_comments[:max_comments]
+            else:
+                kws_lower = [k.strip().lower() for k in keywords if k.strip()]
+                scored_comments = []
+                for c in fetched_comments:
+                    text_lower = c.get('text', '').lower()
+                    score = sum(1 for kw in kws_lower if kw in text_lower)
+                    if score > 0:
+                        scored_comments.append((score, c))
+                scored_comments.sort(key=lambda x: x[0], reverse=True)
+                selected_comments = [c[1] for c in scored_comments][:max_comments]
+        else:
+            selected_comments = fetched_comments[:max_comments]
+            
+        results = []
+        for comment in selected_comments:
+            if self.is_limit_reached:
                 break
             
             text = comment.get('text', '')
             author = comment.get('author', 'Unknown')
             time_text = comment.get('time', '')
             
-            # Create a pseudo-XML structure for the comment
             comment_str = f"<comment author=\"{author}\" date=\"{time_text}\">\n{text}\n</comment>\n"
             results.append(comment_str)
-            count += 1
             
             words = count_words(text)
             self.current_words += words
             if self.current_words >= self.limit_words:
                 self.is_limit_reached = True
                 break
+                
         return "".join(results)
 
     def is_likely_sentence(self, text):
@@ -260,8 +307,15 @@ def build_online_corpus(mode_type, params, progress_callback=None):
         
         if not builder.is_limit_reached and mode in ('comments', 'both'):
             if progress_callback: progress_callback(0.5, "Downloading comments...")
-            max_comments = params.get('max_comments')
-            comments = builder.get_youtube_comments(url, max_comments=max_comments)
+            max_comments = params.get('max_comments', 100)
+            selection_strategy = params.get('selection_strategy', 'From top (Fastest)')
+            keywords = params.get('keywords', [])
+            comments = builder.get_youtube_comments(
+                url, 
+                max_comments=max_comments, 
+                selection_strategy=selection_strategy,
+                keywords=keywords
+            )
             if comments:
                 builder.add_content(f"yt_{video_id}_comments.xml", f"<text type=\"comments\" video_id=\"{video_id}\" url=\"{url}\">\n{comments}\n</text>")
     

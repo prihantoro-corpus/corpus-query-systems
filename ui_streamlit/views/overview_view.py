@@ -1206,52 +1206,7 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
     finally:
         conn.close()
 
-def auto_process_online_files(files):
-    import core.preprocessing.corpus_loader as corpus_loader
-    from core.config import STANZA_LANG_MAP
-    import io
-    
-    if not files:
-        st.error("No online files were downloaded.")
-        return
-        
-    selected_lang_label = get_state('upload_language_select', 'English')
-    if selected_lang_label == "OTHER":
-        lang_code = "OTHER"
-    else:
-        lang_code = STANZA_LANG_MAP.get(selected_lang_label, 'en')
-        
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    def update_progress(val, text):
-        progress_bar.progress(val)
-        status_text.caption(text)
-        
-    files_to_process = []
-    for f_dict in files:
-        buf = io.BytesIO(f_dict['content'].encode('utf-8'))
-        buf.name = f_dict['filename']
-        files_to_process.append(buf)
-        
-    with st.spinner("Processing & indexing online corpus content..."):
-        result = corpus_loader.load_monolingual_corpus_files(
-            files_to_process,
-            explicit_lang_code=lang_code,
-            selected_format="Raw (Natural text)",
-            progress_callback=update_progress
-        )
-        
-        if result.get('error'):
-            st.error(result['error'])
-        else:
-            set_state('current_corpus_path', result['db_path'])
-            set_state('corpus_stats', result['stats'])
-            set_state('current_corpus_name', "Online Scraped Batch")
-            set_state('xml_structure_data', result.get('structure'))
-            set_state('target_lang', lang_code)
-            st.success("Online corpus loaded successfully!")
-            st.rerun()
+
 
 def render_upload_ui():
     import core.preprocessing.corpus_loader as corpus_loader
@@ -1690,6 +1645,28 @@ def render_online_builder_ui():
         url = st.text_input("YouTube Video URL", placeholder="https://www.youtube.com/watch?v=...")
         opt = st.radio("Content to Download", ["Transcript only", "Comments only", "Both Transcript and Comments"], index=2)
         
+        max_comments_val = 100
+        strategy_val = "From top (Fastest)"
+        keywords_val = []
+        
+        if opt in ["Comments only", "Both Transcript and Comments"]:
+            col1, col2 = st.columns(2)
+            with col1:
+                max_comments_val = st.selectbox("Max Comments", [10, 50, 100, 250], index=2)
+            with col2:
+                strategy_val = st.selectbox("Comment Selection", ["From top (Fastest)", "From bottom", "Random", "By likes", "By keyword"])
+                
+            if strategy_val != "From top (Fastest)":
+                st.warning("⚠️ Using this strategy requires downloading a large buffer of comments first. This will take extra time.")
+                
+            if strategy_val == "By keyword":
+                kw_input = st.text_input("Enter 1-5 keywords (comma separated)")
+                if kw_input:
+                    keywords_val = [k.strip() for k in kw_input.split(',') if k.strip()]
+                    if len(keywords_val) > 5:
+                        st.warning("Only the first 5 keywords will be used.")
+                        keywords_val = keywords_val[:5]
+        
         mode_map = {"Transcript only": "transcript", "Comments only": "comments", "Both Transcript and Comments": "both"}
         
         if st.button("Download YouTube Data", type="primary"):
@@ -1704,12 +1681,18 @@ def render_online_builder_ui():
                     status.caption(m)
                 
                 with st.spinner("Downloading..."):
-                    files, warn = build_online_corpus("youtube", {"url": url, "mode": mode_map[opt]}, progress_callback=up)
+                    params = {
+                        "url": url, 
+                        "mode": mode_map[opt],
+                        "max_comments": max_comments_val,
+                        "selection_strategy": strategy_val,
+                        "keywords": keywords_val
+                    }
+                    files, warn = build_online_corpus("youtube", params, progress_callback=up)
                     if files:
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Downloaded {len(files)} components!")
                         if warn: st.warning(warn)
-                        auto_process_online_files(files)
                     else:
                         st.error(warn or "Failed to download. Ensure the video has a transcript and comments.")
 
@@ -1739,7 +1722,6 @@ def render_online_builder_ui():
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Downloaded {len(files)} Mastodon components!")
                         if warn: st.warning(warn)
-                        auto_process_online_files(files)
                     else:
                         st.error(warn or "Failed to download. Ensure the URLs are correct and public.")
  
@@ -1769,9 +1751,82 @@ def render_online_builder_ui():
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Downloaded {len(files)} BlueSky components!")
                         if warn: st.warning(warn)
-                        auto_process_online_files(files)
                     else:
                         st.error(warn or "Failed to download. Ensure the URLs are correct and public.")
+                        
+    # Common processing section for any downloaded online files
+    downloaded_files = get_state('downloaded_online_files')
+    if downloaded_files:
+        st.markdown("---")
+        st.subheader("⚙️ Process Downloaded Corpus")
+        st.success(f"{len(downloaded_files)} components ready for processing.")
+        
+        # Language Selection
+        st.markdown("**Language**")
+        from core.config import STANZA_LANG_MAP
+        lang_options = list(STANZA_LANG_MAP.keys()) + ["OTHER"]
+        selected_lang_label = st.radio(
+            "Language Select", 
+            lang_options, 
+            index=0,
+            horizontal=True,
+            key="online_language_select",
+            label_visibility="collapsed"
+        )
+        
+        # Tagging Tool
+        st.markdown("**Tagging Tool**")
+        tagger_tool = st.radio(
+            "Select Tagging Tool",
+            ["Default (Stanza / SpaCy)", "Custom Tagger"],
+            index=0,
+            horizontal=True,
+            key="online_tagger_tool_select",
+            label_visibility="collapsed"
+        )
+        
+        if tagger_tool == "Custom Tagger":
+            st.warning("Custom Tagger for Online Corpus is not fully wired in this view yet. Please use Default.")
+            
+        if st.button("Process Downloaded Files", type="primary", use_container_width=True):
+            if tagger_tool == "Custom Tagger":
+                st.error("Please use the Default tagger for now.")
+            else:
+                lang_code = "OTHER" if selected_lang_label == "OTHER" else STANZA_LANG_MAP[selected_lang_label]
+                import core.preprocessing.corpus_loader as corpus_loader
+                import io
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                def update_progress(val, text):
+                    progress_bar.progress(val)
+                    status_text.caption(text)
+                    
+                files_to_process = []
+                for f_dict in downloaded_files:
+                    buf = io.BytesIO(f_dict['content'].encode('utf-8'))
+                    buf.name = f_dict['filename']
+                    files_to_process.append(buf)
+                    
+                with st.spinner("Processing & indexing online corpus content..."):
+                    result = corpus_loader.load_monolingual_corpus_files(
+                        files_to_process,
+                        explicit_lang_code=lang_code,
+                        selected_format="Raw (Natural text)",
+                        progress_callback=update_progress
+                    )
+                    
+                    if result.get('error'):
+                        st.error(result['error'])
+                    else:
+                        set_state('current_corpus_path', result['db_path'])
+                        set_state('corpus_stats', result['stats'])
+                        set_state('current_corpus_name', "Online Scraped Batch")
+                        set_state('xml_structure_data', result.get('structure'))
+                        set_state('target_lang', lang_code)
+                        set_state('downloaded_online_files', None) # Clear buffer
+                        st.success("Online corpus loaded successfully!")
+                        st.rerun()
 
     elif mode == "Link Collection":
         st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
