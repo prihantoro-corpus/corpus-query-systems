@@ -437,7 +437,7 @@ def render_annotation_help_button(db_path, key_suffix=""):
     with st.popover("❓ Annotation Tags Guide", use_container_width=False):
         st.markdown("### 🏷️ Annotation Tags Guide")
         
-        selected_layer = st.selectbox("Select Annotation Layer", layers, key=f"anno_layer_{key_suffix}")
+        selected_layer = st.radio("Select Annotation Layer", layers, key=f"anno_layer_{key_suffix}", horizontal=True)
         
         if selected_layer == "Part-of-Speech":
             tagger, tagset = infer_tagger_and_tagset(db_path)
