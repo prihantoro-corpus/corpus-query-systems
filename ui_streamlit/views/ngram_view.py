@@ -412,8 +412,13 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
             html += "<th>Frequency Band</th>"
         
         html += "</tr></thead><tbody>"
+        # Prepare for HTML rendering
+        html_rows = []
         
-        # Render rows
+        import logging
+        logging.getLogger("cortex_profiler").info(f"DEBUG NGRAM UI: \n{df_display.head()}")
+        print(f"DEBUG NGRAM UI: \n{df_display.head()}")
+        
         for _, row in df_display.iterrows():
             ngram_col = [col for col in df.columns if col.startswith('Pos')][0] if any(col.startswith('Pos') for col in df.columns) else df.columns[0]
             ngram_text = str(row[ngram_col])
