@@ -440,9 +440,12 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
         
         st.markdown(html, unsafe_allow_html=True)
         
+        # Limit export to 100,000 rows to prevent Excel and Memory crashes
+        df_export = df.head(100000)
+        
         st.download_button(
             label=f"Download {corpus_name} N-Grams (Excel)",
-            data=df_to_excel_bytes(df),
+            data=df_to_excel_bytes(df_export),
             file_name=f"ngrams_{corpus_name}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key=f"dl_ng_{key_suffix}"
