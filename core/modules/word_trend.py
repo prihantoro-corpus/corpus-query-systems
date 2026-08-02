@@ -73,46 +73,39 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
                 pos_filter = f" AND pos IN ({safe_tags})"
                 
         if comparison_mode == 'exclusive':
+            # Create a list of the exact time values safely formatted for IN clause
+            safe_values = ", ".join([f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in ordered_time_values])
+            
             query = f"""
-            WITH period_ranks AS (
-                {period_ranks_sql}
+            WITH period_totals AS (
+                SELECT CAST({time_attr} AS VARCHAR) as time_val, CAST(COUNT(*) AS DOUBLE) as total_tokens
+                FROM corpus
+                WHERE CAST({time_attr} AS VARCHAR) IN ({safe_values})
+                GROUP BY CAST({time_attr} AS VARCHAR)
             ),
-            filtered_corpus AS (
-                SELECT c._token_low, ANY_VALUE(c.token) as display_token, p.time_val
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
-                  AND NOT regexp_matches(c._token_low, '^[0-9]+$')
+            word_stats AS (
+                SELECT 
+                    _token_low, 
+                    ANY_VALUE(token) as display_token,
+                    CAST(COUNT(*) AS DOUBLE) as freq,
+                    COUNT(DISTINCT CAST({time_attr} AS VARCHAR)) as num_periods,
+                    ANY_VALUE(CAST({time_attr} AS VARCHAR)) as exclusive_time_val
+                FROM corpus
+                WHERE NOT regexp_matches(_token_low, '^[[:punct:]]+$') 
+                  AND NOT regexp_matches(_token_low, '^[0-9]+$')
+                  AND CAST({time_attr} AS VARCHAR) IN ({safe_values})
                   {pos_filter}
-                GROUP BY c._token_low, p.time_val
-            ),
-            token_distribution AS (
-                SELECT _token_low, COUNT(DISTINCT time_val) as num_periods, ANY_VALUE(time_val) as exclusive_time_val
-                FROM filtered_corpus
                 GROUP BY _token_low
             ),
-            exclusive_tokens AS (
-                SELECT _token_low, exclusive_time_val
-                FROM token_distribution
-                WHERE num_periods = 1
-            ),
-            period_totals AS (
-                SELECT p.time_val, CAST(COUNT(*) AS DOUBLE) as total_tokens
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                GROUP BY p.time_val
-            ),
             exclusive_frequencies AS (
-                SELECT fc.time_val, fc.display_token as token, fc._token_low, CAST(COUNT(*) AS DOUBLE) as freq, pt.total_tokens
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                JOIN exclusive_tokens et ON c._token_low = et._token_low AND p.time_val = et.exclusive_time_val
-                JOIN filtered_corpus fc ON c._token_low = fc._token_low AND p.time_val = fc.time_val
-                JOIN period_totals pt ON p.time_val = pt.time_val
-                WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
-                  AND NOT regexp_matches(c._token_low, '^[0-9]+$')
-                  {pos_filter}
-                GROUP BY fc.time_val, fc.display_token, fc._token_low, pt.total_tokens
+                SELECT 
+                    w.exclusive_time_val as time_val,
+                    w.display_token as token,
+                    w.freq,
+                    p.total_tokens
+                FROM word_stats w
+                JOIN period_totals p ON w.exclusive_time_val = p.time_val
+                WHERE w.num_periods = 1
             ),
             ranked_exclusive AS (
                 SELECT time_val, token, (freq / total_tokens * 1000000) as rel_freq,
@@ -126,45 +119,35 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
             """
             
             full_query = f"""
-            WITH period_ranks AS (
-                {period_ranks_sql}
+            WITH period_totals AS (
+                SELECT CAST({time_attr} AS VARCHAR) as time_val, CAST(COUNT(*) AS DOUBLE) as total_tokens
+                FROM corpus
+                WHERE CAST({time_attr} AS VARCHAR) IN ({safe_values})
+                GROUP BY CAST({time_attr} AS VARCHAR)
             ),
-            filtered_corpus AS (
-                SELECT c._token_low, ANY_VALUE(c.token) as display_token, p.time_val
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
-                  AND NOT regexp_matches(c._token_low, '^[0-9]+$')
+            word_stats AS (
+                SELECT 
+                    _token_low, 
+                    ANY_VALUE(token) as display_token,
+                    CAST(COUNT(*) AS DOUBLE) as freq,
+                    COUNT(DISTINCT CAST({time_attr} AS VARCHAR)) as num_periods,
+                    ANY_VALUE(CAST({time_attr} AS VARCHAR)) as exclusive_time_val
+                FROM corpus
+                WHERE NOT regexp_matches(_token_low, '^[[:punct:]]+$') 
+                  AND NOT regexp_matches(_token_low, '^[0-9]+$')
+                  AND CAST({time_attr} AS VARCHAR) IN ({safe_values})
                   {pos_filter}
-                GROUP BY c._token_low, p.time_val
-            ),
-            token_distribution AS (
-                SELECT _token_low, COUNT(DISTINCT time_val) as num_periods, ANY_VALUE(time_val) as exclusive_time_val
-                FROM filtered_corpus
                 GROUP BY _token_low
             ),
-            exclusive_tokens AS (
-                SELECT _token_low, exclusive_time_val
-                FROM token_distribution
-                WHERE num_periods = 1
-            ),
-            period_totals AS (
-                SELECT p.time_val, CAST(COUNT(*) AS DOUBLE) as total_tokens
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                GROUP BY p.time_val
-            ),
             exclusive_frequencies AS (
-                SELECT fc.time_val, fc.display_token as token, fc._token_low, CAST(COUNT(*) AS DOUBLE) as freq, pt.total_tokens
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                JOIN exclusive_tokens et ON c._token_low = et._token_low AND p.time_val = et.exclusive_time_val
-                JOIN filtered_corpus fc ON c._token_low = fc._token_low AND p.time_val = fc.time_val
-                JOIN period_totals pt ON p.time_val = pt.time_val
-                WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
-                  AND NOT regexp_matches(c._token_low, '^[0-9]+$')
-                  {pos_filter}
-                GROUP BY fc.time_val, fc.display_token, fc._token_low, pt.total_tokens
+                SELECT 
+                    w.exclusive_time_val as time_val,
+                    w.display_token as token,
+                    w.freq,
+                    p.total_tokens
+                FROM word_stats w
+                JOIN period_totals p ON w.exclusive_time_val = p.time_val
+                WHERE w.num_periods = 1
             )
             SELECT time_val as Time, token as "Unique Word", (freq / total_tokens * 1000000) as "Relative Frequency (pmw)"
             FROM exclusive_frequencies
@@ -175,18 +158,25 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
             WITH period_ranks AS (
                 {period_ranks_sql}
             ),
-            filtered_corpus AS (
-                SELECT c._token_low, ANY_VALUE(c.token) as display_token, p.rank, p.time_val
+            word_period_stats AS (
+                SELECT 
+                    c._token_low, 
+                    ANY_VALUE(c.token) as display_token,
+                    p.time_val,
+                    p.rank,
+                    CAST(COUNT(*) AS DOUBLE) as freq
                 FROM corpus c
                 JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
                 WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
                   AND NOT regexp_matches(c._token_low, '^[0-9]+$')
                   {pos_filter}
-                GROUP BY c._token_low, p.rank, p.time_val
+                GROUP BY c._token_low, p.time_val, p.rank
             ),
             token_emergence AS (
-                SELECT _token_low, MIN(rank) as first_rank
-                FROM filtered_corpus
+                SELECT 
+                    _token_low, 
+                    MIN(rank) as first_rank
+                FROM word_period_stats
                 GROUP BY _token_low
             ),
             period_totals AS (
@@ -196,16 +186,15 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
                 GROUP BY p.time_val
             ),
             emerging_frequencies AS (
-                SELECT fc.time_val, fc.display_token as token, fc._token_low, CAST(COUNT(*) AS DOUBLE) as freq, te.first_rank, pt.total_tokens
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                JOIN token_emergence te ON c._token_low = te._token_low AND p.rank = te.first_rank
-                JOIN filtered_corpus fc ON c._token_low = fc._token_low AND p.rank = fc.rank
-                JOIN period_totals pt ON p.time_val = pt.time_val
-                WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
-                  AND NOT regexp_matches(c._token_low, '^[0-9]+$')
-                  {pos_filter}
-                GROUP BY fc.time_val, fc.display_token, fc._token_low, te.first_rank, pt.total_tokens
+                SELECT 
+                    wps.time_val, 
+                    wps.display_token as token, 
+                    wps.freq, 
+                    te.first_rank, 
+                    pt.total_tokens
+                FROM word_period_stats wps
+                JOIN token_emergence te ON wps._token_low = te._token_low AND wps.rank = te.first_rank
+                JOIN period_totals pt ON wps.time_val = pt.time_val
             ),
             ranked_emerging AS (
                 SELECT time_val, token, (freq / total_tokens * 1000000) as rel_freq, first_rank,
@@ -223,18 +212,25 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
             WITH period_ranks AS (
                 {period_ranks_sql}
             ),
-            filtered_corpus AS (
-                SELECT c._token_low, ANY_VALUE(c.token) as display_token, p.rank, p.time_val
+            word_period_stats AS (
+                SELECT 
+                    c._token_low, 
+                    ANY_VALUE(c.token) as display_token,
+                    p.time_val,
+                    p.rank,
+                    CAST(COUNT(*) AS DOUBLE) as freq
                 FROM corpus c
                 JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
                 WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
                   AND NOT regexp_matches(c._token_low, '^[0-9]+$')
                   {pos_filter}
-                GROUP BY c._token_low, p.rank, p.time_val
+                GROUP BY c._token_low, p.time_val, p.rank
             ),
             token_emergence AS (
-                SELECT _token_low, MIN(rank) as first_rank
-                FROM filtered_corpus
+                SELECT 
+                    _token_low, 
+                    MIN(rank) as first_rank
+                FROM word_period_stats
                 GROUP BY _token_low
             ),
             period_totals AS (
@@ -244,16 +240,15 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
                 GROUP BY p.time_val
             ),
             emerging_frequencies AS (
-                SELECT fc.time_val, fc.display_token as token, fc._token_low, CAST(COUNT(*) AS DOUBLE) as freq, te.first_rank, pt.total_tokens
-                FROM corpus c
-                JOIN period_ranks p ON CAST(c.{time_attr} AS VARCHAR) = p.time_val
-                JOIN token_emergence te ON c._token_low = te._token_low AND p.rank = te.first_rank
-                JOIN filtered_corpus fc ON c._token_low = fc._token_low AND p.rank = fc.rank
-                JOIN period_totals pt ON p.time_val = pt.time_val
-                WHERE NOT regexp_matches(c._token_low, '^[[:punct:]]+$') 
-                  AND NOT regexp_matches(c._token_low, '^[0-9]+$')
-                  {pos_filter}
-                GROUP BY fc.time_val, fc.display_token, fc._token_low, te.first_rank, pt.total_tokens
+                SELECT 
+                    wps.time_val, 
+                    wps.display_token as token, 
+                    wps.freq, 
+                    te.first_rank, 
+                    pt.total_tokens
+                FROM word_period_stats wps
+                JOIN token_emergence te ON wps._token_low = te._token_low AND wps.rank = te.first_rank
+                JOIN period_totals pt ON wps.time_val = pt.time_val
             )
             SELECT time_val as Time, token as "Emerging Word", (freq / total_tokens * 1000000) as "Relative Frequency (pmw)"
             FROM emerging_frequencies

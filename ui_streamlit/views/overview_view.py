@@ -2635,9 +2635,16 @@ def _render_lexical_complexity_tab(db_path, key_suffix=""):
     lang_name = ov.get_corpus_language(db_path)
     lang_clean = lang_name.strip().lower()
     
-    wl_dir = os.path.join("wordlist", lang_clean)
+    lang_map = {
+        "en": "english", "id": "indonesian", "ar": "arabic", 
+        "jp": "japanese", "ch": "chinese", "ko": "korean", 
+        "lo": "limola", "hi": "hindi", "jv": "javanese"
+    }
+    mapped_lang = lang_map.get(lang_clean, lang_clean)
+    
+    wl_dir = os.path.join("wordlist", mapped_lang)
     if not os.path.isdir(wl_dir):
-        wl_dir = os.path.join("..", "wordlist", lang_clean)
+        wl_dir = os.path.join("..", "wordlist", mapped_lang)
         
     available_wordlists = {}
     if os.path.isdir(wl_dir):
@@ -2657,7 +2664,7 @@ def _render_lexical_complexity_tab(db_path, key_suffix=""):
         )
         selected_wl_path = available_wordlists[selected_wl_name]
     else:
-        st.info(f"No reference wordlists found in '{os.path.join('wordlist', lang_clean)}' for sophistication analysis.")
+        st.info(f"No reference wordlists found in '{os.path.join('wordlist', mapped_lang)}' for sophistication analysis.")
 
     # Scan for sub-corpus XML attributes
     from core.preprocessing.xml_parser import get_xml_attribute_columns
