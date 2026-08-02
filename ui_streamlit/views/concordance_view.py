@@ -98,9 +98,9 @@ def render_concordance_view():
                         with col3:
                              limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit_rule")
 
-                        # POS Tag Guide Popover
-                        from ui_streamlit.components.pos_help import render_pos_help_button
-                        render_pos_help_button(corpus_path, "concordance_rule")
+                        # Annotation Tag Guide Popover
+                        from ui_streamlit.components.pos_help import render_annotation_help_button
+                        render_annotation_help_button(corpus_path, "concordance_rule")
 
                         # Advanced Filters
                         c_adv1, c_adv2 = st.columns(2)
@@ -182,9 +182,9 @@ def render_concordance_view():
                     st.markdown("### 🧠 Natural Language Search")
                     nl_query = st.text_area("Describe your concordance query", height=70, placeholder="e.g. Find examples of 'make' followed by a noun")
                     
-                    # POS Tag Guide Popover
-                    from ui_streamlit.components.pos_help import render_pos_help_button
-                    render_pos_help_button(corpus_path, "concordance_ai")
+                    # Annotation Tag Guide Popover
+                    from ui_streamlit.components.pos_help import render_annotation_help_button
+                    render_annotation_help_button(corpus_path, "concordance_ai")
 
                     # Display Options for AI Mode
                     with st.expander("Display Options"):
@@ -259,9 +259,9 @@ def render_concordance_view():
                         with col3:
                              limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit")
 
-                        # POS Tag Guide Popover
-                        from ui_streamlit.components.pos_help import render_pos_help_button
-                        render_pos_help_button(corpus_path, "concordance_standard")
+                        # Annotation Tag Guide Popover
+                        from ui_streamlit.components.pos_help import render_annotation_help_button
+                        render_annotation_help_button(corpus_path, "concordance_standard")
 
                         # Advanced Filters
                         c_adv1, c_adv2 = st.columns(2)

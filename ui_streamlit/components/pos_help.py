@@ -324,3 +324,244 @@ def render_pos_help_button(db_path, key_suffix=""):
                 "Examples (from corpus)": st.column_config.TextColumn("Examples (from corpus)", width=250)
             }
         )
+
+NER_INFO = {
+    'PERSON': {'defn': 'Person', 'desc': 'People, including fictional.', 'examples': ['Albert Einstein', 'Harry Potter']},
+    'NORP': {'defn': 'Nationalities or religious/political groups', 'desc': 'Nationalities, religious or political groups.', 'examples': ['Americans', 'Democrats']},
+    'FAC': {'defn': 'Facility', 'desc': 'Buildings, airports, highways, bridges, etc.', 'examples': ['Golden Gate Bridge', 'JFK Airport']},
+    'ORG': {'defn': 'Organization', 'desc': 'Companies, agencies, institutions, etc.', 'examples': ['Apple', 'United Nations']},
+    'GPE': {'defn': 'Geopolitical Entity', 'desc': 'Countries, cities, states.', 'examples': ['New York', 'Japan']},
+    'LOC': {'defn': 'Location', 'desc': 'Non-GPE locations, mountain ranges, bodies of water.', 'examples': ['Mount Everest', 'Pacific Ocean']},
+    'PRODUCT': {'defn': 'Product', 'desc': 'Objects, vehicles, foods, etc. (Not services.)', 'examples': ['iPhone', 'Honda Civic']},
+    'EVENT': {'defn': 'Event', 'desc': 'Named hurricanes, battles, wars, sports events, etc.', 'examples': ['World War II', 'Olympics']},
+    'WORK_OF_ART': {'defn': 'Work of Art', 'desc': 'Titles of books, songs, etc.', 'examples': ['Mona Lisa', 'The Beatles']},
+    'LAW': {'defn': 'Law', 'desc': 'Named documents made into laws.', 'examples': ['Constitution', 'Bill of Rights']},
+    'LANGUAGE': {'defn': 'Language', 'desc': 'Any named language.', 'examples': ['English', 'Spanish']},
+    'DATE': {'defn': 'Date', 'desc': 'Absolute or relative dates or periods.', 'examples': ['January', '2026']},
+    'TIME': {'defn': 'Time', 'desc': 'Times smaller than a day.', 'examples': ['morning', '8:00 AM']},
+    'PERCENT': {'defn': 'Percent', 'desc': 'Percentage, including "%".', 'examples': ['20%', 'fifty percent']},
+    'MONEY': {'defn': 'Money', 'desc': 'Monetary values, including unit.', 'examples': ['$100', '50 euros']},
+    'QUANTITY': {'defn': 'Quantity', 'desc': 'Measurements, as of weight or distance.', 'examples': ['10 kg', '5 miles']},
+    'ORDINAL': {'defn': 'Ordinal Number', 'desc': '"first", "second", etc.', 'examples': ['first', '2nd']},
+    'CARDINAL': {'defn': 'Cardinal Number', 'desc': 'Numerals that do not fall under another type.', 'examples': ['two', '1000']}
+}
+
+DEP_INFO = {
+    'acl': {'defn': 'clausal modifier of noun', 'desc': 'Finite or non-finite clause that modifies a noun.', 'examples': ['the man *who is singing*']},
+    'advcl': {'defn': 'adverbial clause modifier', 'desc': 'A clause that modifies a verb or other predicate as an adjunct.', 'examples': ['he ran *because he was scared*']},
+    'advmod': {'defn': 'adverbial modifier', 'desc': 'A (non-clausal) adverb or adverbial phrase that serves to modify a predicate.', 'examples': ['he ran *quickly*']},
+    'amod': {'defn': 'adjectival modifier', 'desc': 'An adjectival phrase that modifies a noun.', 'examples': ['the *red* car']},
+    'appos': {'defn': 'appositional modifier', 'desc': 'A noun phrase that serves to define or modify another noun phrase.', 'examples': ['Sam, my *brother*']},
+    'aux': {'defn': 'auxiliary', 'desc': 'A non-main verb of the clause.', 'examples': ['he *is* running']},
+    'case': {'defn': 'case marking', 'desc': 'Prepositions, postpositions, and other case markers.', 'examples': ['*in* the house']},
+    'cc': {'defn': 'coordinating conjunction', 'desc': 'A conjunction that links two coordinated elements.', 'examples': ['apples *and* oranges']},
+    'ccomp': {'defn': 'clausal complement', 'desc': 'A dependent clause which is a core argument.', 'examples': ['he says *that he is happy*']},
+    'compound': {'defn': 'compound', 'desc': 'A compound noun or multi-word expression.', 'examples': ['*apple* juice']},
+    'conj': {'defn': 'conjunct', 'desc': 'The rightmost element of a coordinated structure.', 'examples': ['apples and *oranges*']},
+    'cop': {'defn': 'copula', 'desc': 'A linking verb.', 'examples': ['he *is* happy']},
+    'csubj': {'defn': 'clausal subject', 'desc': 'A clausal syntactic subject of a clause.', 'examples': ['*what she said* makes sense']},
+    'dep': {'defn': 'unspecified dependency', 'desc': 'A dependency that cannot be assigned a more specific label.', 'examples': []},
+    'det': {'defn': 'determiner', 'desc': 'A word that expresses reference of a noun.', 'examples': ['*the* car', '*a* dog']},
+    'fixed': {'defn': 'multi-word expression', 'desc': 'Grammaticalized multi-word expression.', 'examples': ['*in spite of*']},
+    'flat': {'defn': 'flat multi-word expression', 'desc': 'Names and other multi-word expressions without internal syntactic structure.', 'examples': ['*New York*']},
+    'goeswith': {'defn': 'goes with', 'desc': 'Links parts of a word that are separated in text.', 'examples': []},
+    'iobj': {'defn': 'indirect object', 'desc': 'The recipient or beneficiary of an action.', 'examples': ['give *him* the book']},
+    'list': {'defn': 'list', 'desc': 'Chains of comparable items.', 'examples': []},
+    'mark': {'defn': 'marker', 'desc': 'A word introducing a finite clause subordinate to another clause.', 'examples': ['he ran *because* he was scared']},
+    'nmod': {'defn': 'nominal modifier', 'desc': 'A noun phrase that serves to modify another noun phrase.', 'examples': ['the door of the *house*']},
+    'nsubj': {'defn': 'nominal subject', 'desc': 'A noun phrase which is the syntactic subject of a clause.', 'examples': ['*the car* is red']},
+    'nsubjpass': {'defn': 'nominal subject (passive)', 'desc': 'A noun phrase which is the syntactic subject of a passive clause.', 'examples': ['*the car* was stolen']},
+    'nummod': {'defn': 'numeric modifier', 'desc': 'A number that serves to modify the meaning of a noun.', 'examples': ['*three* cars']},
+    'obj': {'defn': 'object', 'desc': 'The direct object of a verb.', 'examples': ['eat *an apple*']},
+    'dobj': {'defn': 'direct object', 'desc': 'The direct object of a verb.', 'examples': ['eat *an apple*']},
+    'obl': {'defn': 'oblique nominal', 'desc': 'A non-core nominal argument.', 'examples': ['give the book *to him*']},
+    'orphan': {'defn': 'orphan', 'desc': 'Used for elliptical constructions.', 'examples': []},
+    'parataxis': {'defn': 'parataxis', 'desc': 'A clause placed side by side with another clause without coordination or subordination.', 'examples': ['he came, *he saw*, he conquered']},
+    'punct': {'defn': 'punctuation', 'desc': 'Punctuation marks.', 'examples': ['.', ',']},
+    'reparandum': {'defn': 'overridden disfluency', 'desc': 'Speech repair.', 'examples': []},
+    'root': {'defn': 'root', 'desc': 'The root of the sentence, typically the main verb.', 'examples': []},
+    'vocative': {'defn': 'vocative', 'desc': 'A name or noun phrase used to address someone.', 'examples': ['*John*, come here']},
+    'xcomp': {'defn': 'open clausal complement', 'desc': 'A clausal complement without its own subject.', 'examples': ['he wants *to sleep*']}
+}
+
+SENTIMENT_INFO = {
+    'Positive': {'defn': 'Positive Sentiment', 'desc': 'The text segment expresses a favorable, supportive, or optimistic polarity.', 'examples': []},
+    'Neutral': {'defn': 'Neutral Sentiment', 'desc': 'The text segment is objective, factual, or lacks strong emotional polarity.', 'examples': []},
+    'Negative': {'defn': 'Negative Sentiment', 'desc': 'The text segment expresses an unfavorable, critical, or pessimistic polarity.', 'examples': []}
+}
+
+@st.cache_data(show_spinner=False)
+def get_tag_examples(db_path, tag, column):
+    if not db_path:
+        return ""
+    examples_str = ""
+    import duckdb
+    con = duckdb.connect(db_path)
+    try:
+        res = con.execute(f"SELECT DISTINCT token FROM corpus WHERE {column} = ? AND NOT regexp_matches(token, '^[[:punct:]\\s]+$') LIMIT 10", [tag]).fetchall()
+        import random
+        words = [r[0] for r in res if r[0]]
+        if len(words) > 3:
+            random.seed(hash(tag))
+            words = random.sample(words, 3)
+        examples_str = ", ".join(words)
+    except Exception:
+        pass
+    finally:
+        con.close()
+    return examples_str
+
+def check_available_annotations(db_path):
+    available = ["Part-of-Speech"]
+    try:
+        import duckdb
+        with duckdb.connect(db_path, read_only=True) as con:
+            cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+            cols = [c[1].lower() for c in cols_info]
+            if "ent_type" in cols or "in_ner_start" in cols:
+                available.append("Named Entity Recognition (NER)")
+            if "dep_rel" in cols:
+                available.append("Dependency Parsing")
+            if "sentiment" in cols:
+                available.append("Sentiment Analysis")
+    except:
+        pass
+    return available
+
+def render_annotation_help_button(db_path, key_suffix=""):
+    if not db_path:
+        return
+        
+    layers = check_available_annotations(db_path)
+    
+    with st.popover("❓ Annotation Tags Guide", use_container_width=False):
+        st.markdown("### 🏷️ Annotation Tags Guide")
+        
+        selected_layer = st.selectbox("Select Annotation Layer", layers, key=f"anno_layer_{key_suffix}")
+        
+        if selected_layer == "Part-of-Speech":
+            tagger, tagset = infer_tagger_and_tagset(db_path)
+            tags = ov.get_unique_pos_tags(db_path)
+            if not tags:
+                st.info("No POS tags detected.")
+                return
+            st.markdown(f"🤖 **Pipeline Tagger:** `{tagger}`  \n🏷️ **Tagset Scheme:** `{tagset}`")
+            current_defs = ov.get_pos_definitions(db_path)
+            tagset_lower = tagset.lower()
+            if "upos" in tagset_lower or "universal" in tagset_lower:
+                standard_info = UPOS_INFO
+            elif "penn" in tagset_lower or "ptb" in tagset_lower:
+                standard_info = PTB_INFO
+            else:
+                standard_info = {}
+            
+            data_rows = []
+            for t in tags:
+                defn = current_defs.get(t, "")
+                if not defn:
+                    if t in standard_info:
+                        defn = f"{standard_info[t]['defn']} ({standard_info[t]['desc']})"
+                    else:
+                        spacy_defn = explain_pos_tag_via_spacy(t)
+                        if spacy_defn:
+                            defn = spacy_defn
+                        else:
+                            defn = "No definition available."
+                
+                examples = get_pos_tag_examples(db_path, t)
+                data_rows.append({
+                    "Tag": t,
+                    "Definition": defn,
+                    "Examples": examples if examples else "None"
+                })
+        
+        elif selected_layer == "Named Entity Recognition (NER)":
+            column = "ent_type"
+            import duckdb
+            try:
+                with duckdb.connect(db_path, read_only=True) as con:
+                    res_tags = con.execute("SELECT DISTINCT ent_type FROM corpus WHERE ent_type IS NOT NULL AND ent_type != '' AND ent_type != 'O'").fetchall()
+                    tags = [r[0] for r in res_tags if r[0]]
+            except:
+                tags = []
+            if not tags:
+                st.info("No NER tags detected.")
+                return
+            
+            data_rows = []
+            for t in tags:
+                t_clean = t.replace('B-', '').replace('I-', '')
+                if t_clean in NER_INFO:
+                    defn = f"{NER_INFO[t_clean]['defn']} ({NER_INFO[t_clean]['desc']})"
+                else:
+                    defn = "No definition available."
+                examples = get_tag_examples(db_path, t, "ent_type")
+                data_rows.append({
+                    "Tag": t,
+                    "Definition": defn,
+                    "Examples": examples if examples else "None"
+                })
+        
+        elif selected_layer == "Dependency Parsing":
+            column = "dep_rel"
+            import duckdb
+            try:
+                with duckdb.connect(db_path, read_only=True) as con:
+                    res_tags = con.execute("SELECT DISTINCT dep_rel FROM corpus WHERE dep_rel IS NOT NULL AND dep_rel != ''").fetchall()
+                    tags = [r[0] for r in res_tags if r[0]]
+            except:
+                tags = []
+            if not tags:
+                st.info("No Dependency tags detected.")
+                return
+            
+            data_rows = []
+            for t in tags:
+                if t in DEP_INFO:
+                    defn = f"{DEP_INFO[t]['defn']} ({DEP_INFO[t]['desc']})"
+                else:
+                    defn = "No definition available."
+                examples = get_tag_examples(db_path, t, "dep_rel")
+                data_rows.append({
+                    "Tag": t,
+                    "Definition": defn,
+                    "Examples": examples if examples else "None"
+                })
+                
+        elif selected_layer == "Sentiment Analysis":
+            column = "sentiment"
+            import duckdb
+            try:
+                with duckdb.connect(db_path, read_only=True) as con:
+                    res_tags = con.execute("SELECT DISTINCT sentiment FROM corpus WHERE sentiment IS NOT NULL AND sentiment != ''").fetchall()
+                    tags = [r[0] for r in res_tags if r[0]]
+            except:
+                tags = []
+            if not tags:
+                st.info("No Sentiment tags detected.")
+                return
+            
+            data_rows = []
+            for t in tags:
+                t_clean = t.capitalize() if isinstance(t, str) else t
+                if t_clean in SENTIMENT_INFO:
+                    defn = f"{SENTIMENT_INFO[t_clean]['defn']} ({SENTIMENT_INFO[t_clean]['desc']})"
+                else:
+                    defn = "No definition available."
+                data_rows.append({
+                    "Tag": t,
+                    "Definition": defn,
+                    "Examples": "N/A (Document-level metric)"
+                })
+                
+        if data_rows:
+            st.dataframe(
+                pd.DataFrame(data_rows),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Tag": st.column_config.TextColumn("Tag", width=120),
+                    "Definition": st.column_config.TextColumn("Definition", width=350),
+                    "Examples": st.column_config.TextColumn("Examples", width=250)
+                }
+            )
