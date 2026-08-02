@@ -158,7 +158,7 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
                     pat_core = pat
                     regex_pat = '^' + standardize_wildcards(pat_core) + '$'
                     
-                    if default_basis == 'POS Tag' and not is_raw:
+                    if default_basis in ['POS Tag', 'Part-of-Speech'] and not is_raw:
                         target_col = f"p{idx}"
                         regex_pat = "(?i)" + regex_pat
                     elif default_basis == 'Named Entity Recognition (NER)' and not is_raw:
@@ -251,6 +251,11 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
         query += f" GROUP BY {tokens_grp} ORDER BY freq DESC"
         
         full_params = xml_params + params
+        
+        # UI DEBUGGING
+        import streamlit as st
+        st.warning(f"DEBUG NGRAM CORE -> positional_bases: {positional_bases} | basis: {basis} | display_cols: {display_cols}")
+        
         df_res = con.execute(query, full_params).fetch_df()
         con.close()
         
