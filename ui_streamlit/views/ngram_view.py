@@ -26,6 +26,8 @@ def render_ngram_view():
                 st.warning("Please load a corpus first.")
                 return
 
+            active_bases = ["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"]
+
             # Initialize XML restriction variables to prevent NameError in NL search modes
             xml_where = ""
             xml_params = []
@@ -128,7 +130,7 @@ def render_ngram_view():
                          with col_punc:
                              skip_punc = st.checkbox("Skip Punctuation", value=True, key="ngram_skip_punc_rule")
                          with col_basis:
-                             global_basis = st.radio("Output Basis", ["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"], index=0, horizontal=True, key="ngram_basis_rule")
+                             global_basis = st.radio("Output Basis", active_bases, index=0, horizontal=True, key="ngram_basis_rule")
                          
                          from ui_streamlit.components.pos_help import render_annotation_help_button, check_available_annotations
                          render_annotation_help_button(corpus_path, "ngram_rule")
@@ -172,7 +174,7 @@ def render_ngram_view():
                             skip_punc = st.checkbox("Skip Punctuation", value=True)
                             neg_filter = [] # Removed explicit box as per request; relying on positional negation
                         with col_basis:
-                            global_basis = st.radio("Output Basis", ["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"], index=0, horizontal=True, key="ngram_basis")
+                            global_basis = st.radio("Output Basis", active_bases, index=0, horizontal=True, key="ngram_basis")
 
                         st.markdown("##### Positional Filters & Basis")
                         st.caption("Lower filters match the selected basis. Use `*`, `%`, `_` as wildcards. Use `_TAG` for POS tags, `[lemma]` to override, or `-term` to exclude.")
@@ -197,7 +199,7 @@ def render_ngram_view():
                     for i in range(1, n_val + 1):
                          with cols[i-1]:
                              st.markdown(f"**Pos {i}**")
-                             pos_basis = st.radio("Basis", ["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"], index=(["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"]).index(global_basis), horizontal=True, key=f"ng_b{i}")
+                             pos_basis = st.radio("Basis", active_bases, index=(active_bases).index(global_basis), horizontal=True, key=f"ng_b{i}")
                              positional_bases_primary[str(i)] = pos_basis
 
                              val = st.text_input(f"Filter", key=f"ng_p{i}")
@@ -213,7 +215,7 @@ def render_ngram_view():
                         for i in range(1, n_val + 1):
                              with cols[i-1]:
                                  st.markdown(f"**Pos {i}**")
-                                 pos_basis = st.radio("Basis", ["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"], index=(["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"]).index(global_basis), horizontal=True, key=f"ng_b{i}_c1")
+                                 pos_basis = st.radio("Basis", active_bases, index=(active_bases).index(global_basis), horizontal=True, key=f"ng_b{i}_c1")
                                  positional_bases_primary[str(i)] = pos_basis
 
                                  val = st.text_input(f"Filter", key=f"ng_p{i}_c1")
@@ -225,7 +227,7 @@ def render_ngram_view():
                         for i in range(1, n_val + 1):
                              with cols2[i-1]:
                                  st.markdown(f"**Pos {i}**")
-                                 pos_basis = st.radio("Basis", ["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"], index=(["Token", "Lemma"] + [a for a in check_available_annotations(corpus_path) if a != "Sentiment Analysis"]).index(global_basis), horizontal=True, key=f"ng_b{i}_c2")
+                                 pos_basis = st.radio("Basis", active_bases, index=(active_bases).index(global_basis), horizontal=True, key=f"ng_b{i}_c2")
                                  positional_bases_secondary[str(i)] = pos_basis
 
                                  val = st.text_input(f"Filter", key=f"ng_p{i}_c2")

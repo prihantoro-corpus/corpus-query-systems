@@ -15,7 +15,7 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
         return pd.DataFrame()
 
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         if xml_where_clause:
             total_tokens = con.execute(f"SELECT count(*) FROM corpus WHERE 1=1 {xml_where_clause}", xml_params).fetchone()[0]
         else:
