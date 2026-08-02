@@ -37,36 +37,53 @@ class OnlineCorpusBuilder:
         try:
             api = YouTubeTranscriptApi()
             transcript_list = api.list(video_id)
-            # Try to get English or Indonesian manually, or just use first available
-            transcript = transcript_list.find_transcript(['en', 'id', 'ms'])
+            
+            transcript = None
+            
+            # 1. Try to get preferred manually created languages
+            try:
+                transcript = transcript_list.find_transcript(['en', 'id', 'ms', 'en-US', 'en-GB'])
+            except:
+                pass
+                
+            # 2. Try to get preferred generated languages
+            if not transcript:
+                # We need to manually search if find_generated_transcript doesn't exist
+                try:
+                    transcript = transcript_list.find_generated_transcript(['en', 'id', 'ms', 'en-US', 'en-GB'])
+                except:
+                    pass
+            
+            # 3. Fallback to any manually created transcript
+            if not transcript:
+                try:
+                    transcript = next((t for t in transcript_list if not t.is_generated), None)
+                except:
+                    pass
+            
+            # 4. Fallback to absolutely any transcript available
+            if not transcript:
+                try:
+                    transcript = next(iter(transcript_list))
+                except StopIteration:
+                    return None
+                    
+            if not transcript:
+                return None
+                
             data = transcript.fetch()
+            
+            # Process the fetched data
             if hasattr(data, 'snippets'):
                 return " ".join([t.text for t in data.snippets])
             elif isinstance(data, list):
-                return " ".join([t['text'] for t in data])
+                if len(data) > 0 and hasattr(data[0], 'text'):
+                    return " ".join([t.text for t in data])
+                else:
+                    return " ".join([t.get('text', '') for t in data if 'text' in t])
             return None
         except Exception:
-            # Fallback to any transcript
-            try:
-                api = YouTubeTranscriptApi()
-                transcript_list = api.list(video_id)
-                transcript = next(iter(transcript_list))
-                data = transcript.fetch()
-                if hasattr(data, 'snippets'):
-                    return " ".join([t.text for t in data.snippets])
-                elif isinstance(data, list):
-                    return " ".join([t['text'] for t in data])
-                return None
-            except:
-                try:
-                    api = YouTubeTranscriptApi()
-                    data = api.fetch(video_id)
-                    if hasattr(data, 'snippets'):
-                        return " ".join([t.text for t in data.snippets])
-                    elif isinstance(data, list):
-                        return " ".join([t['text'] for t in data])
-                except:
-                    return None
+            return None
 
     def get_youtube_comments(self, video_url, max_comments=100, selection_strategy="From top (Fastest)", keywords=None):
         downloader = YoutubeCommentDownloader()
