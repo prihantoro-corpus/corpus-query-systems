@@ -255,6 +255,7 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
         # UI DEBUGGING
         import streamlit as st
         st.warning(f"DEBUG NGRAM CORE -> positional_bases: {positional_bases} | basis: {basis} | display_cols: {display_cols}")
+        print(f"DEBUG NGRAM CORE -> positional_bases: {positional_bases} | basis: {basis} | display_cols: {display_cols}")
         
         df_res = con.execute(query, full_params).fetch_df()
         con.close()
