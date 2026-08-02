@@ -951,6 +951,15 @@ def render_pattern_results(pattern_results, collocation_results, key_suffix=""):
     
     # Get corpus info
     node_word = collocation_results.get('node', '')
+    stat_measure = collocation_results.get('stat_measure', 'Log-Likelihood')
+    
+    measure_col_map = {
+        "Log-Likelihood": "LL",
+        "Log-Dice": "Log-Dice",
+        "Dice Coefficient": "Dice",
+        "Mutual Information": "MI"
+    }
+    y_col = measure_col_map.get(stat_measure, "LL")
     
     # Display each pattern group
     for pattern in patterns:
@@ -980,8 +989,9 @@ def render_pattern_results(pattern_results, collocation_results, key_suffix=""):
             # Show examples directly (one per collocate)
             st.markdown("**Matching Examples (Representative Instance per Collocate):**")
             
-            # Sort collocates by LL to show top ones first
-            sorted_df = df_group.sort_values('LL', ascending=False)
+            # Sort collocates by chosen measure to show top ones first
+            sort_col = y_col if y_col in df_group.columns else 'LL'
+            sorted_df = df_group.sort_values(sort_col, ascending=False)
             
             # Pagination logic: show 5 by default, expand if button clicked
             limit = 5
@@ -993,7 +1003,7 @@ def render_pattern_results(pattern_results, collocation_results, key_suffix=""):
             
             for idx, (_, row) in enumerate(display_df.iterrows(), 1):
                 collocate = row['Collocate']
-                ll_score = row.get('LL', 0)
+                score_val = row.get(sort_col, 0)
                 
                 # Helper for fallback matching
                 def _matches_item(t_dict, val):
@@ -1035,11 +1045,11 @@ def render_pattern_results(pattern_results, collocation_results, key_suffix=""):
                         
                         display_html = " ".join(parts)
                         st.markdown(
-                            f"{idx}. **{collocate}** (LL: {ll_score:.2f}): {display_html}",
+                            f"{idx}. **{collocate}** ({score_val:.2f}): {display_html}",
                             unsafe_allow_html=True
                         )
                     else:
-                        st.markdown(f"{idx}. **{collocate}** (LL: {ll_score:.2f})")
+                        st.markdown(f"{idx}. **{collocate}** ({score_val:.2f})")
                         for sub_idx, ex_item in enumerate(example_list):
                             if isinstance(ex_item, tuple) and len(ex_item) == 3:
                                 conc_line, node_idx, coll_idx = ex_item
@@ -1065,7 +1075,7 @@ def render_pattern_results(pattern_results, collocation_results, key_suffix=""):
                             )
                 else:
                     # If no example stored, show the collocate info at least
-                    st.markdown(f"{idx}. **{collocate}** (LL: {ll_score:.2f})")
+                    st.markdown(f"{idx}. **{collocate}** ({score_val:.2f})")
             
             # Show more button
             if total > limit:
