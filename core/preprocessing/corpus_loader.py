@@ -116,8 +116,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         sample_str = sample_bytes.decode('utf-8', errors='ignore').strip()
         
         is_xml_ext = filename.lower().endswith('.xml')
+        is_conllu_ext = filename.lower().endswith('.conllu')
         is_pseudo_xml = False
-        if not is_xml_ext:
+        if not is_xml_ext and not is_conllu_ext:
             if sample_str.startswith('<'):
                 is_pseudo_xml = True
             elif any(tag in sample_str.lower() for tag in ['<text', '<corpus', '<p>', '<p ']):
@@ -169,6 +170,86 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
 
             except Exception as e:
                 return {'error': f"Processing Error ({filename}): {str(e)}"}
+                
+        # --- CONLL-U PROCESSING ---
+        elif is_conllu_ext:
+            try:
+                file_bytes = file_source.read()
+                file_content_str = file_bytes.decode('utf-8', errors='ignore')
+                lines = file_content_str.splitlines()
+                
+                current_sent = []
+                # Keep a global counter in case sent_id is missing or we just want sequential
+                sent_id_counter = 0
+                
+                def flush_conllu_sent():
+                    nonlocal sent_id_counter
+                    if not current_sent: return
+                    sent_id_counter += 1
+                    
+                    id_to_token = {r['_conllu_id']: r['token'] for r in current_sent}
+                    id_to_token['0'] = 'ROOT'
+                    
+                    for r in current_sent:
+                        head_id = r.get('dep_head_id', '')
+                        if head_id in id_to_token:
+                            r['dep_head_token'] = id_to_token[head_id]
+                        else:
+                            r['dep_head_token'] = ''
+                            
+                        # Clean up internal id
+                        if '_conllu_id' in r:
+                            del r['_conllu_id']
+                            
+                        r['sent_id'] = sent_id_counter
+                        r['filename'] = filename
+                        all_df_data.append(r)
+                    current_sent.clear()
+                    
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        flush_conllu_sent()
+                        continue
+                    if line.startswith('#'):
+                        continue
+                        
+                    parts = line.split('\t')
+                    if len(parts) >= 8:
+                        token_id = parts[0]
+                        if '-' in token_id or '.' in token_id:
+                            continue # skip multi-word tokens or empty nodes
+                            
+                        token = parts[1]
+                        lemma = parts[2] if parts[2] != '_' else token
+                        pos = parts[3] if parts[3] != '_' else (parts[4] if len(parts) > 4 and parts[4] != '_' else 'TAG')
+                        head = parts[6] if len(parts) > 6 and parts[6] != '_' else ''
+                        deprel = parts[7] if len(parts) > 7 and parts[7] != '_' else ''
+                        
+                        ent_type = ""
+                        misc = parts[9] if len(parts) > 9 else ""
+                        if misc != '_':
+                            ner_match = re.search(r'ner=([A-Za-z0-9_\-]+)', misc, re.IGNORECASE)
+                            if ner_match:
+                                ent_type = ner_match.group(1)
+                                
+                        row = {
+                            'token': token,
+                            'pos': pos,
+                            'lemma': lemma,
+                            'ent_type': ent_type,
+                            'dep_rel': deprel,
+                            'dep_head_id': head,
+                            '_conllu_id': token_id
+                        }
+                        current_sent.append(row)
+                        
+                flush_conllu_sent()
+                if explicit_lang_code != 'OTHER':
+                    xml_detected_lang_code = stanza_lang_code
+                    
+            except Exception as e:
+                return {'error': f"CoNLL-U Error ({filename}): {str(e)}"}
         
         # --- TXT/CSV PROCESSING ---
         else: 
