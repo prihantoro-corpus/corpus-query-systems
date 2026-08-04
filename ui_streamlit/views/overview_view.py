@@ -1251,7 +1251,7 @@ def render_upload_ui():
     lang_code = 'en'
     fmt = "Raw (Natural text)"
     
-    if not is_db_upload:
+    if True: # Always show language and format options
         lang_col, fmt_col = st.columns(2)
         with lang_col:
             st.markdown("**Language**")
