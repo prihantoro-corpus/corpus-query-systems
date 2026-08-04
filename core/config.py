@@ -10,7 +10,7 @@ KNOWN_CORPORA_MAP = {
     "XML Tag Demo (EN)": "english/xml_tag_demo.db",
     "ID-BPPT (XML Tagged)": "indonesian/ID-BPPT-tagged.db",
     "EN-BPPT (XML Tagged)": "english/EN-BPPT-tagged.db",
-    "Brown 50% Only (XML EN TAGGED)": "english/BrownCorpus.db",
+    "BROWN": "english/BrownCorpus.db",
     "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.db",
     "BAWE sample (English)": "english/BAWE.db",
     "JP-DICO-JALF": "japanese/JP-DICO-JALF.db",
@@ -46,6 +46,10 @@ def get_available_corpora():
         # Recursive walk
         count = 0
         for root, dirs, files in os.walk(CORPORA_DIR):
+            # Skip the raw BROWN FILES folder from showing up as Built-In
+            if "BROWN FILES" in dirs:
+                dirs.remove("BROWN FILES")
+                
             for file_name in files:
                 if file_name.lower().endswith(('.xml', '.txt', '.csv', '.xlsx', '.db', '.duckdb')):
                     full_path = os.path.join(root, file_name)
@@ -103,7 +107,7 @@ BUILT_IN_CORPUS_DETAILS = {
         **Source:** BPPT.
         """,
 
-    "Brown 50% Only (XML EN TAGGED)":
+    "BROWN":
         """
         A 50% subsample of the Brown Corpus, the first million-word electronic corpus of English. This sample is provided in a **TreeTagger-style XML format** containing token, POS, and lemma.
         <br><br>
