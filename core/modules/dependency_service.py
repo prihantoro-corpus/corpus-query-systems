@@ -38,51 +38,45 @@ def run_dependency_parsing(db_path, model_name="en_core_web_sm"):
         # Group by sentence
         grouped = df_tokens.groupby(['filename', 'sent_id'])
         
-        updates = [] # List of (dep_rel, dep_head_id, dep_head_token, id)
-        
+        texts = []
+        ids_list = []
         for (fname, sid), group in grouped:
             tokens_in_sent = group['token'].tolist()
             ids_in_sent = group['id'].tolist()
-            
-            # Reconstruct text
             text = " ".join([str(t) for t in tokens_in_sent])
-            if not text.strip():
-                continue
+            if text.strip():
+                texts.append(text)
+                ids_list.append(ids_in_sent)
                 
-            doc = nlp(text)
-            
-            # spaCy tokens might not match 1-to-1 with our tokens if tokenization differs.
-            # However, since CORTEX is usually spaCy/Stanza based, it should be close.
-            # We'll use a simple index-based matching or fallback to alignment.
-            
-            # For simplicity and reliability in CORTEX (which uses white-space or standard tokenization),
-            # we'll try to align spaCy tokens to our database tokens.
-            
-            # If lengths match exactly, it's easy.
+        updates = []
+        # Process in batches using nlp.pipe for massive speedup
+        for i, doc in enumerate(nlp.pipe(texts, batch_size=200)):
+            ids_in_sent = ids_list[i]
             if len(doc) == len(ids_in_sent):
-                for i, token in enumerate(doc):
+                for j, token in enumerate(doc):
                     rel = token.dep_
-                    # head index in doc
                     head_idx = token.head.i
                     head_global_id = ids_in_sent[head_idx]
                     head_text = token.head.text
-                    
-                    updates.append((rel, int(head_global_id), head_text, int(ids_in_sent[i])))
-            else:
-                # Fallback: attempt to match by text/offset or just skip mismatching sentences
-                # For now, if discrepancy is minor, we try best-effort.
-                # In Cortex, usually tokenization is consistent if the user hasn't modified it.
-                pass
+                    updates.append({
+                        'dep_rel': rel, 
+                        'dep_head_id': int(head_global_id), 
+                        'dep_head_token': head_text, 
+                        'id': int(ids_in_sent[j])
+                    })
 
-        # 3. Batch Update
+        # 3. Batch Update using DataFrame join (100x faster than executemany in DuckDB)
         if updates:
-            con.executemany("""
+            df_updates = pd.DataFrame(updates)
+            con.register('df_updates', df_updates)
+            con.execute("""
                 UPDATE corpus 
-                SET dep_rel = ?, 
-                    dep_head_id = ?, 
-                    dep_head_token = ? 
-                WHERE id = ?
-            """, updates)
+                SET dep_rel = df_updates.dep_rel, 
+                    dep_head_id = df_updates.dep_head_id, 
+                    dep_head_token = df_updates.dep_head_token 
+                FROM df_updates
+                WHERE corpus.id = df_updates.id
+            """)
             con.commit()
             return True
             
