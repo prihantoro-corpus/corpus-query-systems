@@ -31,4 +31,4 @@ youtube-transcript-api
 youtube-comment-downloader
 beautifulsoup4
 duckduckgo-search
-
+pypdf>=3.0.0
