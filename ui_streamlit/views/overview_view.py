@@ -2031,8 +2031,12 @@ def _render_metadata_annotation_tab(db_path, key_suffix):
             cols_info = conn.execute("PRAGMA table_info(corpus)").fetch_df()
             conn.close()
             
-            standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
-            meta_cols = [c for c in cols_info['name'].tolist() if c.lower() not in standard]
+            standard = {
+                'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 
+                'topic', 'sentiment', 'ent_type', 'dep_rel', 'dep_head_id', 
+                'dep_head_token', '_conllu_id'
+            }
+            meta_cols = [c for c in cols_info['name'].tolist() if c.lower() not in standard and not c.lower().startswith('in_') and not c.lower().endswith(('_len', '_start', '_id'))]
             
             # State key for the working dataframe
             state_key = f"meta_editor_df_{db_path}_{key_suffix}"
