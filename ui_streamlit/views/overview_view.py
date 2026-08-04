@@ -289,21 +289,26 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     if selected_tab == "XML":
         if error: st.error(error)
         if structure:
-            tags = list(structure.keys())
-            num_cols = 3
-            for i in range(0, len(tags), num_cols):
+            all_attrs = []
+            for tag, attrs in structure.items():
+                if attrs:
+                    for attr_name, vals in attrs.items():
+                        all_attrs.append((tag, attr_name, list(vals)))
+                else:
+                    all_attrs.append((tag, None, []))
+            
+            num_cols = 5
+            for i in range(0, len(all_attrs), num_cols):
                 cols = st.columns(num_cols)
-                for j, tag in enumerate(tags[i:i + num_cols]):
+                for j, (tag, attr_name, vals) in enumerate(all_attrs[i:i + num_cols]):
                     with cols[j]:
-                        st.markdown(f"**&lt;{tag}&gt;**")
-                        attrs = structure[tag]
-                        if attrs:
-                            for attr_name, vals in attrs.items():
-                                val_str = ", ".join([str(v) for v in list(vals)[:3]])
-                                if len(vals) > 3: val_str += ", ..."
-                                st.caption(f"🔹 `{attr_name}` : {val_str}")
+                        if attr_name:
+                            label = f"<{tag}> {attr_name}"
+                            display_vals = [str(v) for v in vals[:10]]
+                            st.multiselect(label, options=display_vals, default=display_vals, disabled=True, key=f"xml_struct_mini_{tag}_{attr_name}_{i}_{j}")
                         else:
-                            st.caption("*(no attributes)*")
+                            label = f"<{tag}>"
+                            st.multiselect(label, options=["(no attributes)"], default=["(no attributes)"], disabled=True, key=f"xml_struct_mini_{tag}_none_{i}_{j}")
         else: st.caption("No XML structure.")
 
     elif selected_tab == "Sub-corpus Stats":
@@ -572,21 +577,27 @@ def render_full_overview(name, path, stats, structure, error):
             if error: st.error(error)
             if structure:
                 st.subheader("Structure and Attributes")
-                tags = list(structure.keys())
-                num_cols = 4
-                for i in range(0, len(tags), num_cols):
+                
+                all_attrs = []
+                for tag, attrs in structure.items():
+                    if attrs:
+                        for attr_name, vals in attrs.items():
+                            all_attrs.append((tag, attr_name, list(vals)))
+                    else:
+                        all_attrs.append((tag, None, []))
+                
+                num_cols = 5
+                for i in range(0, len(all_attrs), num_cols):
                     cols = st.columns(num_cols)
-                    for j, tag in enumerate(tags[i:i + num_cols]):
+                    for j, (tag, attr_name, vals) in enumerate(all_attrs[i:i + num_cols]):
                         with cols[j]:
-                            st.markdown(f"**&lt;{tag}&gt;**")
-                            attrs = structure[tag]
-                            if attrs:
-                                for attr_name, vals in attrs.items():
-                                    val_str = ", ".join([str(v) for v in list(vals)[:3]])
-                                    if len(vals) > 3: val_str += ", ..."
-                                    st.caption(f"🔹 `{attr_name}` : {val_str}")
+                            if attr_name:
+                                label = f"<{tag}> {attr_name}"
+                                display_vals = [str(v) for v in vals[:10]]
+                                st.multiselect(label, options=display_vals, default=display_vals, disabled=True, key=f"xml_struct_main_{tag}_{attr_name}_{i}_{j}")
                             else:
-                                st.caption("*(no attributes)*")
+                                label = f"<{tag}>"
+                                st.multiselect(label, options=["(no attributes)"], default=["(no attributes)"], disabled=True, key=f"xml_struct_main_{tag}_none_{i}_{j}")
 
                 with st.expander("Show Raw Python Data (for diagnosis)"):
                      st.info("The data below is the Python dictionary successfully produced by the XML parser.")
