@@ -376,6 +376,14 @@ def tokenize_text_with_spacy(text, lang_code):
     if not nlp:
         return None
     try:
+        # We must add sentencizer if parser is disabled, otherwise doc.sents fails
+        if "sentencizer" not in nlp.pipe_names:
+            nlp.add_pipe("sentencizer")
+        
+        # Handle large text inputs safely
+        if len(text) > nlp.max_length:
+            nlp.max_length = len(text) + 1000
+            
         # Disable all parsing, tagging, lemmatization to run tokenizer only
         with nlp.select_pipes(disable=['tagger', 'parser', 'ner', 'lemmatizer']):
             doc = nlp(text)
