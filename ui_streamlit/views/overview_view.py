@@ -2070,6 +2070,14 @@ def _render_metadata_annotation_tab(db_path, key_suffix):
             
             df = get_state(state_key)
             
+            # Defensive check: remove stale columns from cached session state (e.g. ent_type)
+            valid_columns = ['filename'] + meta_cols
+            stale_cols = [c for c in df.columns if c not in valid_columns]
+            if stale_cols:
+                df = df.drop(columns=stale_cols)
+                set_state(state_key, df)
+                
+
             # 1. Add New Column UI
             c_add1, c_add2 = st.columns([3, 1])
             with c_add1:
