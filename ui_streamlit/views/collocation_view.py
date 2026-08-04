@@ -209,12 +209,17 @@ def render_collocation_view():
                 with st.expander("Collocation Settings", expanded=True):
                     col1, col2 = st.columns(2)
                     with col1:
+                         from ui_streamlit.components.pos_help import render_annotation_help_button
                          if not comp_mode:
                              node_word = st.text_input("Node Word", value="", placeholder="e.g. beautiful, [lemma]*, _VB*, *kan", key="coll_node", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma (e.g. [run]), token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN>)")
+                             render_annotation_help_button(corpus_path, "collocation_node")
                          else:
                              st.markdown("**Node Words**")
                              node_primary = st.text_input(f"Primary ({get_state('current_corpus_name', 'Corpus')})", value="", key="coll_node_primary")
+                             render_annotation_help_button(corpus_path, "collocation_node_primary")
                              node_secondary = st.text_input(f"Comparison ({comp_name if comp_name else 'Secondary'})", value="", key="coll_node_secondary")
+                             if comp_path:
+                                 render_annotation_help_button(comp_path, "collocation_node_secondary")
                              node_word = node_primary # Default for single-path logic logic below if needed, though we split paths
 
                     with col2:
