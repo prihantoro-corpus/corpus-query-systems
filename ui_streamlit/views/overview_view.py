@@ -356,11 +356,10 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
     strictly following the user's requested template.
     """
     try:
-        con = duckdb.connect(path)
-        
-        # --- 1. Basic corpus size ---
-        total_tokens = display_stats.get('total_tokens', 0)
-        file_count = con.execute("SELECT COUNT(DISTINCT filename) FROM corpus").fetchone()[0]
+        with duckdb.connect(path, read_only=True) as con:
+            # --- 1. Basic corpus size ---
+            total_tokens = display_stats.get('total_tokens', 0)
+            file_count = con.execute("SELECT COUNT(DISTINCT filename) FROM corpus").fetchone()[0]
         
         # --- 2. Language ---
         lang_code = ov.get_corpus_language(path)
@@ -593,9 +592,9 @@ def render_full_overview(name, path, stats, structure, error):
                     import duckdb
                     st.write(f"DB Path: `{path}`")
                     try:
-                        c = duckdb.connect(path)
-                        info = c.execute("PRAGMA table_info(corpus)").fetch_df()
-                        st.write("Table Schema:", info)
+                        with duckdb.connect(path, read_only=True) as c:
+                            info = c.execute("PRAGMA table_info(corpus)").fetch_df()
+                            st.write("Table Schema:", info)
 
                         # Columns check
                         cols = info['name'].tolist()
@@ -1241,7 +1240,7 @@ def render_upload_ui():
     uploaded_files = st.file_uploader(
         "Choose files", 
         accept_multiple_files=True,
-        type=['xml', 'txt', 'csv', 'xlsx', 'db', 'duckdb'],
+        type=['xml', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf'],
         key="main_corpus_file_uploader"
     )
     

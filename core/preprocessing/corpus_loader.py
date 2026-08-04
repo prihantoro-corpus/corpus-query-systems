@@ -117,8 +117,10 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         
         is_xml_ext = filename.lower().endswith('.xml')
         is_conllu_ext = filename.lower().endswith('.conllu')
+        is_docx_ext = filename.lower().endswith('.docx')
+        is_pdf_ext = filename.lower().endswith('.pdf')
         is_pseudo_xml = False
-        if not is_xml_ext and not is_conllu_ext:
+        if not is_xml_ext and not is_conllu_ext and not is_docx_ext and not is_pdf_ext:
             if sample_str.startswith('<'):
                 is_pseudo_xml = True
             elif any(tag in sample_str.lower() for tag in ['<text', '<corpus', '<p>', '<p ']):
@@ -251,15 +253,32 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
             except Exception as e:
                 return {'error': f"CoNLL-U Error ({filename}): {str(e)}"}
         
-        # --- TXT/CSV PROCESSING ---
+        # --- TXT/CSV/DOCX/PDF PROCESSING ---
         else: 
             try:
-                file_bytes = file_source.read()
-                file_content_str = file_bytes.decode('utf-8', errors='ignore')
+                if is_docx_ext:
+                    import docx
+                    doc = docx.Document(file_source)
+                    file_content_str = "\n".join([p.text for p in doc.paragraphs])
+                elif is_pdf_ext:
+                    import pypdf
+                    reader = pypdf.PdfReader(file_source)
+                    pages_text = []
+                    for page in reader.pages:
+                        pages_text.append(page.extract_text() or "")
+                    file_content_str = "\n".join(pages_text)
+                    
+                    # Quality Check
+                    if len(file_content_str.strip()) < len(reader.pages) * 20:
+                        return {'error': f"PDF Quality Error ({filename}): Extracted text is too short. This might be a scanned document without OCR. Process halted."}
+                else:
+                    file_bytes = file_source.read()
+                    file_content_str = file_bytes.decode('utf-8', errors='ignore')
+                
                 clean_lines = [line for line in file_content_str.splitlines() if line and not line.strip().startswith('#')]
                 clean_content = "\n".join(clean_lines)
             except Exception as e:
-                return {'error': f"Error reading raw file {filename}: {str(e)}"}
+                return {'error': f"Error reading document {filename}: {str(e)}"}
 
             current_is_tagged = is_tagged_format
             if current_is_tagged:
