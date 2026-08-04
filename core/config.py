@@ -13,6 +13,7 @@ KNOWN_CORPORA_MAP = {
     "Brown 50% Only (XML EN TAGGED)": "english/BrownCorpus.db",
     "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.db",
     "BAWE sample (English)": "english/BAWE.db",
+    "JP-DICO-JALF": "japanese/JP-DICO-JALF.db",
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
@@ -120,7 +121,10 @@ BUILT_IN_CORPUS_DETAILS = {
         <br><br>
         **Source:** Nesi, H., Gardner, S., Thompson, P. & Wickens, P. (2008). **British Academic Written English corpus.** Coventry University.
         """,
-
+    "JP-DICO-JALF":
+        """
+        The **DICO-JALF Corpus** is a Japanese language learner corpus.
+        """,
 }
 
 STANZA_LANG_MAP = {
