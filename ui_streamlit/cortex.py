@@ -272,7 +272,7 @@ def main():
     st.markdown(
         """
         <div style="text-align: right; margin-bottom: 0.5rem;">
-            <a href="http://www.cortex-app.org/" target="_blank"
+            <a href="https://drive.google.com/drive/folders/15AedwrmeG1IX0JsyGrZoxVGNQ5cYt4Ju?usp=sharing" target="_blank"
                style="color:#00FFF5; font-weight:700; text-decoration:none;">
                 📘 Manual
             </a>
@@ -281,7 +281,7 @@ def main():
         unsafe_allow_html=True
     )
 
-    st.markdown("## CORTEX: Advanced Corpus Query System <span style='font-size: 0.5em; color: rgba(255,255,255,0.5); font-weight: normal; vertical-align: middle; margin-left: 10px;'>v300526</span>", unsafe_allow_html=True)
+    st.markdown("## CORTEX: Advanced Corpus Query System <span style='font-size: 0.5em; color: rgba(255,255,255,0.5); font-weight: normal; vertical-align: middle; margin-left: 10px;'>v040826</span>", unsafe_allow_html=True)
     
     st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
     
