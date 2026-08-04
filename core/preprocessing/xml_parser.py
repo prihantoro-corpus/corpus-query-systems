@@ -505,7 +505,10 @@ def get_xml_attribute_columns(con):
     try:
         cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
         db_cols = [c[1] for c in cols_info]
-        standard_cols = {'token', 'pos', 'lemma', 'sent_id', '_token_low', 'id', 'filename'}
+        standard_cols = {
+            'token', 'pos', 'lemma', 'sent_id', '_token_low', 'id', 'filename',
+            'ent_type', 'dep_rel', 'dep_head_id', 'dep_head_token', '_conllu_id'
+        }
         internal_suffixes = ('_len', '_start', '_id')
         internal_prefixes = ('in_',)
         return [
