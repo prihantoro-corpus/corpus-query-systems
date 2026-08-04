@@ -365,29 +365,27 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         except: pass
 
     try:
-        con = duckdb.connect(db_path)
-        df_src = pd.DataFrame(all_df_data)
-        
-        for col in ['token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type']:
-            if col not in df_src.columns:
-                df_src[col] = "" if col in ['pos', 'lemma', 'ent_type'] else 0
+        with duckdb.connect(db_path) as con:
+            df_src = pd.DataFrame(all_df_data)
             
-        df_src["_token_low"] = df_src["token"].str.lower()
-        con.execute("CREATE TABLE corpus AS SELECT * FROM df_src")
-        con.execute("ALTER TABLE corpus ADD COLUMN id INTEGER")
-        con.execute("CREATE SEQUENCE seq_id START 1")
-        con.execute("UPDATE corpus SET id = nextval('seq_id')")
-        con.execute("CREATE INDEX idx_token_low ON corpus(_token_low)")
-        con.execute("CREATE INDEX idx_id ON corpus(id)")
-        con.execute("CREATE INDEX idx_lemma ON corpus(lemma)")
-        con.execute("CREATE INDEX idx_sent ON corpus(sent_id)")
-        
-        total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
-        token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
-        token_counts = {row[0]: row[1] for row in token_freqs}
-        corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
-        
-        con.close()
+            for col in ['token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type']:
+                if col not in df_src.columns:
+                    df_src[col] = "" if col in ['pos', 'lemma', 'ent_type'] else 0
+                
+            df_src["_token_low"] = df_src["token"].str.lower()
+            con.execute("CREATE TABLE corpus AS SELECT * FROM df_src")
+            con.execute("ALTER TABLE corpus ADD COLUMN id INTEGER")
+            con.execute("CREATE SEQUENCE seq_id START 1")
+            con.execute("UPDATE corpus SET id = nextval('seq_id')")
+            con.execute("CREATE INDEX idx_token_low ON corpus(_token_low)")
+            con.execute("CREATE INDEX idx_id ON corpus(id)")
+            con.execute("CREATE INDEX idx_lemma ON corpus(lemma)")
+            con.execute("CREATE INDEX idx_sent ON corpus(sent_id)")
+            
+            total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+            token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
+            token_counts = {row[0]: row[1] for row in token_freqs}
+            corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
         
     except Exception as e:
         return {'error': f"DuckDB Ingestion Failed: {e}"}
@@ -543,24 +541,22 @@ def load_xml_parallel_corpus(src_file, tgt_file, src_lang_code, tgt_lang_code, p
         except: pass
 
     try:
-        con = duckdb.connect(db_path)
-        if 'filename' not in df_src.columns: df_src['filename'] = src_file.name
-        
-        con.execute("CREATE TABLE corpus AS SELECT * FROM df_src")
-        con.execute("ALTER TABLE corpus ADD COLUMN id INTEGER")
-        con.execute("CREATE SEQUENCE seq_id START 1")
-        con.execute("UPDATE corpus SET id = nextval('seq_id')")
-        con.execute("CREATE INDEX idx_token_low ON corpus(_token_low)")
-        con.execute("CREATE INDEX idx_id ON corpus(id)")
-        con.execute("CREATE INDEX idx_lemma ON corpus(lemma)")
-        con.execute("CREATE INDEX idx_sent ON corpus(sent_id)")
-        
-        total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
-        token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
-        token_counts = {row[0]: row[1] for row in token_freqs}
-        corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
-        
-        con.close()
+        with duckdb.connect(db_path) as con:
+            if 'filename' not in df_src.columns: df_src['filename'] = src_file.name
+            
+            con.execute("CREATE TABLE corpus AS SELECT * FROM df_src")
+            con.execute("ALTER TABLE corpus ADD COLUMN id INTEGER")
+            con.execute("CREATE SEQUENCE seq_id START 1")
+            con.execute("UPDATE corpus SET id = nextval('seq_id')")
+            con.execute("CREATE INDEX idx_token_low ON corpus(_token_low)")
+            con.execute("CREATE INDEX idx_id ON corpus(id)")
+            con.execute("CREATE INDEX idx_lemma ON corpus(lemma)")
+            con.execute("CREATE INDEX idx_sent ON corpus(sent_id)")
+            
+            total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+            token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
+            token_counts = {row[0]: row[1] for row in token_freqs}
+            corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
     except Exception as e:
         return {'error': f"DuckDB Ingestion Failed: {e}"}
 
@@ -623,24 +619,22 @@ def load_excel_parallel_corpus_file(file_source, excel_format):
         except: pass
 
     try:
-        con = duckdb.connect(db_path)
-        if 'filename' not in df_src.columns: df_src['filename'] = file_source.name
-        
-        con.execute("CREATE TABLE corpus AS SELECT * FROM df_src")
-        con.execute("ALTER TABLE corpus ADD COLUMN id INTEGER")
-        con.execute("CREATE SEQUENCE seq_id START 1")
-        con.execute("UPDATE corpus SET id = nextval('seq_id')")
-        con.execute("CREATE INDEX idx_token_low ON corpus(_token_low)")
-        con.execute("CREATE INDEX idx_id ON corpus(id)")
-        con.execute("CREATE INDEX idx_lemma ON corpus(lemma)")
-        con.execute("CREATE INDEX idx_sent ON corpus(sent_id)")
-        
-        total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
-        token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
-        token_counts = {row[0]: row[1] for row in token_freqs}
-        corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
-        
-        con.close()
+        with duckdb.connect(db_path) as con:
+            if 'filename' not in df_src.columns: df_src['filename'] = file_source.name
+            
+            con.execute("CREATE TABLE corpus AS SELECT * FROM df_src")
+            con.execute("ALTER TABLE corpus ADD COLUMN id INTEGER")
+            con.execute("CREATE SEQUENCE seq_id START 1")
+            con.execute("UPDATE corpus SET id = nextval('seq_id')")
+            con.execute("CREATE INDEX idx_token_low ON corpus(_token_low)")
+            con.execute("CREATE INDEX idx_id ON corpus(id)")
+            con.execute("CREATE INDEX idx_lemma ON corpus(lemma)")
+            con.execute("CREATE INDEX idx_sent ON corpus(sent_id)")
+            
+            total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+            token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
+            token_counts = {row[0]: row[1] for row in token_freqs}
+            corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
     except Exception as e:
         return {'error': f"DuckDB Ingestion Failed: {e}"}
 

@@ -852,11 +852,10 @@ def _render_classification_tab(db_path, key_suffix):
     
     # Check Columns
     try:
-        con = duckdb.connect(db_path)
-        cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
-        has_topic = 'topic' in cols
-        has_sent = 'sentiment' in cols
-        con.close()
+        with duckdb.connect(db_path, read_only=True) as con:
+            cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
+            has_topic = 'topic' in cols
+            has_sent = 'sentiment' in cols
         
         found_labels = []
         if has_topic: found_labels.append("Topic")
@@ -948,18 +947,21 @@ def _render_classification_tab(db_path, key_suffix):
                 key=f"bertopic_min_size_{key_suffix}",
                 help="Higher values = fewer, more distinct topics"
             )
+            try:
+                with duckdb.connect(db_path) as con:
+                    con.execute("ALTER TABLE corpus DROP COLUMN sentiment")
+            except: pass
     
     # Run Labeling Button
     if st.button("🚀 Run Labeling", key=f"run_cls_{key_suffix}", disabled=not (do_sent or do_topic)):
         with st.spinner("Processing sentences..."):
             try:
-                con = duckdb.connect(db_path)
-                df_sents = con.execute("""
-                    SELECT filename, sent_id, string_agg(token, ' ' ORDER BY id) as text 
-                    FROM corpus 
-                    GROUP BY filename, sent_id
-                """).fetch_df()
-                con.close()
+                with duckdb.connect(db_path) as con:
+                    df_sents = con.execute("""
+                        SELECT filename, sent_id, string_agg(token, ' ' ORDER BY id) as text 
+                        FROM corpus 
+                        GROUP BY filename, sent_id
+                    """).fetch_df()
                 
                 if df_sents.empty:
                     st.error("Corpus is empty.")
@@ -1105,128 +1107,126 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
     
     st.subheader("Sub-Corpus Statistics")
     
-    conn = duckdb.connect(db_path)
-    try:
-        # 1. By File Name
-        st.markdown("##### 📂 By File Name")
-        df_files = conn.execute("""
-            SELECT 
-                filename, 
-                COUNT(*) as Tokens,
-                CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
-            FROM corpus 
-            GROUP BY filename 
-            ORDER BY Tokens DESC
-        """).fetch_df()
-        
-        if not df_files.empty:
-            c1, c2 = st.columns([2, 1])
-            with c1:
-                # Use Bar Chart for files as there might be many
-                fig = px.bar(df_files, x='filename', y='Tokens', title="Tokens per File")
-                st.plotly_chart(fig, use_container_width=True)
-            with c2:
-                st.dataframe(
-                    df_files.style.format({'TTR': '{:.4f}'}), 
-                    use_container_width=True, 
-                    hide_index=True
-                )
-        else:
-            st.info("No file information available.")
+    with duckdb.connect(db_path) as conn:
+        try:
+            # 1. By File Name
+            st.markdown("##### 📂 By File Name")
+            df_files = conn.execute("""
+                SELECT 
+                    filename, 
+                    COUNT(*) as Tokens,
+                    CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
+                FROM corpus 
+                GROUP BY filename 
+                ORDER BY Tokens DESC
+            """).fetch_df()
             
-        st.divider()
-        
-        # 2. By Topic & Sentiment
-        cols_info = conn.execute("PRAGMA table_info(corpus)").fetch_df()
-        cols = [c.lower() for c in cols_info['name'].tolist()]
-        
-        has_topic = 'topic' in cols
-        has_sent = 'sentiment' in cols
-        
-        if has_topic or has_sent:
-            st.markdown("##### 🏷️ By Automatic Labeling")
-            
-            if has_topic:
-                 # Group by distinct Topic (handling NULLs)
-                topic_data = conn.execute("SELECT topic, COUNT(*) as Count FROM corpus WHERE topic IS NOT NULL GROUP BY topic ORDER BY Count DESC").fetch_df()
-                if not topic_data.empty:
-                    st.write("**Topic Distribution**")
-                    tc1, tc2 = st.columns([1, 1])
-                    with tc1:
-                        fig_t = px.pie(topic_data, names='topic', values='Count', title="Topic Distribution")
-                        st.plotly_chart(fig_t, use_container_width=True)
-                    with tc2:
-                         st.dataframe(topic_data, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Topic column exists but no topics found. Run 'Automatic Labeling'.")
-
-            if has_sent:
-                # Group by distinct Sentiment
-                sent_data = conn.execute("SELECT sentiment, COUNT(*) as Count FROM corpus WHERE sentiment IS NOT NULL GROUP BY sentiment ORDER BY Count DESC").fetch_df()
-                if not sent_data.empty:
-                    st.write("**Sentiment Distribution**")
-                    sc1, sc2 = st.columns([1, 1])
-                    with sc1:
-                        fig_s = px.pie(sent_data, names='sentiment', values='Count', title="Sentiment Distribution", 
-                                       color='sentiment', 
-                                       color_discrete_map={'Positive': 'green', 'Negative': 'red', 'Neutral': 'gray'})
-                        st.plotly_chart(fig_s, use_container_width=True)
-                    with sc2:
-                         st.dataframe(sent_data, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Sentiment column exists but no sentiments found. Run 'Automatic Labeling'.")
-        else:
-            st.info("No Topic/Sentiment labels found. Go to the 'Automatic Labeling' tab to generate them.")
-            
-        st.divider()
-
-        # 3. By XML Attributes
-        from core.preprocessing.xml_parser import get_xml_attribute_columns
-        attr_cols = get_xml_attribute_columns(conn)
-        
-        if attr_cols:
-            st.markdown("##### 🧱 By XML Attributes")
-            st.caption("Distribution of tokens across various document attributes.")
-            
-            for attr in attr_cols:
-                # We limit unique values to avoid crashing charts with high-cardinality attributes (like IDs)
-                unique_count = conn.execute(f'SELECT COUNT(DISTINCT "{attr}") FROM corpus').fetchone()[0]
+            if not df_files.empty:
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    # Use Bar Chart for files as there might be many
+                    fig = px.bar(df_files, x='filename', y='Tokens', title="Tokens per File")
+                    st.plotly_chart(fig, use_container_width=True)
+                with c2:
+                    st.dataframe(
+                        df_files.style.format({'TTR': '{:.4f}'}), 
+                        use_container_width=True, 
+                        hide_index=True
+                    )
+            else:
+                st.info("No file information available.")
                 
-                if unique_count > 50:
-                    st.warning(f"Attribute **{attr}** has too many unique values ({unique_count}) to visualize effectively.")
-                    continue
+            st.divider()
+            
+            # 2. By Topic & Sentiment
+            cols_info = conn.execute("PRAGMA table_info(corpus)").fetch_df()
+            cols = [c.lower() for c in cols_info['name'].tolist()]
+            
+            has_topic = 'topic' in cols
+            has_sent = 'sentiment' in cols
+            
+            if has_topic or has_sent:
+                st.markdown("##### 🏷️ By Automatic Labeling")
+                
+                if has_topic:
+                     # Group by distinct Topic (handling NULLs)
+                    topic_data = conn.execute("SELECT topic, COUNT(*) as Count FROM corpus WHERE topic IS NOT NULL GROUP BY topic ORDER BY Count DESC").fetch_df()
+                    if not topic_data.empty:
+                        st.write("**Topic Distribution**")
+                        tc1, tc2 = st.columns([1, 1])
+                        with tc1:
+                            fig_t = px.pie(topic_data, names='topic', values='Count', title="Topic Distribution")
+                            st.plotly_chart(fig_t, use_container_width=True)
+                        with tc2:
+                             st.dataframe(topic_data, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Topic column exists but no topics found. Run 'Automatic Labeling'.")
+
+                if has_sent:
+                    # Group by distinct Sentiment
+                    sent_data = conn.execute("SELECT sentiment, COUNT(*) as Count FROM corpus WHERE sentiment IS NOT NULL GROUP BY sentiment ORDER BY Count DESC").fetch_df()
+                    if not sent_data.empty:
+                        st.write("**Sentiment Distribution**")
+                        sc1, sc2 = st.columns([1, 1])
+                        with sc1:
+                            fig_s = px.pie(sent_data, names='sentiment', values='Count', title="Sentiment Distribution", 
+                                           color='sentiment', 
+                                           color_discrete_map={'Positive': 'green', 'Negative': 'red', 'Neutral': 'gray'})
+                            st.plotly_chart(fig_s, use_container_width=True)
+                        with sc2:
+                             st.dataframe(sent_data, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Sentiment column exists but no sentiments found. Run 'Automatic Labeling'.")
+            else:
+                st.info("No Topic/Sentiment labels found. Go to the 'Automatic Labeling' tab to generate them.")
+                
+            st.divider()
+
+            # 3. By XML Attributes
+            from core.preprocessing.xml_parser import get_xml_attribute_columns
+            attr_cols = get_xml_attribute_columns(conn)
+            
+            if attr_cols:
+                st.markdown("##### 🧱 By XML Attributes")
+                st.caption("Distribution of tokens across various document attributes.")
+                
+                for attr in attr_cols:
+                    # We limit unique values to avoid crashing charts with high-cardinality attributes (like IDs)
+                    unique_count = conn.execute(f'SELECT COUNT(DISTINCT "{attr}") FROM corpus').fetchone()[0]
                     
-                attr_data = conn.execute(f"""
-                    SELECT 
-                        "{attr}" as Value, 
-                        COUNT(*) as Tokens,
-                        CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
-                    FROM corpus 
-                    WHERE "{attr}" IS NOT NULL 
-                    GROUP BY "{attr}" 
-                    ORDER BY Tokens DESC
-                """).fetch_df()
-                
-                if not attr_data.empty:
-                    st.write(f"**Attribute: {attr}**")
-                    ac1, ac2 = st.columns([1, 1])
-                    with ac1:
-                         fig_a = px.pie(attr_data, names='Value', values='Tokens', title=f"Distribution by {attr}")
-                         st.plotly_chart(fig_a, use_container_width=True)
-                    with ac2:
-                         st.dataframe(
-                             attr_data.style.format({'TTR': '{:.4f}'}), 
-                             use_container_width=True, 
-                             hide_index=True
-                         )
-                    st.markdown("---")
-        else:
-            st.caption("No additional XML attributes detected.")
+                    if unique_count > 50:
+                        st.warning(f"Attribute **{attr}** has too many unique values ({unique_count}) to visualize effectively.")
+                        continue
+                        
+                    attr_data = conn.execute(f"""
+                        SELECT 
+                            "{attr}" as Value, 
+                            COUNT(*) as Tokens,
+                            CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
+                        FROM corpus 
+                        WHERE "{attr}" IS NOT NULL 
+                        GROUP BY "{attr}" 
+                        ORDER BY Tokens DESC
+                    """).fetch_df()
+                    
+                    if not attr_data.empty:
+                        st.write(f"**Attribute: {attr}**")
+                        ac1, ac2 = st.columns([1, 1])
+                        with ac1:
+                             fig_a = px.pie(attr_data, names='Value', values='Tokens', title=f"Distribution by {attr}")
+                             st.plotly_chart(fig_a, use_container_width=True)
+                        with ac2:
+                             st.dataframe(
+                                 attr_data.style.format({'TTR': '{:.4f}'}), 
+                                 use_container_width=True, 
+                                 hide_index=True
+                             )
+                        st.markdown("---")
+            else:
+                st.caption("No additional XML attributes detected.")
 
-    except Exception as e:
-        st.error(f"Error calculating stats: {e}")
-    finally:
-        conn.close()
+        except Exception as e:
+            st.error(f"Error calculating stats: {e}")
 
 
 
@@ -1451,42 +1451,46 @@ def render_upload_ui():
                         with open(db_path, 'wb') as f:
                             f.write(first_file.read())
                             
-                        # Query metadata
-                        con = duckdb.connect(db_path)
-                        tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
-                        
-                        if 'corpus' not in tables:
-                            st.error("Uploaded database is not a valid Cortex database (missing 'corpus' table).")
-                            con.close()
-                            os.remove(db_path)
-                            return
+                        try:
+                            with duckdb.connect(db_path) as con:
+                                con.execute("ALTER TABLE corpus DROP COLUMN ent_type")
+                        except: pass
                             
-                        # Get language
-                        lang = "English"
-                        if 'corpus_metadata' in tables:
-                            res_lang = con.execute("SELECT value FROM corpus_metadata WHERE key='language'").fetchone()
-                            if res_lang:
-                                lang = res_lang[0]
+                        # Query metadata
+                        with duckdb.connect(db_path, read_only=True) as con:
+                            tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+                        
+                            if 'corpus' not in tables:
+                                st.error("Uploaded database is not a valid Cortex database (missing 'corpus' table).")
+                                os.remove(db_path)
+                                return
                                 
-                        # Get XML structure
-                        structure = {}
-                        if 'corpus_metadata' in tables:
-                            res_struct = con.execute("SELECT value FROM corpus_metadata WHERE key='xml_structure'").fetchone()
-                            if res_struct:
-                                try:
-                                    serializable_struct = json.loads(res_struct[0])
-                                    for tag in serializable_struct:
-                                        structure[tag] = {}
-                                        for attr in serializable_struct[tag]:
-                                            structure[tag][attr] = set(serializable_struct[tag][attr])
-                                except:
-                                    pass
+                            # Get language
+                            lang = "English"
+                            if 'corpus_metadata' in tables:
+                                res_lang = con.execute("SELECT value FROM corpus_metadata WHERE key='language'").fetchone()
+                                if res_lang:
+                                    lang = res_lang[0]
                                     
-                        # Get Stats
-                        total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
-                        token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
-                        token_counts = {row[0]: row[1] for row in token_freqs}
-                        stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
+                            # Get XML structure
+                            structure = {}
+                            if 'corpus_metadata' in tables:
+                                res_struct = con.execute("SELECT value FROM corpus_metadata WHERE key='xml_structure'").fetchone()
+                                if res_struct:
+                                    try:
+                                        serializable_struct = json.loads(res_struct[0])
+                                        for tag in serializable_struct:
+                                            structure[tag] = {}
+                                            for attr in serializable_struct[tag]:
+                                                structure[tag][attr] = set(serializable_struct[tag][attr])
+                                    except:
+                                        pass
+                                        
+                            # Get Stats
+                            total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+                            token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
+                            token_counts = {row[0]: row[1] for row in token_freqs}
+                            stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
                         
                         con.close()
                         
