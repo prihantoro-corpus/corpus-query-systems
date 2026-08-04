@@ -289,8 +289,21 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     if selected_tab == "XML":
         if error: st.error(error)
         if structure:
-            html = format_structure_data_hierarchical(structure)
-            st.markdown(f'<div style="font-family: monospace; font-size: 0.85em; padding: 10px; background: #1e1e1e; border-radius: 5px; color: #d4d4d4;">{html}</div>', unsafe_allow_html=True)
+            tags = list(structure.keys())
+            num_cols = 3
+            for i in range(0, len(tags), num_cols):
+                cols = st.columns(num_cols)
+                for j, tag in enumerate(tags[i:i + num_cols]):
+                    with cols[j]:
+                        st.markdown(f"**&lt;{tag}&gt;**")
+                        attrs = structure[tag]
+                        if attrs:
+                            for attr_name, vals in attrs.items():
+                                val_str = ", ".join([str(v) for v in list(vals)[:3]])
+                                if len(vals) > 3: val_str += ", ..."
+                                st.caption(f"🔹 `{attr_name}` : {val_str}")
+                        else:
+                            st.caption("*(no attributes)*")
         else: st.caption("No XML structure.")
 
     elif selected_tab == "Sub-corpus Stats":
@@ -559,8 +572,21 @@ def render_full_overview(name, path, stats, structure, error):
             if error: st.error(error)
             if structure:
                 st.subheader("Structure and Attributes")
-                html = format_structure_data_hierarchical(structure)
-                st.markdown(f'<div style="font-family: monospace; font-size: 0.9em; padding: 15px; background: #1e1e1e; border-radius: 8px; color: #d4d4d4;">{html}</div>', unsafe_allow_html=True)
+                tags = list(structure.keys())
+                num_cols = 4
+                for i in range(0, len(tags), num_cols):
+                    cols = st.columns(num_cols)
+                    for j, tag in enumerate(tags[i:i + num_cols]):
+                        with cols[j]:
+                            st.markdown(f"**&lt;{tag}&gt;**")
+                            attrs = structure[tag]
+                            if attrs:
+                                for attr_name, vals in attrs.items():
+                                    val_str = ", ".join([str(v) for v in list(vals)[:3]])
+                                    if len(vals) > 3: val_str += ", ..."
+                                    st.caption(f"🔹 `{attr_name}` : {val_str}")
+                            else:
+                                st.caption("*(no attributes)*")
 
                 with st.expander("Show Raw Python Data (for diagnosis)"):
                      st.info("The data below is the Python dictionary successfully produced by the XML parser.")
