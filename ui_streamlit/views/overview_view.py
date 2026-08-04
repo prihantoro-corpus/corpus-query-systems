@@ -289,26 +289,19 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     if selected_tab == "XML":
         if error: st.error(error)
         if structure:
+            import pandas as pd
             all_attrs = []
             for tag, attrs in structure.items():
                 if attrs:
                     for attr_name, vals in attrs.items():
-                        all_attrs.append((tag, attr_name, list(vals)))
+                        sample_vals = ", ".join([str(v) for v in list(vals)[:10]])
+                        if len(vals) > 10: sample_vals += ", ..."
+                        all_attrs.append({"Tag": f"<{tag}>", "Attribute": attr_name, "Sample Values": sample_vals})
                 else:
-                    all_attrs.append((tag, None, []))
+                    all_attrs.append({"Tag": f"<{tag}>", "Attribute": "-", "Sample Values": "-"})
             
-            num_cols = 5
-            for i in range(0, len(all_attrs), num_cols):
-                cols = st.columns(num_cols)
-                for j, (tag, attr_name, vals) in enumerate(all_attrs[i:i + num_cols]):
-                    with cols[j]:
-                        if attr_name:
-                            label = f"<{tag}> {attr_name}"
-                            display_vals = [str(v) for v in vals[:10]]
-                            st.multiselect(label, options=display_vals, default=display_vals, disabled=True, key=f"xml_struct_mini_{tag}_{attr_name}_{i}_{j}")
-                        else:
-                            label = f"<{tag}>"
-                            st.multiselect(label, options=["(no attributes)"], default=["(no attributes)"], disabled=True, key=f"xml_struct_mini_{tag}_none_{i}_{j}")
+            df = pd.DataFrame(all_attrs)
+            st.dataframe(df, use_container_width=True, hide_index=True)
         else: st.caption("No XML structure.")
 
     elif selected_tab == "Sub-corpus Stats":
@@ -578,26 +571,19 @@ def render_full_overview(name, path, stats, structure, error):
             if structure:
                 st.subheader("Structure and Attributes")
                 
+                import pandas as pd
                 all_attrs = []
                 for tag, attrs in structure.items():
                     if attrs:
                         for attr_name, vals in attrs.items():
-                            all_attrs.append((tag, attr_name, list(vals)))
+                            sample_vals = ", ".join([str(v) for v in list(vals)[:10]])
+                            if len(vals) > 10: sample_vals += ", ..."
+                            all_attrs.append({"Tag": f"<{tag}>", "Attribute": attr_name, "Sample Values": sample_vals})
                     else:
-                        all_attrs.append((tag, None, []))
+                        all_attrs.append({"Tag": f"<{tag}>", "Attribute": "-", "Sample Values": "-"})
                 
-                num_cols = 5
-                for i in range(0, len(all_attrs), num_cols):
-                    cols = st.columns(num_cols)
-                    for j, (tag, attr_name, vals) in enumerate(all_attrs[i:i + num_cols]):
-                        with cols[j]:
-                            if attr_name:
-                                label = f"<{tag}> {attr_name}"
-                                display_vals = [str(v) for v in vals[:10]]
-                                st.multiselect(label, options=display_vals, default=display_vals, disabled=True, key=f"xml_struct_main_{tag}_{attr_name}_{i}_{j}")
-                            else:
-                                label = f"<{tag}>"
-                                st.multiselect(label, options=["(no attributes)"], default=["(no attributes)"], disabled=True, key=f"xml_struct_main_{tag}_none_{i}_{j}")
+                df = pd.DataFrame(all_attrs)
+                st.dataframe(df, use_container_width=True, hide_index=True)
 
                 with st.expander("Show Raw Python Data (for diagnosis)"):
                      st.info("The data below is the Python dictionary successfully produced by the XML parser.")
