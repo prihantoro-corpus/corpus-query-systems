@@ -2071,8 +2071,9 @@ def _render_metadata_annotation_tab(db_path, key_suffix):
             df = get_state(state_key)
             
             # Defensive check: remove stale columns from cached session state (e.g. ent_type)
-            valid_columns = ['filename'] + meta_cols
-            stale_cols = [c for c in df.columns if c not in valid_columns]
+            # Only remove columns that are explicitly invalid (token-level linguistic features) 
+            # instead of everything not in DB, so we don't accidentally remove newly added un-saved columns.
+            stale_cols = [c for c in df.columns if c != 'filename' and (c.lower() in standard or c.lower().startswith('in_') or c.lower().endswith(('_len', '_start', '_id')))]
             if stale_cols:
                 df = df.drop(columns=stale_cols)
                 set_state(state_key, df)
