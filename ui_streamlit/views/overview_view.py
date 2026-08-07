@@ -1210,10 +1210,11 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                     """).fetch_df()
                     
                     if not attr_data.empty:
-                        st.write(f"**Attribute: {attr}**")
+                        display_attr = "Domain" if attr == "alphabet" else attr
+                        st.write(f"**Attribute: {display_attr}**")
                         ac1, ac2 = st.columns([1, 1])
                         with ac1:
-                             fig_a = px.pie(attr_data, names='Value', values='Tokens', title=f"Distribution by {attr}")
+                             fig_a = px.pie(attr_data, names='Value', values='Tokens', title=f"Distribution by {display_attr}")
                              st.plotly_chart(fig_a, use_container_width=True)
                         with ac2:
                              st.dataframe(
