@@ -109,7 +109,7 @@ BUILT_IN_CORPUS_DETAILS = {
 
     "BROWN":
         """
-        A 50% subsample of the Brown Corpus, the first million-word electronic corpus of English. This sample is provided in a **TreeTagger-style XML format** containing token, POS, and lemma.
+        The Brown Corpus, the first million-word electronic corpus of English. It is provided in a **TreeTagger-style XML format** containing token, POS, and lemma.
         <br><br>
         **Source/Citation:** Francis, W. N., & Kučera, H. (1979). **Brown Corpus Manual: Standard Corpus of Present-Day Edited American English for Use with Digital Computers.** Brown University.
         """,
