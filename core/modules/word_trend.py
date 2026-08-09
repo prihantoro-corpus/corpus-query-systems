@@ -8,7 +8,7 @@ def get_available_metadata_attributes(db_path):
     Excludes standard structural columns.
     """
     if not db_path: return []
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
         standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
@@ -25,7 +25,7 @@ def get_metadata_values(db_path, attribute):
     Returns a sorted list of unique non-null values for a specific metadata attribute.
     """
     if not db_path or not attribute: return []
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         query = f"SELECT DISTINCT {attribute} FROM corpus WHERE {attribute} IS NOT NULL"
         res = con.execute(query).fetchall()
@@ -52,7 +52,7 @@ def get_emerging_words(db_path, time_attr, ordered_time_values, pos_mode, pos_ta
     if not db_path or not time_attr or not ordered_time_values:
         return pd.DataFrame()
 
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Build period ranks table
         ranks = []
@@ -283,7 +283,7 @@ def get_word_tracker_data(db_path, time_attr, words, is_advanced=False, basis='w
     if not clean_words:
         return pd.DataFrame()
 
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Check raw mode
         is_raw_mode = False

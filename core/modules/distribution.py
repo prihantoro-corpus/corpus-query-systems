@@ -11,7 +11,7 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
         return pd.DataFrame(), {}
 
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         
         # 1. Robust Query Tokenization
         query_pattern = r'<[^>]+>|[^\s]+'

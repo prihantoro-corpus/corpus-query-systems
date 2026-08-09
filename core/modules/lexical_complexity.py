@@ -403,7 +403,7 @@ def calculate_corpus_lexical_complexity(db_path, wordlist_path=None, group_by_co
     lang = get_corpus_language(db_path)
     pos_defs = get_pos_definitions(db_path)
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         df = con.execute(f'SELECT "{group_by_column}", token, pos, lemma FROM corpus ORDER BY "{group_by_column}", id').fetchdf()
     except Exception as e:

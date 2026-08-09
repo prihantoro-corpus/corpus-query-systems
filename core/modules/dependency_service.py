@@ -12,7 +12,7 @@ def run_dependency_parsing(db_path, model_name="en_core_web_sm"):
     nlp = ensure_spacy_model(model_name)
     
     # 1. Ensure columns exist
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
         existing_cols = {c[1].lower() for c in cols_info}
@@ -94,7 +94,7 @@ def get_dependency_stats(db_path):
     """
     Returns high-level statistics about dependency relations in the corpus.
     """
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Check if column exists
         cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]

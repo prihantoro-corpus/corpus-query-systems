@@ -66,7 +66,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
     Returns: (stats_df_sorted, freq, primary_target_mwu)
     """
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         import math
         total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
         

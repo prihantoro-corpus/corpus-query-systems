@@ -321,7 +321,7 @@ def apply_classification_to_db(db_path, id_list, topics, sentiments):
     """
     Updates the DuckDB corpus table with new 'topic' and 'sentiment' columns.
     """
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     
     # 1. Create columns if they don't exist
     try:
@@ -361,7 +361,7 @@ def apply_classification_by_sentence(db_path, filenames, sent_ids, topics=None, 
     Updates the DuckDB corpus table with new 'topic' and 'sentiment' columns
     assigned at the sentence level. Supports updating one or both.
     """
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     
     # 1. Create columns if they don't exist
     if topics is not None:
