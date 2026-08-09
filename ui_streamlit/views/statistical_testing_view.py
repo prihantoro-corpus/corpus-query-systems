@@ -123,12 +123,14 @@ def render_statistical_testing_view():
                         slice_ready = False
 
         # Tabs for different analysis modes
-        tab_group, tab_corr, tab_cluster, tab_ca, tab_attrib = st.tabs([
+        tab_group, tab_corr, tab_cluster, tab_ca, tab_attrib, tab_tost, tab_sem = st.tabs([
             "📊 Group Difference", 
             "📈 Correlation", 
             "🌳 Clustering",
             "🗺️ Correspondence Analysis",
-            "🕵️ Authorship Attribution"
+            "🕵️ Authorship Attribution",
+            "⚖️ Equivalence (TOST)",
+            "🏗️ SEM (Models)"
         ])
 
         # ---------------- GROUP DIFFERENCE TAB ----------------
@@ -277,24 +279,31 @@ def render_statistical_testing_view():
 
                             # Generate Report
                             st.markdown("---")
+                            
+                            col_res1, col_res2 = st.columns([3, 1])
+                            with col_res1:
+                                st.subheader("📈 Correlation Results")
+                            with col_res2:
+                                from ui_streamlit.components.print_button import render_print_button
+                                render_print_button()
+
                             st.subheader("📋 Statistical Report")
 
                             with st.container(border=True):
-                                report = f"""
-                                **1. Methodology**
-                                - **Test Used:** {corr_method} Correlation
-                                - **Variables Analyzed:** 
-                                    - X: **{x_label}** ({type_x})
-                                    - Y: **{y_label}** ({type_y})
-                                - **Sample Size:** {n_docs} documents
+                                report = f"""**1. Methodology**
+- **Test Used:** {corr_method} Correlation
+- **Variables Analyzed:** 
+    - X: **{x_label}** ({type_x})
+    - Y: **{y_label}** ({type_y})
+- **Sample Size:** {n_docs} documents
 
-                                **2. Results**
-                                - **Correlation Coefficient ({'r' if method_code=='pearson' else 'rho'}):** {r_val:.3f}
-                                - **P-Value:** {p_val:.4f} ({sig_text})
+**2. Results**
+- **Correlation Coefficient ({'r' if method_code=='pearson' else 'rho'}):** {r_val:.3f}
+- **P-Value:** {p_val:.4f} ({sig_text})
 
-                                **3. Interpretation**
-                                Processing the data revealed a **{strength.lower()} {direction.lower()} correlation** between the two variables.
-                                """
+**3. Interpretation**
+Processing the data revealed a **{strength.lower()} {direction.lower()} correlation** between the two variables.
+"""
 
                                 if p_val < 0.05:
                                     report += f"\nSince p < 0.05, this relationship is **statistically significant**, meaning it is unlikely to be due to chance."
@@ -1236,7 +1245,9 @@ def render_statistical_testing_view():
                 # Group selection
                 st.write(f"**Select groups to compare (from '{grouping_attr}')**")
                 groups = []
-                with st.container(height=150):
+                container_height = 300 if len(unique_vals) > 25 else None
+                
+                with (st.container(height=container_height) if container_height else st.container()):
                     for idx, val in enumerate(unique_vals):
                         is_default = idx < 2 if len(unique_vals) >= 2 else True
                         if st.checkbox(str(val), value=is_default, key=f"stat_compare_group_chk_{val}_{idx}"):
@@ -1330,7 +1341,14 @@ def render_statistical_testing_view():
                 df = results['df']
 
                 st.markdown("---")
-                st.markdown(f"## 📊 Results: {results['query']}")
+                
+                col_res1, col_res2 = st.columns([3, 1])
+                with col_res1:
+                    st.markdown(f"## 📊 Results: {results['query']}")
+                with col_res2:
+                    from ui_streamlit.components.print_button import render_print_button
+                    render_print_button()
+                    
                 st.caption(f"**Test:** Chi-square (proportion test) | **Groups:** {results['groups'][0]} vs {results['groups'][1]} | **Correction:** {results['correction']}")
 
                 # Summary stats
@@ -1434,20 +1452,19 @@ def render_statistical_testing_view():
                     avg_h = df['effect_size'].abs().mean()
                     max_h = df['effect_size'].abs().max() if not df.empty else 0
 
-                    report = f"""
-                    **1. Methodology**
-                    A **Chi-square test of independence** was performed to compare the relative frequencies of **{total_count} words** between groups **'{results['groups'][0]}'** and **'{results['groups'][1]}'**.
+                    report = f"""**1. Methodology**
+A **Chi-square test of independence** was performed to compare the relative frequencies of **{total_count} words** between groups **'{results['groups'][0]}'** and **'{results['groups'][1]}'**.
 
-                    **2. Data & Settings**
-                    - **Variable Checked:** Word frequencies matching query `"{results['query']}"`
-                    - **Grouping Variable:** `{results['grouping_attr']}`
-                    - **Correction Method:** `{results['correction']}` (Used to control false positive rate across {total_count} tests)
+**2. Data & Settings**
+- **Variable Checked:** Word frequencies matching query `"{results['query']}"`
+- **Grouping Variable:** `{results['grouping_attr']}`
+- **Correction Method:** `{results['correction']}` (Used to control false positive rate across {total_count} tests)
 
-                    **3. Results Summary**
-                    - **Significant Differences:** {sig_count} words found ({sig_count/total_count*100:.1f}%)
-                    - **Average Effect Size (Cohen's h):** {avg_h:.3f} (Interpretation: <0.2 Small, 0.5 Medium, >0.8 Large)
-                    - **Maximum Effect Size:** {max_h:.3f}
-                    """
+**3. Results Summary**
+- **Significant Differences:** {sig_count} words found ({sig_count/total_count*100:.1f}%)
+- **Average Effect Size (Cohen's h):** {avg_h:.3f} (Interpretation: <0.2 Small, 0.5 Medium, >0.8 Large)
+- **Maximum Effect Size:** {max_h:.3f}
+"""
 
                     report += "\n**4. Interpretation**\n"
 
@@ -1521,4 +1538,273 @@ def render_statistical_testing_view():
                                 st.markdown(narrative)
                             else:
                                 st.error(f"AI Error: {err}")
+
+        # ---------------- TOST TAB ----------------
+        with tab_tost:
+            with st.expander("💡 **Method & Transparency: Equivalence Testing (TOST)**", expanded=False):
+                st.markdown("""
+                **Goal:** Prove that two groups are *practically equivalent* in their word usage, rather than just failing to prove they are different.
+                
+                **Methodology:**
+                - Uses **Two One-Sided Tests (TOST)** to see if the 90% confidence interval of the mean difference falls entirely within your defined bounds.
+                - **Citation:** *Larsson, T. and Gregory R. Hancock (2026). What if we want to test for similarities between groups, rather than differences? Equivalence testing techniques for corpus linguistics. Corpora 21 (1): 21–33.*
+                """)
+            
+            st.caption("**Goal:** Determine if two groups use a feature with practical equivalence.")
+            
+            col_tost1, col_tost2 = st.columns(2)
+            
+            with col_tost1:
+                st.markdown("### Analysis Configuration")
+                
+                # Dynamic Query Inputs
+                if 'tost_query_count' not in st.session_state:
+                    st.session_state['tost_query_count'] = 1
+                
+                tost_queries = []
+                for i in range(st.session_state['tost_query_count']):
+                    q = st.text_input(
+                        f"Query/Feature {i+1}",
+                        value=get_state('stats_query', '_JJ*') if i == 0 else "",
+                        help="Supports words, lemmas, and tags.",
+                        key=f"tost_query_input_{i}"
+                    )
+                    if q.strip():
+                        tost_queries.append(q.strip())
+                
+                if st.session_state['tost_query_count'] < 10:
+                    if st.button("➕ Add Query"):
+                        st.session_state['tost_query_count'] += 1
+                        st.rerun()
+                from ui_streamlit.components.pos_help import render_pos_help_button
+                render_pos_help_button(corpus_path, "tost_standard")
+                
+                tost_freq_type = st.radio("Frequency Type", ["Relative (per 10k words)", "Absolute"], horizontal=True, key="tost_freq_type")
+                tost_freq_code = "relative_10k" if "Relative" in tost_freq_type else "absolute"
+
+                # Re-use the unique grouping logic
+                con = duckdb.connect(corpus_path)
+                attr_cols_tost = get_xml_attribute_columns(con)
+                con.close()
+                
+                tost_grouping_attr = st.radio(
+                    "Select grouping attribute",
+                    options=attr_cols_tost if attr_cols_tost else ['filename'],
+                    horizontal=True,
+                    key="tost_grouping_attr"
+                )
+                
+                con = duckdb.connect(corpus_path)
+                tost_unique_vals = [r[0] for r in con.execute(f"SELECT DISTINCT {tost_grouping_attr} FROM corpus WHERE {tost_grouping_attr} IS NOT NULL ORDER BY {tost_grouping_attr}").fetchall()]
+                tost_unique_vals = [str(v) for v in tost_unique_vals if str(v).strip()]
+                con.close()
+                
+                tost_groups = []
+                st.write(f"**Select exactly 2 groups to compare**")
+                tost_container_height = 300 if len(tost_unique_vals) > 25 else None
+                
+                with (st.container(height=tost_container_height) if tost_container_height else st.container()):
+                    for idx, val in enumerate(tost_unique_vals):
+                        is_default = idx < 2 if len(tost_unique_vals) >= 2 else True
+                        if st.checkbox(str(val), value=is_default, key=f"tost_group_chk_{val}_{idx}"):
+                            tost_groups.append(val)
+                            
+            with col_tost2:
+                st.markdown("### Equivalence Thresholds")
+                
+                st.info("Define the 'Don't Care' zone. If the difference between groups falls within these bounds, they are considered equivalent.")
+                
+                tost_bound = st.number_input(
+                    "Equivalence Bound (Difference threshold)",
+                    min_value=0.001,
+                    max_value=1000.0,
+                    value=3.00 if "Relative" in tost_freq_type else 50.0,
+                    step=0.5 if "Relative" in tost_freq_type else 10.0,
+                    key="tost_bound"
+                )
+                st.caption(f"We will test if the true difference is between **-{tost_bound}** and **+{tost_bound}**.")
+                
+                alpha_level = st.radio("Alpha Level", [0.05, 0.01], horizontal=True, key="tost_alpha")
+                
+            if st.button("⚖️ Run Equivalence Test (TOST)", type="primary"):
+                if not tost_queries:
+                    st.error("Please enter at least one query.")
+                elif len(tost_groups) != 2:
+                    st.error("Please select exactly 2 groups.")
+                else:
+                    with st.spinner("Running Equivalence Test..."):
+                        try:
+                            all_results = []
+                            for tost_query in tost_queries:
+                                # Use existing backend to get frequency vectors
+                                df_freqs = get_document_frequency_vector(corpus_path, tost_query, group_by='doc_id', freq_type=tost_freq_code)
+                                df_freqs = df_freqs.reset_index() # Make group_id a column
+                                
+                                # Merge with metadata to get the grouping attribute
+                                con = duckdb.connect(corpus_path)
+                                meta_df = con.execute(f"SELECT doc_id, {tost_grouping_attr} FROM corpus WHERE {tost_grouping_attr} IS NOT NULL GROUP BY doc_id, {tost_grouping_attr}").fetchdf()
+                                con.close()
+                                
+                                merged_df = pd.merge(df_freqs, meta_df, left_on='group_id', right_on='doc_id')
+                                
+                                g1_data = merged_df[merged_df[tost_grouping_attr] == tost_groups[0]]['val'].values
+                                g2_data = merged_df[merged_df[tost_grouping_attr] == tost_groups[1]]['val'].values
+                                
+                                if len(g1_data) < 2 or len(g2_data) < 2:
+                                    continue
+                                
+                                mean1 = np.mean(g1_data)
+                                mean2 = np.mean(g2_data)
+                                mean_diff = mean1 - mean2
+                                
+                                # Welch's t-test stats
+                                v1 = np.var(g1_data, ddof=1)
+                                v2 = np.var(g2_data, ddof=1)
+                                n1 = len(g1_data)
+                                n2 = len(g2_data)
+                                
+                                se = np.sqrt(v1/n1 + v2/n2)
+                                df_stat = (v1/n1 + v2/n2)**2 / ( (v1/n1)**2/(n1-1) + (v2/n2)**2/(n2-1) )
+                                
+                                # TOST P-values
+                                t_lower = (mean_diff - (-tost_bound)) / se
+                                t_upper = (mean_diff - tost_bound) / se
+                                
+                                p_lower = 1 - stats.t.cdf(t_lower, df_stat)
+                                p_upper = stats.t.cdf(t_upper, df_stat)
+                                
+                                p_overall = max(p_lower, p_upper)
+                                
+                                # Confidence interval (90% for alpha=0.05)
+                                t_crit = stats.t.ppf(1 - alpha_level, df_stat)
+                                margin = t_crit * se
+                                ci_lower = mean_diff - margin
+                                ci_upper = mean_diff + margin
+                                
+                                is_equivalent = ci_lower >= -tost_bound and ci_upper <= tost_bound
+                                
+                                all_results.append({
+                                    "query": tost_query,
+                                    "mean1": mean1,
+                                    "mean2": mean2,
+                                    "mean_diff": mean_diff,
+                                    "se": se,
+                                    "df_stat": df_stat,
+                                    "ci_lower": ci_lower,
+                                    "ci_upper": ci_upper,
+                                    "p_lower": p_lower,
+                                    "p_upper": p_upper,
+                                    "p_overall": p_overall,
+                                    "is_equivalent": is_equivalent
+                                })
+                            
+                            if not all_results:
+                                st.error("Not enough data points in one or both groups to run the tests.")
+                            else:
+                                st.markdown("---")
+                                
+                                col_res1, col_res2 = st.columns([3, 1])
+                                with col_res1:
+                                    st.subheader("⚖️ Equivalence Results")
+                                with col_res2:
+                                    from ui_streamlit.components.print_button import render_print_button
+                                    render_print_button()
+                                
+                                # Generate Combined Results
+                                if len(all_results) > 1:
+                                    st.markdown("### 🏆 Combined Result (All Features)")
+                                    
+                                    combined_report = []
+                                    for r in all_results:
+                                        combined_report.append({
+                                            "Feature": r["query"],
+                                            "Mean Diff": round(r["mean_diff"], 3),
+                                            f"{int((1 - 2*alpha_level)*100)}% CI": f"[{r['ci_lower']:.3f}, {r['ci_upper']:.3f}]",
+                                            "Equivalent?": "✅ Yes" if r["is_equivalent"] else "❌ No",
+                                            "Max p-value": round(r["p_overall"], 4)
+                                        })
+                                    st.dataframe(pd.DataFrame(combined_report), hide_index=True)
+                                    
+                                    import plotly.graph_objects as go
+                                    fig_combined = go.Figure()
+                                    
+                                    for i, r in enumerate(all_results):
+                                        color = 'green' if r["is_equivalent"] else 'red'
+                                        fig_combined.add_trace(go.Scatter(
+                                            x=[r["ci_lower"], r["ci_upper"]],
+                                            y=[r["query"], r["query"]],
+                                            mode='lines+markers',
+                                            marker=dict(size=10, color=color),
+                                            line=dict(color=color, width=4),
+                                            name=r["query"]
+                                        ))
+                                        fig_combined.add_trace(go.Scatter(
+                                            x=[r["mean_diff"]],
+                                            y=[r["query"]],
+                                            mode='markers',
+                                            marker=dict(color='black', size=12, symbol='diamond'),
+                                            showlegend=False
+                                        ))
+                                        
+                                    fig_combined.add_vline(x=-tost_bound, line_dash="dash", line_color="black", annotation_text="-Bound")
+                                    fig_combined.add_vline(x=tost_bound, line_dash="dash", line_color="black", annotation_text="+Bound")
+                                    fig_combined.update_layout(title="Combined Confidence Intervals", xaxis_title="Mean Difference", yaxis_title="Feature", showlegend=False)
+                                    st.plotly_chart(fig_combined, use_container_width=True)
+                                    
+                                    # Combined Interpretation
+                                    best_sim = min(all_results, key=lambda x: abs(x["mean_diff"]))
+                                    st.info(f"**Combined Interpretation:** We tested {len(all_results)} features. The feature that is **the most similar** between the two groups is `{best_sim['query']}`, with a mean difference of just {best_sim['mean_diff']:.3f}. Remember to check if this difference actually falls within your equivalence bound of ±{tost_bound}.")
+                                
+                                # Render Individual Results
+                                for r in all_results:
+                                    with st.expander(f"Individual Result: `{r['query']}`", expanded=True):
+                                        st.markdown("#### Statistical Report")
+                                        
+                                        report_data = {
+                                            "Comparison": [f"{tost_groups[0]} vs {tost_groups[1]}"],
+                                            "Feature": [r["query"]],
+                                            "Mean Diff": [round(r["mean_diff"], 3)],
+                                            f"{int((1 - 2*alpha_level)*100)}% CI Lower": [round(r["ci_lower"], 3)],
+                                            f"{int((1 - 2*alpha_level)*100)}% CI Upper": [round(r["ci_upper"], 3)],
+                                            "Equivalence Bound": [f"±{tost_bound}"],
+                                            "p-value (Lower)": [round(r["p_lower"], 4)],
+                                            "p-value (Upper)": [round(r["p_upper"], 4)],
+                                            "Max p-value": [round(r["p_overall"], 4)],
+                                            "Equivalent?": ["Yes" if r["is_equivalent"] else "No"]
+                                        }
+                                        st.dataframe(pd.DataFrame(report_data), hide_index=True)
+                                        
+                                        st.markdown("#### Interpretation")
+                                        if r["is_equivalent"]:
+                                            st.success(f"**Equivalence Supported:** A Two One-Sided Tests (TOST) procedure was conducted to determine whether the frequency of `{r['query']}` between '{tost_groups[0]}' ($M = {r['mean1']:.2f}$) and '{tost_groups[1]}' ($M = {r['mean2']:.2f}$) is practically equivalent within bounds of $\pm {tost_bound}$. The maximum p-value across both one-sided tests was significant ($p = {r['p_overall']:.4f}$), and the {int((1 - 2*alpha_level)*100)}% confidence interval for the mean difference [${r['ci_lower']:.3f}$, ${r['ci_upper']:.3f}$] fell entirely within the equivalence bounds. Therefore, we can conclude that the groups are statistically equivalent regarding this linguistic feature.")
+                                        else:
+                                            st.error(f"**Equivalence Not Supported:** A Two One-Sided Tests (TOST) procedure was conducted to determine whether the frequency of `{r['query']}` between '{tost_groups[0]}' ($M = {r['mean1']:.2f}$) and '{tost_groups[1]}' ($M = {r['mean2']:.2f}$) is practically equivalent within bounds of $\pm {tost_bound}$. The maximum p-value across both one-sided tests was $p = {r['p_overall']:.4f}$, and the {int((1 - 2*alpha_level)*100)}% confidence interval for the mean difference [${r['ci_lower']:.3f}$, ${r['ci_upper']:.3f}$] exceeded the equivalence bounds. Therefore, we cannot claim that the groups are practically equivalent for this linguistic feature; they may exhibit meaningful differences.")
+                                        
+                                        import plotly.graph_objects as go
+                                        x = np.linspace(r["mean_diff"] - 4*r["se"], r["mean_diff"] + 4*r["se"], 100)
+                                        y = stats.t.pdf(x, r["df_stat"], loc=r["mean_diff"], scale=r["se"])
+                                        
+                                        fig = go.Figure()
+                                        fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name='Density'))
+                                        fig.add_vline(x=-tost_bound, line_dash="dash", line_color="green", annotation_text="Lower Bound")
+                                        fig.add_vline(x=tost_bound, line_dash="dash", line_color="green", annotation_text="Upper Bound")
+                                        fig.add_shape(type="line", x0=r["ci_lower"], y0=0, x1=r["ci_upper"], y1=0, line=dict(color="red", width=5))
+                                        fig.add_trace(go.Scatter(x=[r["mean_diff"]], y=[0], mode='markers', marker=dict(color='black', size=10), name='Mean Diff'))
+                                        fig.update_layout(title="Confidence Density Plot of Mean Difference", xaxis_title="Mean Difference", yaxis_title="Confidence Density", showlegend=False)
+                                        st.plotly_chart(fig, use_container_width=True)
+
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+
+        # ---------------- SEM TAB ----------------
+        with tab_sem:
+            st.markdown("### 🚧 Under Construction: Structural Equation Modeling (SEM)")
+            st.info("""
+            **Model-Based Equivalence Testing**
+            
+            Future updates will include the ability to fit unconstrained and constrained models (using metrics like RMSEA and AIC) to determine group equivalence, following the methodology outlined in Larsson & Hancock (2026).
+            """)
+
 

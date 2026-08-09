@@ -510,10 +510,12 @@ def get_document_frequency_vector(
     query: str,
     xml_where_clause: str = "",
     xml_params: list = [],
-    group_by: str = "filename"
+    group_by: str = "filename",
+    freq_type: str = "absolute"
 ) -> pd.DataFrame:
     """
     Returns a DataFrame [group, freq] representing the frequency of the query per document.
+    freq_type can be 'absolute' or 'relative_10k'
     """
     con = duckdb.connect(corpus_db_path)
     try:
@@ -531,12 +533,30 @@ def get_document_frequency_vector(
             
         final_params = params_q + xml_params
         
-        sql = f"""
-            SELECT {group_by} as group_id, COUNT(*) as val
-            FROM corpus c
-            WHERE {full_where}
-            GROUP BY {group_by}
-        """
+        if freq_type == 'relative_10k':
+            sql = f"""
+                WITH query_counts AS (
+                    SELECT {group_by} as group_id, CAST(COUNT(*) AS FLOAT) as val
+                    FROM corpus c
+                    WHERE {full_where}
+                    GROUP BY {group_by}
+                ), total_counts AS (
+                    SELECT {group_by} as group_id, CAST(COUNT(*) AS FLOAT) as total
+                    FROM corpus
+                    WHERE {group_by} IS NOT NULL
+                    GROUP BY {group_by}
+                )
+                SELECT q.group_id, (q.val / t.total) * 10000 as val
+                FROM query_counts q
+                JOIN total_counts t ON q.group_id = t.group_id
+            """
+        else:
+            sql = f"""
+                SELECT {group_by} as group_id, CAST(COUNT(*) AS FLOAT) as val
+                FROM corpus c
+                WHERE {full_where}
+                GROUP BY {group_by}
+            """
         df = con.execute(sql, final_params).fetch_df()
         return df.set_index('group_id')
     finally:
