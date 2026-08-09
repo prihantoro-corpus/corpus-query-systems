@@ -1,0 +1,1 @@
+corpora/english/ICNALE_WE.db filter=lfs diff=lfs merge=lfs -text
