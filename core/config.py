@@ -15,6 +15,8 @@ KNOWN_CORPORA_MAP = {
     "BAWE sample (English)": "english/BAWE.db",
     "JP-DICO-JALF": "japanese/JP-DICO-JALF.db",
     "ICNALE Written English": "english/ICNALE_WE.db",
+    "BNC Spoken": "english/BNC Spoken.duckdb",
+    "BNC": "english/BNC.duckdb",
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
