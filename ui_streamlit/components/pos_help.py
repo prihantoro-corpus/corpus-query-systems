@@ -157,7 +157,7 @@ def get_pos_tag_examples(db_path, tag):
         return ""
         
     # 1. Try reading from pos_examples table first
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
         if 'pos_examples' in tables:
@@ -171,7 +171,7 @@ def get_pos_tag_examples(db_path, tag):
         
     # 2. Not found, compute it
     examples_str = ""
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         res = con.execute("""
             SELECT DISTINCT token 
@@ -221,7 +221,7 @@ def infer_tagger_and_tagset(db_path):
     tagger = "Unknown"
     tagset = "Unknown"
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
         if 'corpus_metadata' in tables:
@@ -396,7 +396,7 @@ def get_tag_examples(db_path, tag, column):
         return ""
     examples_str = ""
     import duckdb
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         res = con.execute(f"SELECT DISTINCT token FROM corpus WHERE {column} = ? AND NOT regexp_matches(token, '^[[:punct:]\\s]+$') LIMIT 10", [tag]).fetchall()
         import random
