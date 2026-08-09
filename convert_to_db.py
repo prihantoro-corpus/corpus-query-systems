@@ -25,7 +25,6 @@ def main():
         
         # Open in binary mode as expected by the loader
         f = open(filepath, 'rb')
-        f.name = os.path.basename(filepath)
         file_sources.append(f)
 
     def print_progress(val, text):
@@ -45,12 +44,12 @@ def main():
         f.close()
 
     if result.get('error'):
-        print(f"\n❌ Error during processing: {result['error']}")
+        print(f"\nError during processing: {result['error']}")
         sys.exit(1)
     else:
         temp_db = result['db_path']
         shutil.copy(temp_db, args.output)
-        print(f"\n✅ Successfully created database: {args.output}")
+        print(f"\nSuccessfully created database: {args.output}")
         print(f"   Total Tokens: {result['stats'].get('total_tokens', 0)}")
         print(f"   You can now upload '{args.output}' to the online version of CORTEX!")
 

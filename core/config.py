@@ -14,6 +14,7 @@ KNOWN_CORPORA_MAP = {
     "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.db",
     "BAWE sample (English)": "english/BAWE.db",
     "JP-DICO-JALF": "japanese/JP-DICO-JALF.db",
+    "ICNALE Written English": "english/ICNALE_WE.db",
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
@@ -128,6 +129,12 @@ BUILT_IN_CORPUS_DETAILS = {
     "JP-DICO-JALF":
         """
         The **DICO-JALF Corpus** is a Japanese language learner corpus.
+        """,
+    "ICNALE Written English":
+        """
+        The **International Corpus Network of Asian Learners of English (ICNALE)** Written English corpus.
+        <br><br>
+        **Source/Citation:** Ishikawa, S. (2023). **The ICNALE Guide: An Introduction to a Learner Corpus Study on Asian Learners' L2 English.** Routledge. [Link](https://www.taylorfrancis.com/books/mono/10.4324/9781003252528/icnale-guide-shin-ichiro-ishikawa)
         """,
 }
 
