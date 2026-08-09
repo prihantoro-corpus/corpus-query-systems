@@ -30,7 +30,7 @@ def get_summarization_metadata_fields(db_path):
     if not db_path:
         return []
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         standard_cols = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low'}
         all_cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
@@ -51,7 +51,7 @@ def get_metadata_values(db_path, field):
     if not db_path or not field:
         return []
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         query = f"SELECT DISTINCT {field} FROM corpus WHERE {field} IS NOT NULL ORDER BY {field}"
         df = con.execute(query).fetch_df()
@@ -69,7 +69,7 @@ def get_text_data(db_path, basis="Overall", field=None, value=None):
     if not db_path:
         return ""
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         where_clause = ""
         params = []

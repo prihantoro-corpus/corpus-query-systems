@@ -15,7 +15,7 @@ def get_detailed_contextual_ngrams(corpus_db_path, query_word, xml_where_clause=
         return None
     
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         q = query_word.lower()
         
         # Use Window Functions to get context in one pass
@@ -71,7 +71,7 @@ def get_all_lemma_forms_details(corpus_db_path, target_word, xml_where_clause=""
     term = target_word.lower()
     
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         lemma_list = [r[0] for r in con.execute("SELECT DISTINCT lower(lemma) FROM corpus WHERE _token_low = ? AND lemma NOT LIKE '##%'", [term]).fetchall()]
         
         if not lemma_list:
@@ -100,7 +100,7 @@ def get_related_forms_by_regex(corpus_db_path, target_word):
     if not corpus_db_path: return []
     pat = f".*{re.escape(target_word)}.*"
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         res = con.execute("SELECT DISTINCT token FROM corpus WHERE regexp_matches(_token_low, ?) LIMIT 50", [pat]).fetchall()
         con.close()
         return sorted([r[0] for r in res])
@@ -110,7 +110,7 @@ def get_related_forms_by_regex(corpus_db_path, target_word):
 def get_dictionary_examples(corpus_db_path, target_word, xml_where_clause="", xml_params=[]):
     if not corpus_db_path: return []
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         
         # Prioritizing shorter sentences (< 15 tokens)
         hits_df = con.execute(f"""
@@ -170,7 +170,7 @@ def get_dictionary_examples(corpus_db_path, target_word, xml_where_clause="", xm
 def get_random_examples_v2(corpus_db_path, target_word, limit=5, xml_where_clause="", xml_params=[]):
     if not corpus_db_path: return []
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         hits = con.execute(f"SELECT DISTINCT sent_id FROM corpus WHERE _token_low = ? {xml_where_clause} ORDER BY random() LIMIT ?", [target_word.lower()] + xml_params + [limit]).fetchall()
         
         examples = []

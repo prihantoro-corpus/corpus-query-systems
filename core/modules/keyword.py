@@ -22,7 +22,7 @@ def generate_keyword_list(target_db_path, ref_db_path=None, target_xml_where="",
 
     try:
         # 1. Get Target Counts
-        con_t = duckdb.connect(target_db_path)
+        con_t = duckdb.connect(target_db_path, read_only=True)
         
         sql_t = f"""
         SELECT _token_low as token, count(*) as freq 
@@ -51,7 +51,7 @@ def generate_keyword_list(target_db_path, ref_db_path=None, target_xml_where="",
             df_ref = ref_freq_df.copy()
             total_ref = ref_total_tokens if ref_total_tokens > 0 else df_ref['freq'].sum()
         else:
-            con_r = duckdb.connect(ref_db_path)
+            con_r = duckdb.connect(ref_db_path, read_only=True)
             sql_r = f"""
             SELECT _token_low as token, count(*) as freq 
             FROM corpus 
@@ -136,7 +136,7 @@ def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None
     results = {}
     
     try:
-        con_t = duckdb.connect(target_db_path)
+        con_t = duckdb.connect(target_db_path, read_only=True)
         
         # 1. Verify column exists first
         try:
@@ -151,7 +151,7 @@ def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None
             df_ref = ref_freq_df.copy()
             total_ref = ref_total_tokens if ref_total_tokens > 0 else df_ref['freq'].sum()
         else:
-            con_r = duckdb.connect(ref_db_path)
+            con_r = duckdb.connect(ref_db_path, read_only=True)
             sql_r = f"""
             SELECT _token_low as token, count(*) as freq 
             FROM corpus 

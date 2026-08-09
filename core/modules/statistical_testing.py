@@ -241,7 +241,7 @@ def compare_groups_by_word(
     # Build WHERE clause for the query
     query_where, query_params = build_query_where_clause(parsed, "c")
     
-    con = duckdb.connect(corpus_db_path)
+    con = duckdb.connect(corpus_db_path, read_only=True)
     
     try:
         # Build frequency extraction queries for each group
@@ -455,7 +455,7 @@ def preview_query_matches(
     parsed = parsed_terms[0]
     query_where, query_params = build_query_where_clause(parsed, "c")
     
-    con = duckdb.connect(corpus_db_path)
+    con = duckdb.connect(corpus_db_path, read_only=True)
     
     try:
         # Build WHERE clause
@@ -517,7 +517,7 @@ def get_document_frequency_vector(
     Returns a DataFrame [group, freq] representing the frequency of the query per document.
     freq_type can be 'absolute' or 'relative_10k'
     """
-    con = duckdb.connect(corpus_db_path)
+    con = duckdb.connect(corpus_db_path, read_only=True)
     try:
         import re
         query_pattern = r'<[^>]+>|[^\s]+'
@@ -574,7 +574,7 @@ def get_document_metadata_vector(
     Returns a DataFrame [group, val] for a numeric metadata attribute.
     Tries to cast to FLOAT. Filters out non-numeric values.
     """
-    con = duckdb.connect(corpus_db_path)
+    con = duckdb.connect(corpus_db_path, read_only=True)
     try:
         where_clause = "1=1"
         if xml_where_clause:
@@ -609,7 +609,7 @@ def get_document_metric_vector(
     """
     Returns a DataFrame [group, val] for a calculated metric (TTR, Length).
     """
-    con = duckdb.connect(corpus_db_path)
+    con = duckdb.connect(corpus_db_path, read_only=True)
     try:
         where_clause = "1=1"
         if xml_where_clause:
@@ -710,7 +710,7 @@ def get_feature_matrix(
     if isinstance(ngram_sizes, int):
         ngram_sizes = [ngram_sizes]
         
-    con = duckdb.connect(corpus_db_path)
+    con = duckdb.connect(corpus_db_path, read_only=True)
     try:
         where_clause = "1=1"
         if xml_where_clause:

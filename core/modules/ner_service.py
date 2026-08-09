@@ -22,7 +22,7 @@ def run_spacy_ner(db_path, model_name="en_core_web_sm"):
     """
     nlp = ensure_spacy_model(model_name)
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         df_sents = con.execute("""
             SELECT filename, sent_id, string_agg(token, ' ' ORDER BY id) as text
@@ -70,7 +70,7 @@ def run_regex_ner(db_path, patterns_dict):
     patterns_dict: {Category_Label: regex_pattern_string}
     Returns (df_flat, df_matrix_files, df_matrix_top, all_entities)
     """
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         df_sents = con.execute("""
             SELECT filename, sent_id, string_agg(token, ' ' ORDER BY id) as text
@@ -210,7 +210,7 @@ def annotate_ner_tags_in_db(db_path, all_entities):
     if not all_entities:
         return False
         
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # 1. Group entities by (Filename, sent_id) for efficient lookup
         from collections import defaultdict

@@ -141,7 +141,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
     if not db_path or not wordlist:
         return pd.DataFrame()
 
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Prepare the categories
         categories = sorted(list(set(wordlist.values())), key=natural_sort_key)

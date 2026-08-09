@@ -15,7 +15,7 @@ def get_detailed_contextual_ngrams(corpus_db_path, query_word, xml_where_clause=
         return None
     
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         q = query_word.lower()
         
         # Check if the exact term exists in the corpus first
@@ -99,7 +99,7 @@ def get_all_lemma_forms_details(corpus_db_path, target_word, xml_where_clause=""
     term = target_word.lower()
     
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         # XML-Aware Lemma discovery: find lemmas that are relevant to this word OR if the word is itself a lemma
         lemma_sql = f"""
             SELECT DISTINCT lower(lemma) 
@@ -142,7 +142,7 @@ def get_related_forms_by_regex(corpus_db_path, target_word, xml_where_clause="",
     if not corpus_db_path: return []
     pat = f".*{re.escape(target_word)}.*"
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         sql = f"SELECT DISTINCT token FROM corpus WHERE regexp_matches(_token_low, ?) {xml_where_clause} LIMIT 50"
         res = con.execute(sql, [pat] + xml_params).fetchall()
         con.close()
@@ -153,7 +153,7 @@ def get_related_forms_by_regex(corpus_db_path, target_word, xml_where_clause="",
 def get_subcorpus_size(corpus_db_path, xml_where_clause="", xml_params=[]):
     if not corpus_db_path: return 0
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         # Using count(*) on the restricted view
         sql = f"SELECT count(*) FROM corpus WHERE 1=1 {xml_where_clause}"
         count = con.execute(sql, xml_params).fetchone()[0]
@@ -165,7 +165,7 @@ def get_subcorpus_size(corpus_db_path, xml_where_clause="", xml_params=[]):
 def get_dictionary_examples(corpus_db_path, target_word, xml_where_clause="", xml_params=[]):
     if not corpus_db_path: return []
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         term = target_word.lower()
         
         # 1. Introspect columns to find metadata
@@ -262,7 +262,7 @@ def get_dictionary_examples(corpus_db_path, target_word, xml_where_clause="", xm
 def get_random_examples(corpus_db_path, target_word, limit=5, xml_where_clause="", xml_params=[]):
     if not corpus_db_path: return []
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         term = target_word.lower()
         exact_count = con.execute(f"SELECT count(*) FROM corpus WHERE _token_low = ? {xml_where_clause}", [term] + xml_params).fetchone()[0]
         if exact_count > 0:

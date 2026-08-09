@@ -601,7 +601,7 @@ def generate_grammar_exercises(
     
     if db_path and os.path.exists(db_path):
         try:
-            con = duckdb.connect(db_path)
+            con = duckdb.connect(db_path, read_only=True)
             # Fetch distinct tokens and their POS tags
             rows = con.execute("""
                 SELECT DISTINCT token, pos 
@@ -1054,7 +1054,7 @@ def generate_reading_comprehension(
     
     if db_path and os.path.exists(db_path):
         try:
-            con = duckdb.connect(db_path)
+            con = duckdb.connect(db_path, read_only=True)
             rows = con.execute("""
                 SELECT DISTINCT token, pos 
                 FROM corpus 
@@ -1451,7 +1451,7 @@ def generate_reading_comprehension(
                 # 2. Database same entity type query
                 if len(distractors) < 4 and db_path and os.path.exists(db_path):
                     try:
-                        con = duckdb.connect(db_path)
+                        con = duckdb.connect(db_path, read_only=True)
                         columns = con.execute("PRAGMA table_info(corpus)").fetchall()
                         col_names = [col[1] for col in columns]
                         if "ent_type" in col_names:
@@ -1475,7 +1475,7 @@ def generate_reading_comprehension(
                 # 3. Database POS fallback query
                 if len(distractors) < 4 and db_path and os.path.exists(db_path):
                     try:
-                        con = duckdb.connect(db_path)
+                        con = duckdb.connect(db_path, read_only=True)
                         if q_word in ["Who", "Where"] or label == "ORG":
                             db_prop = con.execute("""
                                 SELECT DISTINCT token 

@@ -18,7 +18,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         st = None
 
     try:
-        con = duckdb.connect(corpus_db_path)
+        con = duckdb.connect(corpus_db_path, read_only=True)
         
         # 1. Robust Query Tokenization
         # Split by space but preserve <tag attr="val"> blocks
@@ -747,7 +747,7 @@ def persist_annotations_to_db(db_path: str, annotations: dict):
     if not db_path or not annotations:
         return False, "No database or annotations provided."
 
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # 1. Discover all unique attributes
         all_attrs = set()
@@ -805,7 +805,7 @@ def get_collocate_frequency_list(db_path, query, collocate_filter, window, xml_w
     """
     import duckdb
     import re
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # 1. Parse Primary Query and Collocate Filter
         search_terms = query.strip().split()

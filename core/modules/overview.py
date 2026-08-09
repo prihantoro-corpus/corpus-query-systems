@@ -5,7 +5,7 @@ import json
 def get_corpus_files(db_path):
     """Fetches unique filenames from the corpus."""
     if not db_path: return []
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         res = con.execute("SELECT DISTINCT filename FROM corpus ORDER BY filename").fetchall()
         return [r[0] for r in res]
@@ -21,7 +21,7 @@ def get_restricted_stats(db_path, xml_where_clause="", xml_params=[]):
     if not db_path:
         return {}
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # total_tokens
         sql_total = f"SELECT count(*) FROM corpus WHERE 1=1 {xml_where_clause}"
@@ -60,7 +60,7 @@ def calculate_corpus_statistics(corpus_stats, db_path=None):
     # Self-healing: if we have a DB but types/tokens are suspiciously low, re-calculate
     if db_path and (total_tokens == 0 or type_count == 0):
         try:
-            con = duckdb.connect(db_path)
+            con = duckdb.connect(db_path, read_only=True)
             try:
                 res = con.execute("SELECT count(*), count(DISTINCT _token_low) FROM corpus").fetchone()
                 total_tokens = res[0]
@@ -82,7 +82,7 @@ def get_top_frequencies_v2(db_path, limit=100, xml_where_clause="", xml_params=[
     """
     Fetches the top frequency tokens with their POS (if available).
     """
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Check if POS exists
         cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
@@ -110,7 +110,7 @@ def get_unique_pos_tags(db_path, xml_where_clause="", xml_params=[]):
     """
     Fetches unique POS tags from the corpus, excluding dummy or empty tags.
     """
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
         if 'pos' not in cols:
@@ -132,7 +132,7 @@ def infer_tagset(db_path):
     """
     if not db_path:
         return "Unknown"
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
         if 'corpus_metadata' in tables:
@@ -179,7 +179,7 @@ def get_pos_definitions(db_path):
     db_defs = {}
     has_defs = False
     
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
         if 'pos_definitions' in tables:
@@ -330,7 +330,7 @@ def save_pos_definitions(db_path, definitions):
     Saves the POS definitions dictionary to the database.
     """
     if not db_path or not definitions: return False
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS pos_definitions (tag VARCHAR PRIMARY KEY, definition VARCHAR)")
         con.execute("DELETE FROM pos_definitions")
@@ -347,7 +347,7 @@ def save_pos_definitions(db_path, definitions):
 def get_corpus_language(db_path):
     """Retrieves the corpus language from metadata table."""
     if not db_path: return "English"
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         tables = con.execute("SHOW TABLES").fetchall()
         if ('corpus_metadata',) not in tables:
@@ -362,7 +362,7 @@ def get_corpus_language(db_path):
 def set_corpus_language(db_path, language):
     """Saves the corpus language to metadata table."""
     if not db_path: return False
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
         con.execute("INSERT INTO corpus_metadata VALUES ('language', ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [language])
@@ -376,7 +376,7 @@ def set_corpus_language(db_path, language):
 def set_corpus_metadata(db_path, key, value):
     """Saves arbitrary key-value metadata to the corpus_metadata table."""
     if not db_path or not key: return False
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
         con.execute("INSERT INTO corpus_metadata VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [key, str(value)])
@@ -398,7 +398,7 @@ def set_xml_structure(db_path, structure):
         for attr, vals in attrs.items():
             serializable[tag][attr] = list(vals)
             
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
         con.execute("INSERT INTO corpus_metadata VALUES ('xml_structure', ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [json.dumps(serializable)])
@@ -412,7 +412,7 @@ def set_xml_structure(db_path, structure):
 def get_xml_structure(db_path):
     """Retrieves the XML structure from database metadata and restores sets."""
     if not db_path: return None
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
         if 'corpus_metadata' not in tables:
@@ -441,7 +441,7 @@ def apply_metadata_to_files(db_path, metadata_df):
     """
     if not db_path or metadata_df.empty: return False
     import re
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # 1. Identify attribute columns (excluding filename)
         attr_cols = [c for c in metadata_df.columns if c != 'filename']
@@ -473,7 +473,7 @@ def apply_metadata_to_files(db_path, metadata_df):
 def get_file_sentences(db_path, filename):
     """Retrieves all sentences for a given file, grouped by sent_id."""
     if not db_path or not filename: return []
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Get all tokens for the file, ordered by id
         res = con.execute("""
@@ -493,7 +493,7 @@ def get_file_sentences(db_path, filename):
 def get_file_word_count(db_path, filename):
     """Returns the total token count for a file."""
     if not db_path or not filename: return 0
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         res = con.execute("SELECT count(*) FROM corpus WHERE filename = ?", [filename]).fetchone()
         return res[0] if res else 0
@@ -509,7 +509,7 @@ def apply_segmental_metadata(db_path, filename, sent_ids, meta_dict):
     """
     if not db_path or not filename or not sent_ids or not meta_dict: return False
     import re
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Ensure columns exist
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
@@ -545,7 +545,7 @@ def slice_corpus_file(db_path, filename, max_words=5000):
     Renames the filename in the corpus table to filename_part1, filename_part2, etc.
     """
     if not db_path or not filename: return False
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Get all token IDs for this file in order
         ids = [r[0] for r in con.execute("SELECT id FROM corpus WHERE filename = ? ORDER BY id", [filename]).fetchall()]
@@ -571,7 +571,7 @@ def slice_corpus_file(db_path, filename, max_words=5000):
 def get_sentence_metadata(db_path, filename):
     """Retrieves all metadata for sentences in a file."""
     if not db_path or not filename: return pd.DataFrame()
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
         standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
@@ -598,7 +598,7 @@ def get_sentence_metadata(db_path, filename):
 def get_file_tokens(db_path, filename):
     """Retrieves all tokens for a given file in order."""
     if not db_path or not filename: return []
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Get all tokens with their ID and any existing metadata
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
@@ -624,7 +624,7 @@ def apply_token_metadata(db_path, token_ids, meta_dict):
     """
     if not db_path or not token_ids or not meta_dict: return False
     import re
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     try:
         # Ensure columns exist
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
