@@ -258,7 +258,6 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
                                 df_word_raw, 
                                 df_abs_grouped[df_abs_grouped['Category'] == cat][['Word', 'Absolute Freq']], 
                                 on='Word', 
-                                style=None, # ignore warnings
                                 how='left'
                             )
                             df_sheet = df_sheet.sort_values(by='Raw Freq', ascending=False).reset_index(drop=True)
