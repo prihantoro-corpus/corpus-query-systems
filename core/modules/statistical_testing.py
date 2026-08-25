@@ -531,7 +531,8 @@ def get_document_frequency_vector(
         if xml_where_clause:
             full_where += f" AND {xml_where_clause}"
             
-        final_params = params_q + xml_params
+        xml_cond = f" AND {xml_where_clause}" if xml_where_clause else ""
+        final_params = params_q + xml_params + xml_params if xml_where_clause else params_q
         
         if freq_type == 'relative_10k':
             sql = f"""
@@ -542,20 +543,30 @@ def get_document_frequency_vector(
                     GROUP BY {group_by}
                 ), total_counts AS (
                     SELECT {group_by} as group_id, CAST(COUNT(*) AS FLOAT) as total
-                    FROM corpus
-                    WHERE {group_by} IS NOT NULL
-                    GROUP BY {group_by}
+                    FROM corpus c
+                    WHERE c.{group_by} IS NOT NULL {xml_cond}
+                    GROUP BY c.{group_by}
                 )
-                SELECT q.group_id, (q.val / t.total) * 10000 as val
-                FROM query_counts q
-                JOIN total_counts t ON q.group_id = t.group_id
+                SELECT t.group_id, COALESCE((q.val / t.total) * 10000, 0.0) as val
+                FROM total_counts t
+                LEFT JOIN query_counts q ON t.group_id = q.group_id
             """
         else:
             sql = f"""
-                SELECT {group_by} as group_id, CAST(COUNT(*) AS FLOAT) as val
-                FROM corpus c
-                WHERE {full_where}
-                GROUP BY {group_by}
+                WITH query_counts AS (
+                    SELECT {group_by} as group_id, CAST(COUNT(*) AS FLOAT) as val
+                    FROM corpus c
+                    WHERE {full_where}
+                    GROUP BY {group_by}
+                ), total_counts AS (
+                    SELECT {group_by} as group_id
+                    FROM corpus c
+                    WHERE c.{group_by} IS NOT NULL {xml_cond}
+                    GROUP BY c.{group_by}
+                )
+                SELECT t.group_id, COALESCE(q.val, 0.0) as val
+                FROM total_counts t
+                LEFT JOIN query_counts q ON t.group_id = q.group_id
             """
         df = con.execute(sql, final_params).fetch_df()
         return df.set_index('group_id')

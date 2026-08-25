@@ -1637,15 +1637,15 @@ A **Chi-square test of independence** was performed to compare the relative freq
                             all_results = []
                             for tost_query in tost_queries:
                                 # Use existing backend to get frequency vectors
-                                df_freqs = get_document_frequency_vector(corpus_path, tost_query, group_by='doc_id', freq_type=tost_freq_code)
+                                df_freqs = get_document_frequency_vector(corpus_path, tost_query, group_by=grouping_key, freq_type=tost_freq_code)
                                 df_freqs = df_freqs.reset_index() # Make group_id a column
                                 
                                 # Merge with metadata to get the grouping attribute
                                 con = duckdb.connect(corpus_path)
-                                meta_df = con.execute(f"SELECT doc_id, {tost_grouping_attr} FROM corpus WHERE {tost_grouping_attr} IS NOT NULL GROUP BY doc_id, {tost_grouping_attr}").fetchdf()
+                                meta_df = con.execute(f"SELECT {grouping_key}, {tost_grouping_attr} FROM corpus WHERE {tost_grouping_attr} IS NOT NULL GROUP BY {grouping_key}, {tost_grouping_attr}").fetchdf()
                                 con.close()
                                 
-                                merged_df = pd.merge(df_freqs, meta_df, left_on='group_id', right_on='doc_id')
+                                merged_df = pd.merge(df_freqs, meta_df, left_on='group_id', right_on=grouping_key)
                                 
                                 g1_data = merged_df[merged_df[tost_grouping_attr] == tost_groups[0]]['val'].values
                                 g2_data = merged_df[merged_df[tost_grouping_attr] == tost_groups[1]]['val'].values
