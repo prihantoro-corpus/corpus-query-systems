@@ -287,12 +287,16 @@ def render_word_profiler_chart(df, wl_name, hide_oov=False):
         ).properties(height=300)
     else:
         # Multiple Segments - Stacked Bar Chart (Horizontal Stacked)
+        # Calculate dynamic height based on the number of segments to show all values cleanly
+        num_segments = len(df)
+        dynamic_height = max(150, num_segments * 30)
+        
         chart = alt.Chart(plot_df).mark_bar().encode(
             x=alt.X('Percentage:Q', title='Percentage (%)', stack="normalize"), # Stacked horizontally to 100%
             y=alt.Y('Segment:N', title='Segment', sort=None),
             color=alt.Color('Category:N', sort=cats, scale=alt.Scale(scheme='category20')),
             tooltip=['Segment', 'Category', 'Percentage', 'Frequency']
-        ).properties(height=400)
+        ).properties(height=dynamic_height)
 
     st.altair_chart(chart, use_container_width=True)
 
