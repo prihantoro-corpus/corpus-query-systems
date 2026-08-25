@@ -195,7 +195,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
         if group_cols:
             # Construct a single 'Segment' label by concatenating group columns
             if len(group_cols) > 1:
-                df_tokens['Segment'] = df_tokens[group_cols].astype(str).agg(': '.join, axis=1)
+                df_tokens['Segment'] = df_tokens[group_cols].astype(str).apply(lambda x: ': '.join(x), axis=1)
             else:
                 df_tokens['Segment'] = df_tokens[group_cols[0]].astype(str)
                 
