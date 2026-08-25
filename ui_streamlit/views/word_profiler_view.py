@@ -42,12 +42,36 @@ def render_word_profiler_view():
                 import duckdb
                 con = duckdb.connect(corpus_path)
                 attr_cols = get_xml_attribute_columns(con)
-                con.close()
                 if attr_cols:
-                    metadata_col = st.radio("Select Metadata Attribute", attr_cols, horizontal=True, key="wp_metadata_col")
+                    selected_cols = st.multiselect("Select Metadata Attribute(s)", attr_cols, default=[attr_cols[0]] if attr_cols else [], key="wp_metadata_cols")
+                    
+                    # For each selected column, show available values with checklist (defaulting to all checked)
+                    metadata_col = []
+                    filtered_xml_filters = {}
+                    
+                    for col in selected_cols:
+                        st.markdown(f"**Filter values for: {col}**")
+                        # Fetch distinct values
+                        try:
+                            res = con.execute(f'SELECT DISTINCT "{col}" FROM corpus WHERE "{col}" IS NOT NULL ORDER BY "{col}"').fetchall()
+                            unique_vals = [str(r[0]).strip() for r in res if str(r[0]).strip() and str(r[0]).lower() != 'nan']
+                        except:
+                            unique_vals = []
+                            
+                        if unique_vals:
+                            # Use streamlit multiselect defaulting to all values
+                            chosen_vals = st.multiselect(f"Select values for {col}", options=unique_vals, default=unique_vals, key=f"wp_filter_vals_{col}")
+                            if chosen_vals:
+                                filtered_xml_filters[col] = {'type': 'list', 'values': chosen_vals}
+                                metadata_col.append(col)
+                        else:
+                            metadata_col.append(col)
+                            
+                    st.session_state['wp_metadata_value_filters'] = filtered_xml_filters
                 else:
                     st.warning("No metadata attributes found in this corpus.")
                     metadata_col = None
+                con.close()
 
         # 2. Wordlist Selection
         with st.expander("Wordlist Selection", expanded=True):
@@ -104,7 +128,17 @@ def render_word_profiler_view():
 
         # 3. Filtering
         xml_filters = render_xml_restriction_filters(corpus_path, "word_profiler", corpus_name=corpus_name)
-        xml_where, xml_params = apply_xml_restrictions(xml_filters)
+        
+        # Combine global filters with the metadata filters specified in settings
+        combined_filters = {}
+        if xml_filters:
+            combined_filters.update(xml_filters)
+        
+        wp_meta_filters = st.session_state.get('wp_metadata_value_filters')
+        if wp_meta_filters:
+            combined_filters.update(wp_meta_filters)
+            
+        xml_where, xml_params = apply_xml_restrictions(combined_filters)
 
         # 4. Run Analysis
         if st.button("Run Analysis", type="primary"):

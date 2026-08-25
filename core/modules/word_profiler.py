@@ -151,18 +151,23 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
             is_plain = False
 
         # Build the query
-        group_col = None
+        group_cols = []
         if basis == 'By Filename':
-            group_col = 'filename'
+            group_cols = ['filename']
         elif basis == 'By Metadata' and metadata_col:
-            group_col = metadata_col
+            # metadata_col can be a string (legacy) or a list of strings
+            if isinstance(metadata_col, list):
+                group_cols = metadata_col
+            else:
+                group_cols = [metadata_col]
 
         where_clause = "WHERE 1=1"
         if xml_where_clause:
             where_clause += xml_where_clause
 
-        if group_col:
-            query = f"SELECT {group_col}, _token_low, lemma, count(*) as freq FROM corpus {where_clause} GROUP BY {group_col}, _token_low, lemma"
+        if group_cols:
+            cols_str = ", ".join([f'"{col}"' for col in group_cols])
+            query = f"SELECT {cols_str}, _token_low, lemma, count(*) as freq FROM corpus {where_clause} GROUP BY {cols_str}, _token_low, lemma"
         else:
             query = f"SELECT _token_low, lemma, count(*) as freq FROM corpus {where_clause} GROUP BY _token_low, lemma"
 
@@ -187,10 +192,16 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
         df_tokens['Category'] = df_tokens.apply(get_category, axis=1)
 
         # Aggregate by Segment and Category
-        if group_col:
-            results = df_tokens.groupby([group_col, 'Category'])['freq'].sum().reset_index()
+        if group_cols:
+            # Construct a single 'Segment' label by concatenating group columns
+            if len(group_cols) > 1:
+                df_tokens['Segment'] = df_tokens[group_cols].astype(str).agg(': '.join, axis=1)
+            else:
+                df_tokens['Segment'] = df_tokens[group_cols[0]].astype(str)
+                
+            results = df_tokens.groupby(['Segment', 'Category'])['freq'].sum().reset_index()
             # Pivot to have Categories as columns
-            pivot_df = results.pivot(index=group_col, columns='Category', values='freq').fillna(0)
+            pivot_df = results.pivot(index='Segment', columns='Category', values='freq').fillna(0)
         else:
             results = df_tokens.groupby('Category')['freq'].sum().reset_index()
             # For whole corpus, we want a single row
@@ -229,7 +240,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
             import zipfile
             from io import BytesIO
             
-            segments = df_tokens[group_col].unique() if group_col else ['Whole Corpus']
+            segments = df_tokens['Segment'].unique() if group_cols else ['Whole Corpus']
             segment_excels = {}
             top_50_lists = {}
             
@@ -238,8 +249,8 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
             df_abs_grouped.columns = ['Word', 'Category', 'Absolute Freq']
             
             for seg_name in segments:
-                if group_col:
-                    df_seg = df_tokens[df_tokens[group_col] == seg_name]
+                if group_cols:
+                    df_seg = df_tokens[df_tokens['Segment'] == seg_name]
                 else:
                     df_seg = df_tokens
                     
