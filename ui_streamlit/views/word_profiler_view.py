@@ -73,16 +73,12 @@ def render_word_profiler_view():
                 wl_dir = os.path.join(base_wl_dir, mapped_lang)
                 available_lists = []
                 if os.path.exists(wl_dir):
-                    for root, dirs, files in os.walk(wl_dir):
-                        if 'bin' in dirs:
-                            dirs.remove('bin')
-                        for file in files:
-                            if file.endswith((".txt", ".csv", ".xlsx", ".xls")):
-                                if file.endswith("_stats.csv"):
-                                    continue
-                                full_path = os.path.join(root, file)
-                                rel_path = os.path.relpath(full_path, wl_dir)
-                                available_lists.append(rel_path)
+                    for file in os.listdir(wl_dir):
+                        full_path = os.path.join(wl_dir, file)
+                        if os.path.isfile(full_path) and file.endswith((".txt", ".csv", ".xlsx", ".xls")):
+                            if file.endswith("_stats.csv"):
+                                continue
+                            available_lists.append(file)
  
                 if available_lists:
                     st.write("**Choose Wordlist(s):**")
