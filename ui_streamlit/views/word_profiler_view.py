@@ -118,15 +118,21 @@ def render_word_profiler_view():
                 with st.spinner("Analyzing..."):
                     all_results = {}
                     for wl_name, wl_dict in selected_wordlists.items():
-                        df_res = notify_timing(f"Word Profiler analysis for '{wl_name}' completed")(run_word_profiler_analysis)(
+                        res_tuple = notify_timing(f"Word Profiler analysis for '{wl_name}' completed")(run_word_profiler_analysis)(
                             db_path=corpus_path,
                             wordlist=wl_dict,
                             basis=basis,
                             metadata_col=metadata_col,
                             xml_where_clause=xml_where,
-                            xml_params=xml_params
+                            xml_params=xml_params,
+                            return_detailed=True
                         )
-                        all_results[wl_name] = df_res
+                        if isinstance(res_tuple, tuple) and len(res_tuple) == 2:
+                            df_res, detailed = res_tuple
+                        else:
+                            df_res = res_tuple
+                            detailed = None
+                        all_results[wl_name] = {'summary': df_res, 'detailed': detailed}
                     set_state('last_wp_results_multiple', all_results)
 
         # 5. Results
@@ -136,7 +142,14 @@ def render_word_profiler_view():
                 st.info("No results found.")
             else:
                 st.subheader("Analysis Results")
-                for wl_name, df_results in all_results.items():
+                for wl_name, res_data in all_results.items():
+                    if isinstance(res_data, dict):
+                        df_results = res_data['summary']
+                        detailed = res_data.get('detailed')
+                    else:
+                        df_results = res_data
+                        detailed = None
+
                     with st.expander(f"📊 Results for: {wl_name}", expanded=True):
                         if df_results.empty:
                             st.info(f"No results for {wl_name}")
@@ -150,13 +163,57 @@ def render_word_profiler_view():
                         render_word_profiler_chart(df_results, wl_name, hide_oov == "Hide OOV")
 
                         # Download Button for this specific wordlist
-                        st.download_button(
-                            label=f"Download {wl_name} Results (Excel)",
-                            data=df_to_excel_bytes(df_results),
-                            file_name=f"word_profiler_{corpus_name}_{wl_name.split('.')[0]}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"dl_{wl_name}"
-                        )
+                        col_dl1, col_dl2 = st.columns(2)
+                        with col_dl1:
+                            st.download_button(
+                                label=f"Download {wl_name} Results (Excel)",
+                                data=df_to_excel_bytes(df_results),
+                                file_name=f"word_profiler_{corpus_name}_{wl_name.split('.')[0]}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"dl_{wl_name}"
+                            )
+                        with col_dl2:
+                            if detailed and 'zip_bytes' in detailed:
+                                st.download_button(
+                                    label="Download Detailed Domain Reports (ZIP)",
+                                    data=detailed['zip_bytes'],
+                                    file_name=f"word_profiler_detailed_{corpus_name}_{wl_name.split('.')[0]}.zip",
+                                    mime="application/zip",
+                                    key=f"dl_zip_{wl_name}"
+                                )
+
+                        # Render top 10 visualizations
+                        if detailed and 'top_10_lists' in detailed:
+                            st.markdown("#### 🔝 Top 10 Most Frequent Words by Level")
+                            segments = list(detailed['top_10_lists'].keys())
+                            if len(segments) > 1:
+                                selected_seg = st.selectbox(
+                                    "Select Domain/Segment for Top 10 lists:",
+                                    options=segments,
+                                    key=f"wp_top10_seg_{wl_name}"
+                                )
+                            else:
+                                selected_seg = segments[0] if segments else None
+                            
+                            if selected_seg:
+                                cat_data = detailed['top_10_lists'][selected_seg]
+                                cat_tabs = st.tabs(list(cat_data.keys()))
+                                for cat_tab, cat_name in zip(cat_tabs, cat_data.keys()):
+                                    with cat_tab:
+                                        df_top = cat_data[cat_name]
+                                        if not df_top.empty:
+                                            col1, col2 = st.columns([1, 2])
+                                            with col1:
+                                                st.dataframe(df_top, use_container_width=True)
+                                            with col2:
+                                                chart = alt.Chart(df_top).mark_bar().encode(
+                                                    x=alt.X('Raw Freq:Q', title='Raw Frequency'),
+                                                    y=alt.Y('Word:N', sort='-x', title='Word'),
+                                                    color=alt.value('#1f77b4')
+                                                ).properties(height=250)
+                                                st.altair_chart(chart, use_container_width=True)
+                                        else:
+                                            st.info(f"No words found in this category for {selected_seg}.")
 
                         # Summary Metrics
                         if basis == "Whole Corpus" and not df_results.empty:

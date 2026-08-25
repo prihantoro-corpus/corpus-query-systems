@@ -133,13 +133,13 @@ def load_wordlist(file_path_or_content, is_file=True):
             
     return wordlist
 
-def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata_col=None, xml_where_clause="", xml_params=[]):
+def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata_col=None, xml_where_clause="", xml_params=[], return_detailed=False):
     """
     Runs the word profiler analysis.
-    Returns a DataFrame with the results.
+    Returns a DataFrame with the results, or a tuple of (DataFrame, detailed_results) if return_detailed is True.
     """
     if not db_path or not wordlist:
-        return pd.DataFrame()
+        return (pd.DataFrame(), {}) if return_detailed else pd.DataFrame()
 
     con = duckdb.connect(db_path, read_only=True)
     try:
@@ -169,7 +169,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
         df_tokens = con.execute(query, xml_params).fetch_df()
         
         if df_tokens.empty:
-            return pd.DataFrame()
+            return (pd.DataFrame(), {}) if return_detailed else pd.DataFrame()
 
         # Map tokens to categories by checking both token and lemma
         def get_category(row):
@@ -223,7 +223,76 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
             res_row['Total Tokens'] = int(total)
             display_rows.append(res_row)
 
-        return pd.DataFrame(display_rows)
+        display_df = pd.DataFrame(display_rows)
+
+        if return_detailed:
+            import zipfile
+            from io import BytesIO
+            
+            segments = df_tokens[group_col].unique() if group_col else ['Whole Corpus']
+            segment_excels = {}
+            top_10_lists = {}
+            
+            # Global absolute frequencies for each word within its category
+            df_abs_grouped = df_tokens.groupby(['_token_low', 'Category'])['freq'].sum().reset_index()
+            df_abs_grouped.columns = ['Word', 'Category', 'Absolute Freq']
+            
+            for seg_name in segments:
+                if group_col:
+                    df_seg = df_tokens[df_tokens[group_col] == seg_name]
+                else:
+                    df_seg = df_tokens
+                    
+                excel_buffer = BytesIO()
+                top_10_lists[seg_name] = {}
+                
+                with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                    for cat in all_cats:
+                        df_cat = df_seg[df_seg['Category'] == cat]
+                        
+                        if not df_cat.empty:
+                            df_word_raw = df_cat.groupby('_token_low')['freq'].sum().reset_index()
+                            df_word_raw.columns = ['Word', 'Raw Freq']
+                            
+                            df_sheet = pd.merge(
+                                df_word_raw, 
+                                df_abs_grouped[df_abs_grouped['Category'] == cat][['Word', 'Absolute Freq']], 
+                                on='Word', 
+                                how='left'
+                            )
+                            df_sheet = df_sheet.sort_values(by='Raw Freq', ascending=False).reset_index(drop=True)
+                        else:
+                            df_sheet = pd.DataFrame(columns=['Word', 'Raw Freq', 'Absolute Freq'])
+                        
+                        # Add top 10
+                        top_10_lists[seg_name][cat] = df_sheet.head(10)[['Word', 'Raw Freq', 'Absolute Freq']]
+                        
+                        # Write to sheet
+                        sheet_name = str(cat)[:31]
+                        for char in [':', '\\', '/', '?', '*', '[', ']']:
+                            sheet_name = sheet_name.replace(char, '')
+                        df_sheet.to_excel(writer, sheet_name=sheet_name, index=False)
+                
+                excel_buffer.seek(0)
+                segment_excels[seg_name] = excel_buffer.getvalue()
+                
+            # Create ZIP
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for seg_name, excel_bytes in segment_excels.items():
+                    clean_filename = "".join(c for c in str(seg_name) if c.isalnum() or c in (' ', '_', '-')).strip()
+                    if not clean_filename:
+                        clean_filename = "segment"
+                    zip_file.writestr(f"{clean_filename}.xlsx", excel_bytes)
+                    
+            zip_buffer.seek(0)
+            detailed_results = {
+                'zip_bytes': zip_buffer.getvalue(),
+                'top_10_lists': top_10_lists
+            }
+            return display_df, detailed_results
+
+        return display_df
 
     finally:
         con.close()
