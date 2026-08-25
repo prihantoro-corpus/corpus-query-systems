@@ -182,15 +182,17 @@ def render_word_profiler_view():
                                     key=f"dl_zip_{wl_name}"
                                 )
 
-                        # Render top 10 visualizations
+                        # Render top 50 visualizations
                         if detailed and 'top_10_lists' in detailed:
-                            st.markdown("#### 🔝 Top 10 Most Frequent Words by Level")
+                            st.markdown("#### 🔝 Top 50 Most Frequent Words by Level")
+                            st.info("💡 Note: Only the top 50 words are shown here. You can download the full frequency results for all levels and domains from the ZIP file above.")
                             segments = list(detailed['top_10_lists'].keys())
                             if len(segments) > 1:
-                                selected_seg = st.selectbox(
-                                    "Select Domain/Segment for Top 10 lists:",
+                                selected_seg = st.radio(
+                                    "Select Domain/Segment for Top 50 lists:",
                                     options=segments,
-                                    key=f"wp_top10_seg_{wl_name}"
+                                    horizontal=True,
+                                    key=f"wp_top50_seg_{wl_name}"
                                 )
                             else:
                                 selected_seg = segments[0] if segments else None
@@ -210,7 +212,7 @@ def render_word_profiler_view():
                                                     x=alt.X('Raw Freq:Q', title='Raw Frequency'),
                                                     y=alt.Y('Word:N', sort='-x', title='Word'),
                                                     color=alt.value('#1f77b4')
-                                                ).properties(height=250)
+                                                ).properties(height=400) # taller for 50 words
                                                 st.altair_chart(chart, use_container_width=True)
                                         else:
                                             st.info(f"No words found in this category for {selected_seg}.")
