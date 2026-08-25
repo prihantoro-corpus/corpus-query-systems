@@ -231,7 +231,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
             
             segments = df_tokens[group_col].unique() if group_col else ['Whole Corpus']
             segment_excels = {}
-            top_10_lists = {}
+            top_50_lists = {}
             
             # Global absolute frequencies for each word within its category
             df_abs_grouped = df_tokens.groupby(['_token_low', 'Category'])['freq'].sum().reset_index()
@@ -244,7 +244,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
                     df_seg = df_tokens
                     
                 excel_buffer = BytesIO()
-                top_10_lists[seg_name] = {}
+                top_50_lists[seg_name] = {}
                 
                 with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                     for cat in all_cats:
@@ -258,14 +258,15 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
                                 df_word_raw, 
                                 df_abs_grouped[df_abs_grouped['Category'] == cat][['Word', 'Absolute Freq']], 
                                 on='Word', 
+                                style=None, # ignore warnings
                                 how='left'
                             )
                             df_sheet = df_sheet.sort_values(by='Raw Freq', ascending=False).reset_index(drop=True)
                         else:
                             df_sheet = pd.DataFrame(columns=['Word', 'Raw Freq', 'Absolute Freq'])
                         
-                        # Add top 10
-                        top_10_lists[seg_name][cat] = df_sheet.head(10)[['Word', 'Raw Freq', 'Absolute Freq']]
+                        # Add top 50
+                        top_50_lists[seg_name][cat] = df_sheet.head(50)[['Word', 'Raw Freq', 'Absolute Freq']]
                         
                         # Write to sheet
                         sheet_name = str(cat)[:31]
@@ -288,7 +289,7 @@ def run_word_profiler_analysis(db_path, wordlist, basis='Whole Corpus', metadata
             zip_buffer.seek(0)
             detailed_results = {
                 'zip_bytes': zip_buffer.getvalue(),
-                'top_10_lists': top_10_lists
+                'top_10_lists': top_50_lists
             }
             return display_df, detailed_results
 
