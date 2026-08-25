@@ -204,9 +204,11 @@ def render_word_profiler_view():
                                     with cat_tab:
                                         df_top = cat_data[cat_name]
                                         if not df_top.empty:
+                                            df_top_display = df_top.copy()
+                                            df_top_display.index = range(1, len(df_top_display) + 1)
                                             col1, col2 = st.columns([1, 2])
                                             with col1:
-                                                st.dataframe(df_top, use_container_width=True)
+                                                st.dataframe(df_top_display, use_container_width=True)
                                             with col2:
                                                 chart = alt.Chart(df_top).mark_bar().encode(
                                                     x=alt.X('Raw Freq:Q', title='Raw Frequency'),
