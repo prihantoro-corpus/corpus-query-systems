@@ -362,7 +362,7 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
             file_count = con.execute("SELECT COUNT(DISTINCT filename) FROM corpus").fetchone()[0]
         
         # --- 2. Language ---
-        lang_code = ov.get_corpus_language(path)
+        lang_code = ov.get_corpus_language(path) or "English"
         lang_map = {
             'en': 'English', 'id': 'Indonesian', 'fr': 'French', 'de': 'German', 
             'es': 'Spanish', 'it': 'Italian', 'pt': 'Portuguese', 'zh': 'Chinese',
