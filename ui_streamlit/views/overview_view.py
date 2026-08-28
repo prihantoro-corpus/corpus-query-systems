@@ -355,11 +355,11 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
     Builds and renders a natural-language summary paragraph above the tabs,
     strictly following the user's requested template.
     """
+    con = duckdb.connect(path, read_only=True)
     try:
-        with duckdb.connect(path, read_only=True) as con:
-            # --- 1. Basic corpus size ---
-            total_tokens = display_stats.get('total_tokens', 0)
-            file_count = con.execute("SELECT COUNT(DISTINCT filename) FROM corpus").fetchone()[0]
+        # --- 1. Basic corpus size ---
+        total_tokens = display_stats.get('total_tokens', 0)
+        file_count = con.execute("SELECT COUNT(DISTINCT filename) FROM corpus").fetchone()[0]
         
         # --- 2. Language ---
         lang_code = ov.get_corpus_language(path) or "English"
@@ -488,10 +488,12 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
         
     except Exception as e:
         import traceback
-        err_trace = traceback.format_exc()
-        print(f"NARRATION ERROR: {e}\n{err_trace}")
-        st.error(f"⚠️ Narration Block Failed: {e}")
-        st.code(err_trace)
+        print(f"NARRATION ERROR: {e}\n{traceback.format_exc()}")
+    finally:
+        try:
+            con.close()
+        except:
+            pass
 
 def render_full_overview(name, path, stats, structure, error):
     # --- XML Restriction Filters ---
