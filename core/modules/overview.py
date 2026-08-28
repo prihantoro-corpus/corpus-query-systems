@@ -330,7 +330,7 @@ def save_pos_definitions(db_path, definitions):
     Saves the POS definitions dictionary to the database.
     """
     if not db_path or not definitions: return False
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS pos_definitions (tag VARCHAR PRIMARY KEY, definition VARCHAR)")
         con.execute("DELETE FROM pos_definitions")
@@ -362,7 +362,7 @@ def get_corpus_language(db_path):
 def set_corpus_language(db_path, language):
     """Saves the corpus language to metadata table."""
     if not db_path: return False
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
         con.execute("INSERT INTO corpus_metadata VALUES ('language', ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [language])
@@ -376,7 +376,7 @@ def set_corpus_language(db_path, language):
 def set_corpus_metadata(db_path, key, value):
     """Saves arbitrary key-value metadata to the corpus_metadata table."""
     if not db_path or not key: return False
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
         con.execute("INSERT INTO corpus_metadata VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [key, str(value)])
@@ -398,7 +398,7 @@ def set_xml_structure(db_path, structure):
         for attr, vals in attrs.items():
             serializable[tag][attr] = list(vals)
             
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS corpus_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
         con.execute("INSERT INTO corpus_metadata VALUES ('xml_structure', ?) ON CONFLICT (key) DO UPDATE SET value=excluded.value", [json.dumps(serializable)])
@@ -441,7 +441,7 @@ def apply_metadata_to_files(db_path, metadata_df):
     """
     if not db_path or metadata_df.empty: return False
     import re
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         # 1. Identify attribute columns (excluding filename)
         attr_cols = [c for c in metadata_df.columns if c != 'filename']
@@ -509,7 +509,7 @@ def apply_segmental_metadata(db_path, filename, sent_ids, meta_dict):
     """
     if not db_path or not filename or not sent_ids or not meta_dict: return False
     import re
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         # Ensure columns exist
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
@@ -545,7 +545,7 @@ def slice_corpus_file(db_path, filename, max_words=5000):
     Renames the filename in the corpus table to filename_part1, filename_part2, etc.
     """
     if not db_path or not filename: return False
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         # Get all token IDs for this file in order
         ids = [r[0] for r in con.execute("SELECT id FROM corpus WHERE filename = ? ORDER BY id", [filename]).fetchall()]
@@ -624,7 +624,7 @@ def apply_token_metadata(db_path, token_ids, meta_dict):
     """
     if not db_path or not token_ids or not meta_dict: return False
     import re
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         # Ensure columns exist
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
