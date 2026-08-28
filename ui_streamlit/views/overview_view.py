@@ -488,7 +488,10 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
         
     except Exception as e:
         import traceback
-        print(f"NARRATION ERROR: {e}\n{traceback.format_exc()}")
+        err_trace = traceback.format_exc()
+        print(f"NARRATION ERROR: {e}\n{err_trace}")
+        st.error(f"⚠️ Narration Block Failed: {e}")
+        st.code(err_trace)
 
 def render_full_overview(name, path, stats, structure, error):
     # --- XML Restriction Filters ---
