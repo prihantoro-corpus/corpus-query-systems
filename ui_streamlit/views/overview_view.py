@@ -440,12 +440,13 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
                 else: ld_label = "high"
 
         # --- 7. Reading Ease ---
-        re_score = 0
+        re_score = 0.0
         re_label = "not available"
         if 'fre' in all_cols or 'fkgl' in all_cols:
             re_col = 'fre' if 'fre' in all_cols else 'fkgl'
-            re_score = con.execute(f"SELECT AVG(CAST({re_col} AS FLOAT)) FROM corpus WHERE {re_col} IS NOT NULL").fetchone()[0]
-            if re_score:
+            re_score_raw = con.execute(f"SELECT AVG(CAST({re_col} AS FLOAT)) FROM corpus WHERE {re_col} IS NOT NULL").fetchone()[0]
+            if re_score_raw is not None:
+                re_score = re_score_raw
                 if re_score >= 60: re_label = "easy to read"
                 elif re_score >= 30: re_label = "moderately complex"
                 else: re_label = "very difficult"
