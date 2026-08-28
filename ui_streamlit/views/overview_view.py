@@ -1393,30 +1393,51 @@ def render_upload_ui():
                             
                     # Download button for last trained model
                     last_model_bytes = get_state('last_trained_tagger_bytes')
-                    if last_model_bytes:
+                    last_model_json = get_state('last_trained_tagger_json')
+                    if last_model_json or last_model_bytes:
                         st.write("") # spacer
-                        st.download_button(
-                            label="📥 Click here to download trained model",
-                            data=last_model_bytes,
-                            file_name="custom_tagger_model.pkl",
-                            mime="application/octet-stream",
-                            key="download_trained_model_btn"
-                        )
+                        d_col1, d_col2 = st.columns(2)
+                        with d_col1:
+                            if last_model_json:
+                                st.download_button(
+                                    label="📥 Download Model (.json)",
+                                    data=last_model_json,
+                                    file_name="custom_tagger_model.json",
+                                    mime="application/json",
+                                    key="download_trained_model_json_btn"
+                                )
+                        with d_col2:
+                            if last_model_bytes:
+                                st.download_button(
+                                    label="📥 Download Model (.pkl)",
+                                    data=last_model_bytes,
+                                    file_name="custom_tagger_model.pkl",
+                                    mime="application/octet-stream",
+                                    key="download_trained_model_pkl_btn"
+                                )
                 else:
                     # Load Existing Model
-                    st.write("**Load Pre-trained Model (.pkl)**")
+                    st.write("**Load Pre-trained Model (.json or .pkl)**")
                     uploaded_model_file = st.file_uploader(
                         "Upload Trained Model File",
-                        type=["pkl"],
+                        type=["json", "pkl"],
                         key="uploaded_model_file_uploader",
-                        help="Upload a previously trained and downloaded .pkl model file."
+                        help="Upload a previously trained and downloaded .json or .pkl model file."
                     )
                     
                     if uploaded_model_file:
                         try:
-                            import pickle
-                            # Read and deserialize
-                            pre_trained_tagger = pickle.loads(uploaded_model_file.read())
+                            # Read and deserialize based on file extension
+                            fn = uploaded_model_file.name.lower()
+                            if fn.endswith('.json'):
+                                import json
+                                from core.preprocessing.custom_tagger import CustomDataDrivenTagger
+                                data = json.loads(uploaded_model_file.read().decode('utf-8'))
+                                pre_trained_tagger = CustomDataDrivenTagger.from_json(data)
+                            else:
+                                import pickle
+                                pre_trained_tagger = pickle.loads(uploaded_model_file.read())
+                                
                             custom_config = {
                                 'pre_trained_tagger': pre_trained_tagger
                             }
@@ -1556,10 +1577,15 @@ def render_upload_ui():
                         if result.get('trained_tagger'):
                             try:
                                 import pickle
+                                import json
                                 model_bytes = pickle.dumps(result['trained_tagger'])
                                 set_state('last_trained_tagger_bytes', model_bytes)
+                                
+                                # Also save as JSON for maximum portability
+                                model_json_str = json.dumps(result['trained_tagger'].to_json(), indent=2)
+                                set_state('last_trained_tagger_json', model_json_str.encode('utf-8'))
                             except Exception as e:
-                                print(f"Error pickling model: {e}")
+                                print(f"Error serializing model: {e}")
                                 
                         # Extract and save annotated corpus text
                         if result.get('annotated_corpus_text'):
