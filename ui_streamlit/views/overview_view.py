@@ -485,8 +485,9 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
             unsafe_allow_html=True
         )
         
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        print(f"NARRATION ERROR: {e}\n{traceback.format_exc()}")
 
 def render_full_overview(name, path, stats, structure, error):
     # --- XML Restriction Filters ---
