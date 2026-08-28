@@ -870,3 +870,106 @@ class CustomDataDrivenTagger:
                 'lemma': 'unknown_lemma',
                 'confidence': 0.0
             } for _ in sentence_tokens]
+
+    def to_json(self):
+        """
+        Serializes the model's properties to a JSON-serializable dictionary.
+        """
+        import collections
+        
+        def serialize_dict_keys(d):
+            if not isinstance(d, dict):
+                return d
+            new_dict = {}
+            for k, v in d.items():
+                # Convert tuple keys to joined string
+                if isinstance(k, tuple):
+                    k_str = "|||".join(str(x) for x in k)
+                    new_dict[f"__tuple__:{k_str}"] = serialize_dict_keys(v)
+                else:
+                    new_dict[k] = serialize_dict_keys(v)
+            return new_dict
+            
+        data = {
+            'guesser_tag': self.guesser_tag,
+            'algorithm': self.algorithm,
+            'context_window': self.context_window,
+            'prob_threshold': self.prob_threshold,
+            
+            'lexicon': self.lexicon,
+            'tag_lemmas': serialize_dict_keys(self.tag_lemmas),
+            'known_words': list(self.known_words),
+            
+            'perceptron_weights': serialize_dict_keys(self.perceptron_weights),
+            'perceptron_classes': list(self.perceptron_classes),
+            
+            'nb_priors': self.nb_priors,
+            'nb_likelihoods': serialize_dict_keys(self.nb_likelihoods),
+            'nb_tag_counts': self.nb_tag_counts,
+            'nb_feature_vocab_sizes': self.nb_feature_vocab_sizes,
+            
+            'hmm_unigrams': dict(self.hmm_unigrams),
+            'hmm_bigrams': serialize_dict_keys(dict(self.hmm_bigrams)),
+            'hmm_trigrams': serialize_dict_keys(dict(self.hmm_trigrams)),
+            'hmm_emissions': serialize_dict_keys(dict(self.hmm_emissions)),
+            'hmm_tag_word_counts': dict(self.hmm_tag_word_counts),
+            'hmm_total_tokens': self.hmm_total_tokens,
+            'hmm_lambdas': list(self.hmm_lambdas),
+        }
+        return data
+
+    @classmethod
+    def from_json(cls, data):
+        """
+        Creates a new CustomDataDrivenTagger instance and loads its state from a serialized JSON dictionary.
+        """
+        import collections
+        
+        tagger = cls(
+            guesser_tag=data.get('guesser_tag', 'NN'),
+            algorithm=data.get('algorithm', 'Averaged Perceptron'),
+            context_window=data.get('context_window', 2),
+            prob_threshold=data.get('prob_threshold', 0.1)
+        )
+        
+        def deserialize_dict_keys(d):
+            if not isinstance(d, dict):
+                return d
+            new_dict = {}
+            for k, v in d.items():
+                if isinstance(k, str) and k.startswith("__tuple__:"):
+                    k_parts = k[len("__tuple__:"):].split("|||")
+                    k_tuple = tuple(k_parts)
+                    new_dict[k_tuple] = deserialize_dict_keys(v)
+                else:
+                    new_dict[k] = deserialize_dict_keys(v)
+            return new_dict
+            
+        tagger.lexicon = data.get('lexicon', {})
+        tagger.tag_lemmas = deserialize_dict_keys(data.get('tag_lemmas', {}))
+        tagger.known_words = set(data.get('known_words', []))
+        
+        tagger.perceptron_weights = deserialize_dict_keys(data.get('perceptron_weights', {}))
+        tagger.perceptron_classes = set(data.get('perceptron_classes', []))
+        
+        tagger.nb_priors = data.get('nb_priors', {})
+        tagger.nb_likelihoods = deserialize_dict_keys(data.get('nb_likelihoods', {}))
+        tagger.nb_tag_counts = data.get('nb_tag_counts', {})
+        tagger.nb_feature_vocab_sizes = data.get('nb_feature_vocab_sizes', {})
+        
+        tagger.hmm_unigrams = collections.Counter(data.get('hmm_unigrams', {}))
+        
+        hmm_bigrams_deserialized = deserialize_dict_keys(data.get('hmm_bigrams', {}))
+        tagger.hmm_bigrams = collections.Counter(hmm_bigrams_deserialized)
+        
+        hmm_trigrams_deserialized = deserialize_dict_keys(data.get('hmm_trigrams', {}))
+        tagger.hmm_trigrams = collections.Counter(hmm_trigrams_deserialized)
+        
+        hmm_emissions_deserialized = deserialize_dict_keys(data.get('hmm_emissions', {}))
+        tagger.hmm_emissions = collections.Counter(hmm_emissions_deserialized)
+        
+        tagger.hmm_tag_word_counts = collections.Counter(data.get('hmm_tag_word_counts', {}))
+        tagger.hmm_total_tokens = data.get('hmm_total_tokens', 0)
+        tagger.hmm_lambdas = data.get('hmm_lambdas', [0.0, 0.0, 0.0])
+        
+        return tagger

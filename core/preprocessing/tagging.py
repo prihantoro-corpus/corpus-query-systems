@@ -298,15 +298,37 @@ def tag_text_with_stanza(text, lang_code):
     except Exception as e:
         print(f"Stanza error for {lang_code}: {str(e)}")
         
-    # 3. Try Custom PKL Model as Last Resort if Stanza fails/is disabled
+    # 3. Try Custom JSON or PKL Model as Last Resort if Stanza fails/is disabled
     import os
-    pkl_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'model', f'{lang_code}-hmm.pkl')
-    if os.path.exists(pkl_path):
+    import json
+    from core.preprocessing.custom_tagger import CustomDataDrivenTagger
+    
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    json_path = os.path.join(base_dir, 'model', f'{lang_code}-hmm.json')
+    pkl_path = os.path.join(base_dir, 'model', f'{lang_code}-hmm.pkl')
+    
+    custom_tagger = None
+    
+    if os.path.exists(json_path):
+        print(f"Found custom {lang_code}-hmm.json model. Using it as last resort fallback...")
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            custom_tagger = CustomDataDrivenTagger.from_json(data)
+        except Exception as e:
+            print(f"Failed to load custom {lang_code}-hmm.json: {e}")
+            
+    if custom_tagger is None and os.path.exists(pkl_path):
         print(f"Found custom {lang_code}-hmm.pkl model. Using it as last resort fallback...")
         try:
             import pickle
             with open(pkl_path, 'rb') as f:
                 custom_tagger = pickle.load(f)
+        except Exception as e:
+            print(f"Failed to load custom {lang_code}-hmm.pkl: {e}")
+            
+    if custom_tagger is not None:
+        try:
             sentences_tokens = tokenize_text_only(text, lang_code)
             results = []
             sent_id = 0
@@ -324,7 +346,7 @@ def tag_text_with_stanza(text, lang_code):
                     })
             return results, None
         except Exception as e:
-            print(f"Failed to load/tag with {lang_code}-hmm.pkl: {e}")
+            print(f"Failed to tag with custom model: {e}")
     # 4. Fallback to Simple Regex Tokenizer
     fallback_res, fallback_err = tag_text_simple_fallback(text)
     return fallback_res, f"treetagger fail, switching to fallback. {tt_err}" if tt_err else fallback_err
