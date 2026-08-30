@@ -192,7 +192,6 @@ def render_keyword_view():
                     import os
                     
                     corpus_lang = get_corpus_language(current_path)
-                    st.caption(f"Detected target corpus language: **{corpus_lang}**")
                     
                     base_wl_dir = "wordlist"
                     if not os.path.exists(base_wl_dir) and os.path.exists(os.path.join("..", "wordlist")):
@@ -204,35 +203,53 @@ def render_keyword_view():
                         "lo": "limola", "hi": "hindi", "jv": "javanese"
                     }
                     mapped_lang = lang_map.get(corpus_lang.lower(), corpus_lang.lower())
-                    wl_dir = os.path.join(base_wl_dir, mapped_lang)
                     
-                    available_wls = []
-                    if os.path.exists(wl_dir):
-                        for file in os.listdir(wl_dir):
-                            full_path = os.path.join(wl_dir, file)
-                            if os.path.isfile(full_path) and file.endswith((".txt", ".csv", ".xlsx", ".xls")):
-                                if file.endswith("_stats.csv"):
-                                    continue
-                                available_wls.append(file)
+                    # Discover all language directories in wordlist
+                    available_langs = []
+                    if os.path.exists(base_wl_dir):
+                        available_langs = [d for d in os.listdir(base_wl_dir) if os.path.isdir(os.path.join(base_wl_dir, d)) and not d.startswith('.')]
                     
-                    if available_wls:
-                        sel_wl = st.selectbox("Available Frequency Lists", sorted(available_wls), key="sel_local_wl")
-                        if st.button("Load as Reference", key="load_local_wl_ref"):
-                            wl_full_path = os.path.join(wl_dir, sel_wl)
-                            with st.spinner(f"Loading '{sel_wl}'..."):
-                                df_freq, total = load_local_frequency_list(wl_full_path)
-                                if df_freq is not None and not df_freq.empty:
-                                    set_state('comp_freq_df', df_freq)
-                                    set_state('comp_total_tokens', total)
-                                    set_state('comp_corpus_name', sel_wl)
-                                    set_state('comp_corpus_path', 'frequency_list') 
-                                    set_state('comp_ref_type', 'freq_list')
-                                    st.success(f"Loaded {len(df_freq)} entries from {sel_wl}.")
-                                    st.rerun()
-                                else:
-                                    st.error(f"Failed to load or parse '{sel_wl}'.")
+                    if available_langs:
+                        try:
+                            default_idx = sorted(available_langs).index(mapped_lang)
+                        except ValueError:
+                            try:
+                                default_idx = sorted(available_langs).index("english")
+                            except ValueError:
+                                default_idx = 0
+                                
+                        sel_lang = st.selectbox("Language Category", sorted(available_langs), index=default_idx, key="sel_local_wl_lang")
+                        wl_dir = os.path.join(base_wl_dir, sel_lang)
+                        
+                        available_wls = []
+                        if os.path.exists(wl_dir):
+                            for file in os.listdir(wl_dir):
+                                full_path = os.path.join(wl_dir, file)
+                                if os.path.isfile(full_path) and file.endswith((".txt", ".csv", ".xlsx", ".xls")):
+                                    if file.endswith("_stats.csv"):
+                                        continue
+                                    available_wls.append(file)
+                        
+                        if available_wls:
+                            sel_wl = st.selectbox("Available Frequency Lists", sorted(available_wls), key="sel_local_wl")
+                            if st.button("Load as Reference", key="load_local_wl_ref"):
+                                wl_full_path = os.path.join(wl_dir, sel_wl)
+                                with st.spinner(f"Loading '{sel_wl}'..."):
+                                    df_freq, total = load_local_frequency_list(wl_full_path)
+                                    if df_freq is not None and not df_freq.empty:
+                                        set_state('comp_freq_df', df_freq)
+                                        set_state('comp_total_tokens', total)
+                                        set_state('comp_corpus_name', sel_wl)
+                                        set_state('comp_corpus_path', 'frequency_list') 
+                                        set_state('comp_ref_type', 'freq_list')
+                                        st.success(f"Loaded {len(df_freq)} entries from {sel_wl}.")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Failed to load or parse '{sel_wl}'.")
+                        else:
+                            st.info(f"No pre-built frequency lists found in the `wordlist/{sel_lang}/` directory.")
                     else:
-                        st.info(f"No pre-built frequency lists found in the `wordlist/{mapped_lang}/` directory.")
+                        st.info("No pre-built wordlist directories found.")
 
                 with tabs[2]:
                     uploaded_ref = st.file_uploader("Upload XML or Frequency List", type=['xml', 'txt', 'csv', 'tsv'], key="upload_ref_kw")
