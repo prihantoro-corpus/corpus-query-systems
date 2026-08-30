@@ -38,6 +38,87 @@ def parse_frequency_list_file(uploaded_file):
         st.error(f"Error parsing frequency list: {e}")
         return None, 0
 
+def load_local_frequency_list(file_path):
+    """Loads a frequency list from a local file path and returns df (with 'token' and 'freq' columns) and total count."""
+    try:
+        import os
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == '.csv':
+            df = pd.read_csv(file_path)
+            token_col = None
+            freq_col = None
+            for col in df.columns:
+                col_lower = col.lower()
+                if col_lower in ['token', 'word']:
+                    token_col = col
+                elif col_lower in ['freq', 'frequency', 'count']:
+                    freq_col = col
+            if token_col is not None and freq_col is not None:
+                df = df[[token_col, freq_col]].rename(columns={token_col: 'token', freq_col: 'freq'})
+                df['token'] = df['token'].astype(str).str.lower()
+                df['freq'] = pd.to_numeric(df['freq'], errors='coerce').fillna(0).astype(int)
+                total = df['freq'].sum()
+                return df, total
+            else:
+                if len(df.columns) >= 2:
+                    df = df.iloc[:, [0, 1]]
+                    df.columns = ['token', 'freq']
+                    df['token'] = df['token'].astype(str).str.lower()
+                    df['freq'] = pd.to_numeric(df['freq'], errors='coerce').fillna(0).astype(int)
+                    total = df['freq'].sum()
+                    return df, total
+        elif ext in ('.xlsx', '.xls'):
+            df = pd.read_excel(file_path)
+            token_col = None
+            freq_col = None
+            for col in df.columns:
+                col_lower = col.lower()
+                if col_lower in ['token', 'word']:
+                    token_col = col
+                elif col_lower in ['freq', 'frequency', 'count']:
+                    freq_col = col
+            if token_col is not None and freq_col is not None:
+                df = df[[token_col, freq_col]].rename(columns={token_col: 'token', freq_col: 'freq'})
+                df['token'] = df['token'].astype(str).str.lower()
+                df['freq'] = pd.to_numeric(df['freq'], errors='coerce').fillna(0).astype(int)
+                total = df['freq'].sum()
+                return df, total
+            else:
+                if len(df.columns) >= 2:
+                    df = df.iloc[:, [0, 1]]
+                    df.columns = ['token', 'freq']
+                    df['token'] = df['token'].astype(str).str.lower()
+                    df['freq'] = pd.to_numeric(df['freq'], errors='coerce').fillna(0).astype(int)
+                    total = df['freq'].sum()
+                    return df, total
+        else: # e.g. .txt or .tsv
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            data = []
+            total = 0
+            start_idx = 0
+            if lines:
+                first_parts = lines[0].strip().split()
+                if len(first_parts) >= 2:
+                    try:
+                        int(first_parts[1])
+                    except ValueError:
+                        start_idx = 1
+            for line in lines[start_idx:]:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    word = parts[0].lower()
+                    try:
+                        freq = int(parts[1])
+                        data.append({'token': word, 'freq': freq})
+                        total += freq
+                    except ValueError:
+                        continue
+            return pd.DataFrame(data), total
+    except Exception as e:
+        st.error(f"Error loading local frequency list: {e}")
+        return None, 0
+
 def render_keyword_view():
     st.header("Keyword Analysis")
 
@@ -87,7 +168,7 @@ def render_keyword_view():
 
             elif not ref_path:
                 st.info("Select a reference corpus to compare against.")
-                tabs = st.tabs(["🏛️ Pre-built", "📤 Upload"])
+                tabs = st.tabs(["🏛️ Pre-built Corpora", "📋 Pre-built Wordlists", "📤 Upload"])
 
                 with tabs[0]:
                     available_corpora = get_available_corpora()
@@ -106,6 +187,54 @@ def render_keyword_view():
                                 st.rerun()
 
                 with tabs[1]:
+                    st.markdown("##### Select a pre-built frequency list from the local repository:")
+                    from core.modules.overview import get_corpus_language
+                    import os
+                    
+                    corpus_lang = get_corpus_language(current_path)
+                    st.caption(f"Detected target corpus language: **{corpus_lang}**")
+                    
+                    base_wl_dir = "wordlist"
+                    if not os.path.exists(base_wl_dir) and os.path.exists(os.path.join("..", "wordlist")):
+                        base_wl_dir = os.path.join("..", "wordlist")
+                    
+                    lang_map = {
+                        "en": "english", "id": "indonesian", "ar": "arabic", 
+                        "jp": "japanese", "ch": "chinese", "ko": "korean", 
+                        "lo": "limola", "hi": "hindi", "jv": "javanese"
+                    }
+                    mapped_lang = lang_map.get(corpus_lang.lower(), corpus_lang.lower())
+                    wl_dir = os.path.join(base_wl_dir, mapped_lang)
+                    
+                    available_wls = []
+                    if os.path.exists(wl_dir):
+                        for file in os.listdir(wl_dir):
+                            full_path = os.path.join(wl_dir, file)
+                            if os.path.isfile(full_path) and file.endswith((".txt", ".csv", ".xlsx", ".xls")):
+                                if file.endswith("_stats.csv"):
+                                    continue
+                                available_wls.append(file)
+                    
+                    if available_wls:
+                        sel_wl = st.selectbox("Available Frequency Lists", sorted(available_wls), key="sel_local_wl")
+                        if st.button("Load as Reference", key="load_local_wl_ref"):
+                            wl_full_path = os.path.join(wl_dir, sel_wl)
+                            with st.spinner(f"Loading '{sel_wl}'..."):
+                                df_freq, total = load_local_frequency_list(wl_full_path)
+                                if df_freq is not None and not df_freq.empty:
+                                    set_state('comp_freq_df', df_freq)
+                                    set_state('comp_total_tokens', total)
+                                    set_state('comp_corpus_name', sel_wl)
+                                    set_state('comp_corpus_path', 'frequency_list') 
+                                    set_state('comp_ref_type', 'freq_list')
+                                    st.success(f"Loaded {len(df_freq)} entries from {sel_wl}.")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Failed to load or parse '{sel_wl}'.")
+                    else:
+                        st.info(f"No pre-built frequency lists found in the `wordlist/{mapped_lang}/` directory.")
+
+                with tabs[2]:
                     uploaded_ref = st.file_uploader("Upload XML or Frequency List", type=['xml', 'txt', 'csv', 'tsv'], key="upload_ref_kw")
                     if uploaded_ref:
                         if st.button("Process Reference", key="btn_process_ref"):
