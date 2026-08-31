@@ -1683,7 +1683,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
             label=str(node),
             color=color,
             size=35,
-            font={'size': 38, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
+            font={'size': 44, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Node Word: {node}"
         )
@@ -1706,7 +1706,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
                 label=str(coll),
                 color=node_color,
                 size=node_size,
-                font={'size': 32, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
+                font={'size': 36, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
                 shape="dot",
                 title=f"Collocate: {coll}\nShared by {degree} nodes\nCombined Score: {combined_score:.2f}"
             )
@@ -1729,10 +1729,11 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
         return
         
     # Pre-calculate layout static positions using networkx spring_layout
-    pos = nx.spring_layout(G, k=1.4 / (len(G.nodes) ** 0.5) if len(G.nodes) > 0 else 0.25, iterations=50)
+    # Using a tighter k and coordinate scaling multiplier to shorten branch distances
+    pos = nx.spring_layout(G, k=1.0 / (len(G.nodes) ** 0.5) if len(G.nodes) > 0 else 0.2, iterations=50)
     for n_id, coords in pos.items():
-        G.nodes[n_id]['x'] = float(coords[0] * 750)
-        G.nodes[n_id]['y'] = float(coords[1] * 750)
+        G.nodes[n_id]['x'] = float(coords[0] * 550)
+        G.nodes[n_id]['y'] = float(coords[1] * 550)
         
     # Render using Pyvis
     with st.spinner("Generating collocation network..."):
