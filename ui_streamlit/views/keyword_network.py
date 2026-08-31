@@ -183,17 +183,17 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
         # Separate color for overall node
         if cat_name == "Overall":
             color = "#E2E8F0"  # Silver/White for central overall node
-            size = 35
+            size = 70
         else:
             color = CATEGORY_COLORS[i % len(CATEGORY_COLORS)]
-            size = 28
+            size = 56
             
         G.add_node(
             cat_name,
             label=str(cat_name),
             color=color,
             size=size,
-            font={'size': 15, 'color': '#ffffff', 'strokeWidth': 2, 'strokeColor': '#000000'},
+            font={'size': 30, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category: {cat_name}"
         )
@@ -213,7 +213,7 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
 
             if word not in added_keywords:
                 # Size word nodes proportional to how much they are shared
-                node_size = 11 + (count * 4)
+                node_size = 22 + (count * 8)
                 node_color = "#00FFF5" if count > 1 else "#a5b4fc"
                 
                 G.add_node(
@@ -221,7 +221,7 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
                     label=str(word),
                     color=node_color,
                     size=node_size,
-                    font={'size': 11, 'color': '#ffffff'},
+                    font={'size': 22, 'color': '#ffffff'},
                     shape="dot",
                     title=f"Keyword: {word}\nShared by {count} categories"
                 )
@@ -248,7 +248,7 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
     # Render using Pyvis
     with st.spinner("Generating network visualization..."):
         net = Network(
-            height="600px", 
+            height="1200px", 
             width="100%", 
             bgcolor="#0f172a", 
             font_color="#ffffff", 
@@ -302,7 +302,7 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
                 "border: 1px solid rgba(255, 255, 255, 0.1);"
             )
             
-            st.components.v1.html(html_content, height=620, scrolling=False)
+            st.components.v1.html(html_content, height=1240, scrolling=False)
             
         except Exception as e:
             st.error(f"Failed to render pyvis network: {e}")
