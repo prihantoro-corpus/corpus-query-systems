@@ -1430,10 +1430,11 @@ def render_multi_node_charts(nodes, shared_df, stat_measure, calc_method, pretti
     overlap_counts = shared_df.groupby('Associated Nodes').size().reset_index(name='Collocate Count')
     overlap_counts = overlap_counts.sort_values(by='Collocate Count', ascending=True)
     
-    viz_tab1, viz_tab2, viz_tab3 = st.tabs([
+    viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs([
         "🔮 Bubble Matrix (Clean Grid)",
         "📊 Stacked Bar Chart",
-        "🕸️ Overlap Size Overview"
+        "🕸️ Overlap Size Overview",
+        "🕸️ Network"
     ])
     
     with viz_tab1:
@@ -1593,6 +1594,9 @@ def render_multi_node_charts(nodes, shared_df, stat_measure, calc_method, pretti
         else:
             st.info("No overlap groups detected.")
 
+    with viz_tab4:
+        render_collocation_network(nodes, shared_df, key_suffix="multi")
+
     # Excel download button for visual comparison data
     st.markdown("---")
     st.markdown("##### ⬇️ Download Visual Comparison Chart Data")
@@ -1605,3 +1609,173 @@ def render_multi_node_charts(nodes, shared_df, stat_measure, calc_method, pretti
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key="dl_multi_node_chart_data"
     )
+
+def render_collocation_network(nodes, shared_df, key_suffix=""):
+    import networkx as nx
+    from pyvis.network import Network
+    import tempfile
+    import os
+    
+    st.markdown("##### 🕸️ Collocation Network")
+    st.markdown(
+        "Visualise how collocates are shared across the comparison node words. "
+        "Shared collocates will cluster in the centre between the nodes they belong to."
+    )
+    
+    # 1. Controls
+    c1, c2 = st.columns(2)
+    with c1:
+        top_n = st.number_input(
+            "Top N Collocates",
+            min_value=5,
+            max_value=200,
+            value=25,
+            key=f"coll_net_top_{key_suffix}"
+        )
+    with c2:
+        show_shared_only = st.toggle(
+            "Show Only Shared Collocates",
+            value=False,
+            help="Hides collocates that are unique to a single node word.",
+            key=f"coll_net_shared_{key_suffix}"
+        )
+        
+    # Get top N shared collocates
+    df_sorted = shared_df.sort_values(by='Combined Score', ascending=False)
+    
+    if show_shared_only:
+        df_sorted = df_sorted[df_sorted['Degree'] >= 2]
+        
+    df_top = df_sorted.head(top_n)
+    
+    if df_top.empty:
+        st.info("No collocates match the current filters.")
+        return
+        
+    G = nx.Graph()
+    
+    NODE_COLORS = [
+        "#FF6B6B", "#4D96FF", "#6BCB77", "#FFD93D", "#9B5DE5", 
+        "#F15BB5", "#00F5D4", "#00BBF9", "#F77F00", "#D62828"
+    ]
+    
+    # Add Node Word nodes
+    for i, node in enumerate(nodes):
+        color = NODE_COLORS[i % len(NODE_COLORS)]
+        G.add_node(
+            node,
+            label=str(node),
+            color=color,
+            size=35,
+            font={'size': 38, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
+            shape="dot",
+            title=f"Node Word: {node}"
+        )
+        
+    # Count collocate sharing
+    added_collocates = set()
+    edges_to_add = []
+    
+    for _, row in df_top.iterrows():
+        coll = row['Collocate']
+        degree = int(row['Degree'])
+        combined_score = float(row['Combined Score'])
+        
+        # Add collocate node
+        if coll not in added_collocates:
+            node_size = 12 + (degree * 4)
+            node_color = "#00FFF5" if degree > 1 else "#a5b4fc"
+            G.add_node(
+                coll,
+                label=str(coll),
+                color=node_color,
+                size=node_size,
+                font={'size': 32, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
+                shape="dot",
+                title=f"Collocate: {coll}\nShared by {degree} nodes\nCombined Score: {combined_score:.2f}"
+            )
+            added_collocates.add(coll)
+            
+        # Add edges to connected node words
+        for node in nodes:
+            score_col = f"{node} Score"
+            if score_col in row and float(row[score_col]) > 0:
+                edges_to_add.append((node, coll))
+                
+    G.add_edges_from(edges_to_add)
+    
+    # Clean up node words with 0 degrees
+    isolated = [node for node in G.nodes() if G.degree(node) == 0]
+    G.remove_nodes_from(isolated)
+    
+    if len(G.nodes) == 0:
+        st.info("The network is empty.")
+        return
+        
+    # Pre-calculate layout static positions using networkx spring_layout
+    pos = nx.spring_layout(G, k=1.4 / (len(G.nodes) ** 0.5) if len(G.nodes) > 0 else 0.25, iterations=50)
+    for n_id, coords in pos.items():
+        G.nodes[n_id]['x'] = float(coords[0] * 750)
+        G.nodes[n_id]['y'] = float(coords[1] * 750)
+        
+    # Render using Pyvis
+    with st.spinner("Generating collocation network..."):
+        net = Network(
+            height="1200px", 
+            width="100%", 
+            bgcolor="#0f172a", 
+            font_color="#ffffff", 
+            notebook=False
+        )
+        net.from_nx(G)
+        
+        physics_json = """
+        {
+          "physics": {
+            "enabled": false
+          },
+          "interaction": {
+            "hover": true,
+            "navigationButtons": true,
+            "zoomView": true
+          },
+          "edges": {
+            "color": {
+              "color": "rgba(255, 255, 255, 0.18)",
+              "hover": "rgba(0, 255, 245, 0.8)",
+              "highlight": "rgba(0, 255, 245, 0.8)"
+            },
+            "width": 1.2,
+            "smooth": {
+              "type": "continuous"
+            }
+          }
+        }
+        """
+        net.set_options(physics_json)
+        
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
+                tmp_path = tmp.name
+            net.write_html(tmp_path)
+            
+            with open(tmp_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+                
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+                
+            # Replace white background styles from pyvis template
+            html_content = html_content.replace(
+                "background-color: #ffffff;",
+                "background-color: #0f172a;"
+            )
+            html_content = html_content.replace(
+                "border: 1px solid lightgray;",
+                "border: 1px solid rgba(255, 255, 255, 0.1);"
+            )
+            
+            st.components.v1.html(html_content, height=1240, scrolling=False)
+            
+        except Exception as e:
+            st.error(f"Failed to render pyvis network: {e}")
