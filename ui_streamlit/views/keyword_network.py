@@ -240,10 +240,11 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
         return
 
     # Pre-calculate positions using networkx spring layout for static presentation without initial movement
-    pos = nx.spring_layout(G, k=1.8 / (len(G.nodes) ** 0.5) if len(G.nodes) > 0 else 0.3, iterations=50)
+    # Using a smaller k and scaling multiplier to pull branches closer
+    pos = nx.spring_layout(G, k=1.0 / (len(G.nodes) ** 0.5) if len(G.nodes) > 0 else 0.2, iterations=50)
     for node, coords in pos.items():
-        G.nodes[node]['x'] = float(coords[0] * 1000)
-        G.nodes[node]['y'] = float(coords[1] * 1000)
+        G.nodes[node]['x'] = float(coords[0] * 500)
+        G.nodes[node]['y'] = float(coords[1] * 500)
 
     # Render using Pyvis
     with st.spinner("Generating network visualization..."):
