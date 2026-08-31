@@ -3,6 +3,63 @@ import pandas as pd
 from ui_streamlit.state_manager import get_state, set_state
 import importlib
 import core.modules.keyword
+import re
+
+def filter_keyword_dataframe(df, query_str):
+    if df is None or df.empty or not query_str:
+        return df
+
+    filters = query_str.strip().split()
+    filtered_df = df.copy()
+    
+    for f in filters:
+        is_negated = False
+        if f.startswith('-'):
+            is_negated = True
+            f = f[1:]
+            
+        if not f:
+            continue
+            
+        # POS Tag Filter (e.g. _JJ or _NN)
+        if f.startswith('_'):
+            if 'pos' in filtered_df.columns:
+                pos_pattern = f[1:].upper().replace('*', '.*')
+                if '.*' in pos_pattern:
+                    regex = f"^{pos_pattern}$"
+                    mask = filtered_df['pos'].str.upper().str.match(regex, na=False)
+                else:
+                    mask = filtered_df['pos'].str.upper().str.startswith(pos_pattern, na=False)
+            else:
+                mask = pd.Series(False, index=filtered_df.index)
+                
+        # Lemma Filter (e.g. [be])
+        elif f.startswith('[') and f.endswith(']'):
+            if 'lemma' in filtered_df.columns:
+                lemma_val = f[1:-1].lower()
+                if '*' in lemma_val:
+                    regex = '^' + re.escape(lemma_val).replace(r'\*', '.*') + '$'
+                    mask = filtered_df['lemma'].str.lower().str.match(regex, na=False)
+                else:
+                    mask = filtered_df['lemma'].str.lower() == lemma_val
+            else:
+                mask = pd.Series(False, index=filtered_df.index)
+                
+        # Wildcard / Token Filter (e.g. *ing)
+        else:
+            token_val = f.lower()
+            if '*' in token_val:
+                regex = '^' + re.escape(token_val).replace(r'\*', '.*') + '$'
+                mask = filtered_df['token'].str.lower().str.match(regex, na=False)
+            else:
+                mask = filtered_df['token'].str.lower() == token_val
+                
+        if is_negated:
+            filtered_df = filtered_df[~mask]
+        else:
+            filtered_df = filtered_df[mask]
+            
+    return filtered_df
 from ui_streamlit.utils import notify_timing
 importlib.reload(core.modules.keyword)
 from core.modules.keyword import generate_keyword_list, generate_grouped_keyword_list
@@ -491,6 +548,37 @@ def render_keyword_results(res, key_suffix=""):
     top_n = res['top_n']
     st.markdown(f"### Results for: **{res['target']}**")
     st.caption(f"Compared against: {res['ref']}")
+
+    # Search filter text input
+    kw_filter = st.text_input(
+        "🔍 Filter Keywords",
+        value="",
+        placeholder="e.g. _JJ (adjectives), [be] (lemma be), *ing (ends in -ing), -NN (exclude nouns)",
+        key=f"kw_filter_input_{key_suffix}"
+    )
+
+    if kw_filter:
+        filtered_res = {
+            'target': res['target'],
+            'ref': res['ref'],
+            'top_n': res['top_n']
+        }
+        if 'overall' in res and res['overall'] is not None:
+            filtered_res['overall'] = filter_keyword_dataframe(res['overall'], kw_filter)
+        else:
+            filtered_res['overall'] = None
+            
+        filtered_res['by_filename'] = {}
+        for fname, df in res.get('by_filename', {}).items():
+            filtered_res['by_filename'][fname] = filter_keyword_dataframe(df, kw_filter)
+            
+        filtered_res['by_attributes'] = {}
+        for attr, groups in res.get('by_attributes', {}).items():
+            filtered_res['by_attributes'][attr] = {}
+            for val, df in groups.items():
+                filtered_res['by_attributes'][attr][val] = filter_keyword_dataframe(df, kw_filter)
+                
+        res = filtered_res
 
     from ui_streamlit.views.keyword_network import render_keyword_network
 
