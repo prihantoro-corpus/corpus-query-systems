@@ -183,17 +183,17 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
         # Separate color for overall node
         if cat_name == "Overall":
             color = "#E2E8F0"  # Silver/White for central overall node
-            size = 70
+            size = 45
         else:
             color = CATEGORY_COLORS[i % len(CATEGORY_COLORS)]
-            size = 56
+            size = 35
             
         G.add_node(
             cat_name,
             label=str(cat_name),
             color=color,
             size=size,
-            font={'size': 30, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
+            font={'size': 38, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category: {cat_name}"
         )
@@ -213,7 +213,7 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
 
             if word not in added_keywords:
                 # Size word nodes proportional to how much they are shared
-                node_size = 22 + (count * 8)
+                node_size = 12 + (count * 4)
                 node_color = "#00FFF5" if count > 1 else "#a5b4fc"
                 
                 G.add_node(
@@ -221,7 +221,7 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
                     label=str(word),
                     color=node_color,
                     size=node_size,
-                    font={'size': 22, 'color': '#ffffff'},
+                    font={'size': 32, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
                     shape="dot",
                     title=f"Keyword: {word}\nShared by {count} categories"
                 )
