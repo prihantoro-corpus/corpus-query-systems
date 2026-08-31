@@ -1640,11 +1640,27 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
             key=f"coll_net_shared_{key_suffix}"
         )
         
+    # Parse Degree column (which may contain string fractions like '4/4') as an integer
+    def parse_degree(d):
+        d_str = str(d)
+        if '/' in d_str:
+            try:
+                return int(d_str.split('/')[0])
+            except:
+                pass
+        try:
+            return int(float(d_str))
+        except:
+            return 1
+            
+    shared_df_copy = shared_df.copy()
+    shared_df_copy['ParsedDegree'] = shared_df_copy['Degree'].apply(parse_degree)
+        
     # Get top N shared collocates
-    df_sorted = shared_df.sort_values(by='Combined Score', ascending=False)
+    df_sorted = shared_df_copy.sort_values(by='Combined Score', ascending=False)
     
     if show_shared_only:
-        df_sorted = df_sorted[df_sorted['Degree'] >= 2]
+        df_sorted = df_sorted[df_sorted['ParsedDegree'] >= 2]
         
     df_top = df_sorted.head(top_n)
     
@@ -1678,7 +1694,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
     
     for _, row in df_top.iterrows():
         coll = row['Collocate']
-        degree = int(row['Degree'])
+        degree = int(row['ParsedDegree'])
         combined_score = float(row['Combined Score'])
         
         # Add collocate node
