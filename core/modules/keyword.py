@@ -24,8 +24,16 @@ def generate_keyword_list(target_db_path, ref_db_path=None, target_xml_where="",
         # 1. Get Target Counts
         con_t = duckdb.connect(target_db_path, read_only=True)
         
+        # Introspect columns to get POS and Lemma if present
+        cols_t = [c[1] for c in con_t.execute("PRAGMA table_info(corpus)").fetchall()]
+        has_pos = 'pos' in cols_t
+        has_lemma = 'lemma' in cols_t
+        
+        pos_select = ", mode(pos) as pos" if has_pos else ""
+        lemma_select = ", mode(lemma) as lemma" if has_lemma else ""
+        
         sql_t = f"""
-        SELECT _token_low as token, count(*) as freq 
+        SELECT _token_low as token {pos_select} {lemma_select}, count(*) as freq 
         FROM corpus 
         WHERE NOT regexp_matches(_token_low, '^[[:punct:]]+$') 
           AND NOT regexp_matches(_token_low, '^[0-9]+$')
@@ -175,8 +183,15 @@ def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None
             top_ref_tokens = set(df_ref.sort_values('freq_r', ascending=False).head(500)['token'])
 
         # 3. Pull all target counts and totals grouped by group_by_col in single queries (much faster than looping DuckDB queries)
+        cols_t = [c[1] for c in con_t.execute("PRAGMA table_info(corpus)").fetchall()]
+        has_pos = 'pos' in cols_t
+        has_lemma = 'lemma' in cols_t
+        
+        pos_select = ", mode(pos) as pos" if has_pos else ""
+        lemma_select = ", mode(lemma) as lemma" if has_lemma else ""
+        
         sql_target_all = f"""
-        SELECT "{group_by_col}" as group_val, _token_low as token, count(*) as freq 
+        SELECT "{group_by_col}" as group_val, _token_low as token {pos_select} {lemma_select}, count(*) as freq 
         FROM corpus 
         WHERE NOT regexp_matches(_token_low, '^[[:punct:]]+$') 
           AND NOT regexp_matches(_token_low, '^[0-9]+$')
@@ -206,7 +221,12 @@ def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None
 
         # 4. Iterate Groups and compile results in memory
         for group_val in groups:
-            df_target = df_target_all[df_target_all['group_val'] == group_val][['token', 'freq']].rename(columns={'freq': 'freq_t'})
+            target_cols = ['token', 'freq']
+            if has_pos:
+                target_cols.append('pos')
+            if has_lemma:
+                target_cols.append('lemma')
+            df_target = df_target_all[df_target_all['group_val'] == group_val][target_cols].rename(columns={'freq': 'freq_t'})
             if df_target.empty:
                 continue
 
