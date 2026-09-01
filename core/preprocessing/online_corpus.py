@@ -171,26 +171,81 @@ class OnlineCorpusBuilder:
         return True
 
     def scrape_url(self, url):
+        # Layer 1: Direct Fetch with Chrome 121 Headers & Referer
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Referer': 'https://www.google.com/',
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="121", "Google Chrome";v="121"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'cross-site',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        html = None
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
-            }
             try:
-                resp = requests.get(url, headers=headers, timeout=12)
+                resp = requests.get(url, headers=headers, timeout=10)
             except requests.exceptions.SSLError:
-                resp = requests.get(url, headers=headers, timeout=12, verify=False)
-
+                resp = requests.get(url, headers=headers, timeout=10, verify=False)
+                
             if resp.status_code == 200:
                 if resp.encoding and resp.encoding.lower() == 'iso-8859-1':
                     resp.encoding = resp.apparent_encoding
+                html = resp.text
+        except Exception as e:
+            print(f"Scrape Layer 1 failed for {url[:50]}: {e}")
 
+        if html:
+            soup = BeautifulSoup(html, 'html.parser')
+            for el in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript', 'iframe']):
+                el.extract()
+            paragraphs = soup.find_all('p')
+            clean_text = []
+            for p in paragraphs:
+                text = p.get_text(separator=' ').strip()
+                text = re.sub(r'\s+', ' ', text)
+                if self.is_likely_sentence(text):
+                    clean_text.append(text)
+            
+            if clean_text:
+                return '\n'.join(clean_text)
+            else:
+                text = soup.get_text(separator='\n')
+                lines = [line.strip() for line in text.splitlines() if line.strip()]
+                valid_lines = [l for l in lines if self.is_likely_sentence(l)]
+                if valid_lines:
+                    return '\n'.join(valid_lines)
+                elif lines:
+                    chunks = [l for l in lines if len(l) > 30]
+                    if chunks:
+                        return '\n'.join(chunks)
+
+        # Layer 2: Free Jina AI Reader Proxy (Bypasses Cloudflare & Datacenter IP Blocks)
+        try:
+            jina_url = 'https://r.jina.ai/' + url
+            resp = requests.get(jina_url, timeout=15)
+            if resp.status_code == 200 and resp.text:
+                lines = [line.strip() for line in resp.text.splitlines() if line.strip()]
+                clean_lines = [l for l in lines if not l.startswith('Title:') and not l.startswith('URL Source:') and len(l) > 20]
+                if clean_lines:
+                    return '\n'.join(clean_lines)
+        except Exception as e:
+            print(f"Scrape Layer 2 (Jina) failed for {url[:50]}: {e}")
+
+        # Layer 3: Google Translate Proxy Fallback
+        try:
+            gt_url = f"https://translate.google.com/translate?sl=auto&tl=id&u={url}"
+            gt_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0'}
+            resp = requests.get(gt_url, headers=gt_headers, timeout=15)
+            if resp.status_code == 200 and resp.text:
                 soup = BeautifulSoup(resp.text, 'html.parser')
-                # Remove scripts, styles, headers, footers, navs, ads
-                for element in soup(["script", "style", "nav", "header", "footer", "aside", "noscript", "iframe"]):
-                    element.extract()
-                
+                for el in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript', 'iframe']):
+                    el.extract()
                 paragraphs = soup.find_all('p')
                 clean_text = []
                 for p in paragraphs:
@@ -198,22 +253,11 @@ class OnlineCorpusBuilder:
                     text = re.sub(r'\s+', ' ', text)
                     if self.is_likely_sentence(text):
                         clean_text.append(text)
-                
                 if clean_text:
                     return '\n'.join(clean_text)
-                else:
-                    # Fallback text extraction if strict paragraph matching found no sentences
-                    text = soup.get_text(separator='\n')
-                    lines = [line.strip() for line in text.splitlines() if line.strip()]
-                    valid_lines = [l for l in lines if self.is_likely_sentence(l)]
-                    if valid_lines:
-                        return '\n'.join(valid_lines)
-                    elif lines:
-                        chunks = [l for l in lines if len(l) > 30]
-                        if chunks:
-                            return '\n'.join(chunks)
         except Exception as e:
-            print(f"Scrape error for {url}: {e}")
+            print(f"Scrape Layer 3 (Google Translate) failed for {url[:50]}: {e}")
+
         return None
 
     def score_domain(self, url):
