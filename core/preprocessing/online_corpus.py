@@ -172,12 +172,23 @@ class OnlineCorpusBuilder:
 
     def scrape_url(self, url):
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-            resp = requests.get(url, headers=headers, timeout=10)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+            }
+            try:
+                resp = requests.get(url, headers=headers, timeout=12)
+            except requests.exceptions.SSLError:
+                resp = requests.get(url, headers=headers, timeout=12, verify=False)
+
             if resp.status_code == 200:
+                if resp.encoding and resp.encoding.lower() == 'iso-8859-1':
+                    resp.encoding = resp.apparent_encoding
+
                 soup = BeautifulSoup(resp.text, 'html.parser')
-                # Remove scripts, styles, headers, footers, navs
-                for element in soup(["script", "style", "nav", "header", "footer", "aside", "noscript"]):
+                # Remove scripts, styles, headers, footers, navs, ads
+                for element in soup(["script", "style", "nav", "header", "footer", "aside", "noscript", "iframe"]):
                     element.extract()
                 
                 paragraphs = soup.find_all('p')
@@ -191,11 +202,16 @@ class OnlineCorpusBuilder:
                 if clean_text:
                     return '\n'.join(clean_text)
                 else:
-                    # Fallback to basic cleaning if no paragraphs found
-                    text = soup.get_text(separator=' ')
-                    lines = (line.strip() for line in text.splitlines())
-                    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-                    return '\n'.join(chunk for chunk in chunks if chunk)
+                    # Fallback text extraction if strict paragraph matching found no sentences
+                    text = soup.get_text(separator='\n')
+                    lines = [line.strip() for line in text.splitlines() if line.strip()]
+                    valid_lines = [l for l in lines if self.is_likely_sentence(l)]
+                    if valid_lines:
+                        return '\n'.join(valid_lines)
+                    elif lines:
+                        chunks = [l for l in lines if len(l) > 30]
+                        if chunks:
+                            return '\n'.join(chunks)
         except Exception as e:
             print(f"Scrape error for {url}: {e}")
         return None
@@ -375,12 +391,18 @@ def build_online_corpus(mode_type, params, progress_callback=None):
     
     elif mode_type == "links":
         links = params.get('links', [])
+        success_logs = []
         for i, link in enumerate(links[:50]):
             if builder.is_limit_reached: break
-            if progress_callback: progress_callback(i/len(links), f"Scraping {link}...")
+            if progress_callback: progress_callback(i/len(links[:50]), f"Scraping {i+1}/{len(links[:50])}: {link[:40]}...")
             content = builder.scrape_url(link)
             if content:
                 builder.add_content(f"link_{i}.txt", f"<text url=\"{link}\" source=\"link_collection\">\n{content}\n</text>")
+                success_logs.append(link)
+        warning = f"Successfully scraped {len(success_logs)} out of {len(links[:50])} links."
+        if builder.is_limit_reached:
+            warning += " Limit reached (max 500,000 words)."
+        return builder.downloaded_files, warning
     
     elif mode_type == "keyword_scrape_selected":
         keywords = params.get('keywords', [])

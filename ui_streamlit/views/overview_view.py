@@ -1872,31 +1872,32 @@ def render_online_builder_ui():
                         st.error(warn or "Failed to download. Ensure the URLs are correct and public.")
                         
     elif mode == "Link Collection":
-        st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
-        st.caption("Paste one URL per line.")
+        st.info("💡 **Experimental:** Max 50 links and 500,000 words limit.")
+        st.caption("Paste URLs (one per line, numbered list, or comma-separated).")
         links_text = st.text_area("URLs", height=200, placeholder="https://example.com\nhttps://test.org")
         
         if st.button("Scrape Links", type="primary"):
-            links = [l.strip() for l in links_text.split('\n') if l.strip()]
+            import re
+            links = re.findall(r'https?://[^\s,><"\']+', links_text)
             if not links:
-                st.error("No links provided")
+                st.error("No valid HTTP/HTTPS URLs found in the text area.")
             else:
                 from core.preprocessing.online_corpus import build_online_corpus
                 progress_bar = st.progress(0)
                 status = st.empty()
                 def up(p, m):
-                    progress_bar.progress(p)
+                    progress_bar.progress(min(p, 1.0))
                     status.caption(m)
                 
-                with st.spinner("Scraping..."):
+                with st.spinner(f"Scraping {len(links)} links..."):
                     files, warn = build_online_corpus("links", {"links": links}, progress_callback=up)
                     if files:
                         set_state('downloaded_online_files', files)
-                        st.success(f"✅ Scraped {len(files)} pages!")
+                        st.success(f"✅ Scraped {len(files)} out of {len(links)} pages!")
                         if warn: st.warning(warn)
                         st.rerun()
                     else:
-                        st.error(warn or "Failed to scrape.")
+                        st.error(warn or f"Failed to scrape content from the {len(links)} provided links.")
  
     elif mode == "Keyword Search":
         from core.preprocessing.online_corpus import OnlineCorpusBuilder
