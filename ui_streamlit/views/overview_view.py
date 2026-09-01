@@ -1871,79 +1871,6 @@ def render_online_builder_ui():
                     else:
                         st.error(warn or "Failed to download. Ensure the URLs are correct and public.")
                         
-    # Common processing section for any downloaded online files
-    downloaded_files = get_state('downloaded_online_files')
-    if downloaded_files:
-        st.markdown("---")
-        st.subheader("⚙️ Process Downloaded Corpus")
-        st.success(f"{len(downloaded_files)} components ready for processing.")
-        
-        # Language Selection
-        st.markdown("**Language**")
-        from core.config import STANZA_LANG_MAP
-        lang_options = list(STANZA_LANG_MAP.keys()) + ["OTHER"]
-        selected_lang_label = st.radio(
-            "Language Select", 
-            lang_options, 
-            index=0,
-            horizontal=True,
-            key="online_language_select",
-            label_visibility="collapsed"
-        )
-        
-        # Tagging Tool
-        tagger_tool = st.radio(
-            "**Tagging Tool**",
-            ["Default (TreeTagger/Stanza/Spacy)", "Custom Tagger"],
-            index=0,
-            horizontal=True,
-            key="online_tagger_tool_select",
-            help="They are based on priority. e.g. if a language is chosen and not found in TreeTagger, we switch to Stanza, and if still not found, to Spacy."
-        )
-        
-        if tagger_tool == "Custom Tagger":
-            st.warning("Custom Tagger for Online Corpus is not fully wired in this view yet. Please use Default.")
-            
-        if st.button("Process Downloaded Files", type="primary", use_container_width=True):
-            if tagger_tool == "Custom Tagger":
-                st.error("Please use the Default tagger for now.")
-            else:
-                lang_code = "OTHER" if selected_lang_label == "OTHER" else STANZA_LANG_MAP[selected_lang_label]
-                import core.preprocessing.corpus_loader as corpus_loader
-                import io
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                def update_progress(val, text):
-                    progress_bar.progress(val)
-                    status_text.caption(text)
-                    
-                files_to_process = []
-                for f_dict in downloaded_files:
-                    buf = io.BytesIO(f_dict['content'].encode('utf-8'))
-                    buf.name = f_dict['filename']
-                    files_to_process.append(buf)
-                    
-                with st.spinner("Processing & indexing online corpus content..."):
-                    result = corpus_loader.load_monolingual_corpus_files(
-                        files_to_process,
-                        explicit_lang_code=lang_code,
-                        selected_format="Raw (Natural text)",
-                        progress_callback=update_progress
-                    )
-                    
-                    if result.get('error'):
-                        st.error(result['error'])
-                    else:
-                        set_state('current_corpus_path', result['db_path'])
-                        set_state('corpus_stats', result['stats'])
-                        set_state('current_corpus_name', "Online Scraped Batch")
-                        set_state('xml_structure_data', result.get('structure'))
-                        set_state('target_lang', lang_code)
-                        set_state('downloaded_online_files', None) # Clear buffer
-                        st.success("Online corpus loaded successfully!")
-                        st.rerun()
-
     elif mode == "Link Collection":
         st.info("💡 **Experimental:** Max 50 links and 100,000 words limit.")
         st.caption("Paste one URL per line.")
@@ -1967,7 +1894,7 @@ def render_online_builder_ui():
                         set_state('downloaded_online_files', files)
                         st.success(f"✅ Scraped {len(files)} pages!")
                         if warn: st.warning(warn)
-                        auto_process_online_files(files)
+                        st.rerun()
                     else:
                         st.error(warn or "Failed to scrape.")
  
@@ -2047,9 +1974,82 @@ def render_online_builder_ui():
                             set_state('downloaded_online_files', files)
                             st.success(f"✅ Scraped and built corpus with {len(files)} pages!")
                             if warn: st.warning(warn)
-                            auto_process_online_files(files)
+                            st.rerun()
                         else:
                             st.error("Failed to scrape any content from the selected links.")
+
+    # Common processing section for any downloaded online files
+    downloaded_files = get_state('downloaded_online_files')
+    if downloaded_files:
+        st.markdown("---")
+        st.subheader("⚙️ Process Downloaded Corpus")
+        st.success(f"{len(downloaded_files)} components ready for processing.")
+        
+        # Language Selection
+        st.markdown("**Language**")
+        from core.config import STANZA_LANG_MAP
+        lang_options = list(STANZA_LANG_MAP.keys()) + ["OTHER"]
+        selected_lang_label = st.radio(
+            "Language Select", 
+            lang_options, 
+            index=0,
+            horizontal=True,
+            key="online_language_select",
+            label_visibility="collapsed"
+        )
+        
+        # Tagging Tool
+        tagger_tool = st.radio(
+            "**Tagging Tool**",
+            ["Default (TreeTagger/Stanza/Spacy)", "Custom Tagger"],
+            index=0,
+            horizontal=True,
+            key="online_tagger_tool_select",
+            help="They are based on priority. e.g. if a language is chosen and not found in TreeTagger, we switch to Stanza, and if still not found, to Spacy."
+        )
+        
+        if tagger_tool == "Custom Tagger":
+            st.warning("Custom Tagger for Online Corpus is not fully wired in this view yet. Please use Default.")
+            
+        if st.button("Process Downloaded Files", type="primary", use_container_width=True):
+            if tagger_tool == "Custom Tagger":
+                st.error("Please use the Default tagger for now.")
+            else:
+                lang_code = "OTHER" if selected_lang_label == "OTHER" else STANZA_LANG_MAP[selected_lang_label]
+                import core.preprocessing.corpus_loader as corpus_loader
+                import io
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                def update_progress(val, text):
+                    progress_bar.progress(val)
+                    status_text.caption(text)
+                    
+                files_to_process = []
+                for f_dict in downloaded_files:
+                    buf = io.BytesIO(f_dict['content'].encode('utf-8'))
+                    buf.name = f_dict['filename']
+                    files_to_process.append(buf)
+                    
+                with st.spinner("Processing & indexing online corpus content..."):
+                    result = corpus_loader.load_monolingual_corpus_files(
+                        files_to_process,
+                        explicit_lang_code=lang_code,
+                        selected_format="Raw (Natural text)",
+                        progress_callback=update_progress
+                    )
+                    
+                    if result.get('error'):
+                        st.error(result['error'])
+                    else:
+                        set_state('current_corpus_path', result['db_path'])
+                        set_state('corpus_stats', result['stats'])
+                        set_state('current_corpus_name', "Online Scraped Batch")
+                        set_state('xml_structure_data', result.get('structure'))
+                        set_state('target_lang', lang_code)
+                        set_state('downloaded_online_files', None) # Clear buffer
+                        st.success("Online corpus loaded successfully!")
+                        st.rerun()
 
 def _render_metadata_annotation_tab(db_path, key_suffix):
     import duckdb
