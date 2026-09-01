@@ -163,7 +163,7 @@ class OnlineCorpusBuilder:
         text = text.strip()
         if len(text) < 15:
             return False
-        if not re.search(r'[.!?]$', text):
+        if not re.search(r'[.!?][\"\'\”\’\)]*$', text):
             return False
         words = text.split()
         if len(words) < 3:
