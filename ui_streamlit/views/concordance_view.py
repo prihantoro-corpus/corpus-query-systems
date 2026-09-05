@@ -87,7 +87,10 @@ def render_concordance_view():
 
             with tab_advanced:
                 # 1. Controls
-                search_mode = st.radio("Search Mode", ["Standard", "Natural Language (Rule)", "Natural Language (AI)"], horizontal=True, key="kwic_search_mode")
+                valid_modes = ["Standard", "Natural Language (Rule)", "Natural Language (AI)"]
+                if get_state('kwic_search_mode') not in valid_modes:
+                    set_state('kwic_search_mode', 'Standard')
+                search_mode = st.radio("Search Mode", valid_modes, horizontal=True, key="kwic_search_mode")
                 search_term = get_state('kwic_search_term', '')
 
                 if search_mode == "Natural Language (Rule)":
