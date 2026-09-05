@@ -484,6 +484,12 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
         | **Band 3 (🟨 Medium)** | Medium frequency vocabulary | $3.0 \\le \\text{Zipf} < 4.0$ | $1 - 9$ PMW |
         | **Band 2 (🟧 Low)** | Low frequency vocabulary | $2.0 \\le \\text{Zipf} < 3.0$ | $0.1 - 0.99$ PMW |
         | **Band 1 (🟥 Very Low)** | Rare / Low frequency words | $\\text{Zipf} < 2.0$ | $< 0.1$ PMW |
+
+        ---
+        ### 📚 Academic References & Literature
+        * **Brysbaert, M., Buchmeier, M., Keuleers, E., & New, B. (2011)**. *Creating a collocation database for British English: SUBTLEX-UK*. **Quarterly Journal of Experimental Psychology**, 64(9), 1758–1770.
+        * **van Heuven, W. J., Mandera, P., Keuleers, E., & Brysbaert, M. (2014)**. *SUBTLEX-UK: A new and improved word frequency database for British English*. **Quarterly Journal of Experimental Psychology**, 67(6), 1176–1190.
+        * **Brysbaert, M., & New, B. (2009)**. *Moving beyond Kučera and Francis: A web-based empirical study of word frequency effects using subtitles*. **Behavior Research Methods**, 41(4), 977–990.
         """)
 
     if not forms_df.empty:
