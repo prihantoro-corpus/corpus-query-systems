@@ -120,7 +120,7 @@ def render_concordance_view():
                         with c_adv1:
                             coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
                         with c_adv2:
-                            sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
+                            sort_order = st.radio("Sort By", ["Random (Default)", "Node", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
                             # Display Control Row 1
                             c_r1_1, c_r1_2, c_r1_3 = st.columns(3)
                             with c_r1_1:
@@ -300,7 +300,7 @@ def render_concordance_view():
                         with c_adv1:
                             coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
                         with c_adv2:
-                            sort_order = st.radio("Sort By", ["Node (Default)", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
+                            sort_order = st.radio("Sort By", ["Random (Default)", "Node", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
                             
                             # Display Control Row 1
                             c_st1, c_st2, c_st3 = st.columns(3)
@@ -1291,9 +1291,9 @@ def render_concordance_column(results, search_term, key_suffix=""):
          # Clickable Headers for Sorting
          st.markdown("---")
          st.markdown("##### Click headers to sort results")
-         h_col1, h_col2, h_col3 = st.columns([4.2, 1.6, 4.2])
+         h_col0, h_col1, h_col2, h_col3 = st.columns([2.5, 2.5, 2.5, 2.5])
          
-         sort_col = get_state(f'kwic_sort_col_{key_suffix}', 'Node')
+         sort_col = get_state(f'kwic_sort_col_{key_suffix}', 'Random')
          sort_dir = get_state(f'kwic_sort_dir_{key_suffix}', 'asc')
 
          def set_sort(col):
@@ -1305,29 +1305,38 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  set_state(f'kwic_sort_col_{key_suffix}', col)
                  set_state(f'kwic_sort_dir_{key_suffix}', 'asc')
 
-         with h_col1:
-             if st.button("⬅ Sort Left Context", key=f"btn_sort_l_{key_suffix}", use_container_width=True):
-                 set_sort('Left')
+         with h_col0:
+             if st.button("🎲 Random (Default)", key=f"btn_sort_rnd_{key_suffix}", use_container_width=True):
+                 set_sort('Random')
                  st.rerun()
-         with h_col2:
-             if st.button("Center", key=f"btn_sort_n_{key_suffix}", use_container_width=True):
+         with h_col1:
+             if st.button("🎯 Node", key=f"btn_sort_n_{key_suffix}", use_container_width=True):
                  set_sort('Node')
                  st.rerun()
+         with h_col2:
+             if st.button("⬅ Left Context", key=f"btn_sort_l_{key_suffix}", use_container_width=True):
+                 set_sort('Left')
+                 st.rerun()
          with h_col3:
-             if st.button("Sort Right Context ➡", key=f"btn_sort_r_{key_suffix}", use_container_width=True):
+             if st.button("Right Context ➡", key=f"btn_sort_r_{key_suffix}", use_container_width=True):
                  set_sort('Right')
                  st.rerun()
 
          # Perform Sorting
          # Clean tags for sorting
          def clean_html(raw_html):
-             return re.sub(r'<[^>]*>', '', raw_html)
+             return re.sub(r'<[^>]*>', '', str(raw_html))
 
-         sorted_rows = sorted(
-             kwic_rows, 
-             key=lambda x: clean_html(x[sort_col]).lower(), 
-             reverse=(sort_dir == 'desc')
-         )
+         if sort_col == 'Random':
+             sorted_rows = list(kwic_rows)
+             if sort_dir == 'desc':
+                 sorted_rows.reverse()
+         else:
+             sorted_rows = sorted(
+                 kwic_rows, 
+                 key=lambda x: clean_html(x.get(sort_col, '') if isinstance(x, dict) else str(x)).lower(), 
+                 reverse=(sort_dir == 'desc')
+             )
 
          # --- PAGINATION & VIEW CONTROLS ---
          st.markdown("---")
