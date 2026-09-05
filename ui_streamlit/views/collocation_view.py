@@ -5,12 +5,8 @@ from ui_streamlit.caching import cached_generate_collocation
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
 from core.ai_service import interpret_results_llm, parse_nl_query, parse_nl_query_rules_only
-import importlib
-import core.visualiser.network
-importlib.reload(core.visualiser.network)
 from core.visualiser.network import create_pyvis_graph
 import core.modules.collocation_patterns
-importlib.reload(core.modules.collocation_patterns)
 from core.io_utils import df_to_excel_bytes
 from ui_streamlit.caching import cached_generate_kwic, cached_get_subcorpus_size
 from ui_streamlit.components.result_display import render_kwic_table

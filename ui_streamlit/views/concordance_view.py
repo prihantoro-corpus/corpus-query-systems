@@ -14,12 +14,6 @@ from core.io_utils import df_to_excel_bytes
 import core.modules.overview as ov
 
 def render_concordance_view():
-    import importlib
-    import core.modules.concordance
-    importlib.reload(core.modules.concordance)
-    import ui_streamlit.caching
-    importlib.reload(ui_streamlit.caching)
-    
     st.header("Concordance (KWIC)")
     
     # Guidelines Layout using shared component

@@ -108,16 +108,6 @@ def render_results_section(df_display, df_full, selected_attr, key_prefix):
         st.markdown(ai_res)
 
 def render_word_trend_view():
-    import importlib
-    import core.modules.word_trend
-    importlib.reload(core.modules.word_trend)
-    global get_available_metadata_attributes, get_metadata_values, get_emerging_words, get_word_tracker_data, compute_tracker_statistics
-    get_available_metadata_attributes = core.modules.word_trend.get_available_metadata_attributes
-    get_metadata_values = core.modules.word_trend.get_metadata_values
-    get_emerging_words = core.modules.word_trend.get_emerging_words
-    get_word_tracker_data = core.modules.word_trend.get_word_tracker_data
-    compute_tracker_statistics = core.modules.word_trend.compute_tracker_statistics
-    
     st.header("Word Trend")
     
     corpus_path = get_state('current_corpus_path')

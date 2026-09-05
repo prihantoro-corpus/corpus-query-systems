@@ -5,11 +5,6 @@ from ui_streamlit.utils import notify_timing
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions, get_xml_attribute_columns
 
-# Force reload of statistical_testing module to ensure latest changes are picked up
-import importlib
-import core.modules.statistical_testing
-importlib.reload(core.modules.statistical_testing) 
-
 from core.modules.statistical_testing import (
     compare_groups_by_word, preview_query_matches,
     get_document_frequency_vector, get_document_metadata_vector,
