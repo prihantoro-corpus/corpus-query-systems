@@ -290,7 +290,7 @@ def main():
         unsafe_allow_html=True
     )
 
-    st.markdown("## CORTEX: Advanced Corpus Query System <span style='font-size: 0.5em; color: rgba(255,255,255,0.5); font-weight: normal; vertical-align: middle; margin-left: 10px;'>version 0.0.1: 5-sept-2026</span>", unsafe_allow_html=True)
+    st.markdown("## CORTEX: An Advanced Corpus Query System <span style='font-size: 0.5em; color: rgba(255,255,255,0.5); font-weight: normal; vertical-align: middle; margin-left: 10px;'>version 0.0.1: 5-sept-2026</span>", unsafe_allow_html=True)
     
     st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
     
