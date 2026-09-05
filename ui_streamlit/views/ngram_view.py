@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import urllib.parse
 from ui_streamlit.state_manager import get_state, set_state
 from ui_streamlit.caching import cached_generate_ngrams
 from ui_streamlit.components.filters import render_xml_restriction_filters
@@ -324,6 +325,38 @@ def render_ngram_view():
                     render_comparison_tables(shared_df, df1_unique, df2_unique,
                                             corpus_name, comp_name, analysis_type='ngram')
 
+def format_ngram_to_concordance_query(ngram_str, positional_bases=None, global_basis='Token'):
+    """
+    Converts an N-Gram result string (e.g. 'IN the end of' or 'at the end of')
+    into a valid Concordance query string (e.g. '_IN the end of' or 'at the end of').
+    """
+    tokens = str(ngram_str).split()
+    query_parts = []
+    
+    COMMON_POS_TAGS = {
+        'CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD',
+        'NN', 'NNS', 'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$', 'RB', 'RBR',
+        'RBS', 'RP', 'SYM', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ',
+        'WDT', 'WP', 'WP$', 'WRB'
+    }
+
+    for i, tok in enumerate(tokens):
+        pos_idx = str(i + 1)
+        basis = positional_bases.get(pos_idx, global_basis) if positional_bases else global_basis
+        
+        # Already formatted (starts with _ or < or inside [])
+        if tok.startswith('_') or tok.startswith('<') or (tok.startswith('[') and tok.endswith(']')):
+            query_parts.append(tok)
+        elif basis in ['POS Tag', 'Part-of-Speech', 'POS'] or tok in COMMON_POS_TAGS or (tok.isupper() and 2 <= len(tok) <= 4 and tok.isalpha()):
+            tag = tok[1:] if tok.startswith('_') else tok
+            query_parts.append(f"_{tag}")
+        elif basis == 'Lemma':
+            query_parts.append(f"[{tok}]")
+        else:
+            query_parts.append(tok)
+            
+    return " ".join(query_parts)
+
 
 def run_ngram_query(identifier, path, name, n, filters, skip_punc, basis, positional_bases, neg_filter, xml_where, xml_params, source='advanced'):
     with st.spinner(f"Generating n-grams for {name}..."):
@@ -342,10 +375,15 @@ def run_ngram_query(identifier, path, name, n, filters, skip_punc, basis, positi
         )
         df.attrs['source'] = source
         df.attrs['n'] = n
+        df.attrs['basis'] = basis
+        df.attrs['positional_bases'] = positional_bases
         st.session_state[f'last_ngram_results_{identifier}'] = df
 
 def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
     n_val_actual = df.attrs.get('n', n_val)
+    global_basis = df.attrs.get('basis', 'Token')
+    pos_bases = df.attrs.get('positional_bases', {})
+
     if df is not None and not df.empty:
         total_results = len(df)
         display_limit = 100
@@ -393,14 +431,32 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
             border-radius: 4px;
             margin: 0 2px;
             display: inline-block;
-            min-width: 120px;
+            min-width: 100px;
             text-align: center;
+        }
+        .ngram-concordance-link {
+            color: #00FFF5 !important;
+            font-weight: 600;
+            text-decoration: none !important;
+            padding: 4px 10px;
+            background: rgba(0, 255, 245, 0.1);
+            border: 1px solid rgba(0, 255, 245, 0.3);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: inline-block;
+            transition: all 0.2s ease;
+        }
+        .ngram-concordance-link:hover {
+            background: rgba(0, 255, 245, 0.25);
+            border-color: #00FFF5;
+            transform: translateY(-1px);
         }
         </style>
         <table class="ngram-table">
         <thead>
             <tr>
                 <th>N-Gram</th>
+                <th>Concordance</th>
                 <th>Frequency</th>
                 <th>Relative Freq (PMW)</th>
         """
@@ -412,8 +468,6 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
             html += "<th>Frequency Band</th>"
         
         html += "</tr></thead><tbody>"
-        # Prepare for HTML rendering
-        html_rows = []
         
         for _, row in df_display.iterrows():
             ngram_col = [col for col in df.columns if col.startswith('Pos')][0] if any(col.startswith('Pos') for col in df.columns) else df.columns[0]
@@ -426,7 +480,12 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
                 color = position_colors[i % len(position_colors)]
                 colored_ngram += f'<span class="ngram-token" style="background-color: {color}20; border-left: 3px solid {color};">{token}</span> '
             
+            kwic_query_str = format_ngram_to_concordance_query(ngram_text, positional_bases=pos_bases, global_basis=global_basis)
+            encoded_kwic_query = urllib.parse.quote(kwic_query_str)
+            concordance_link_html = f'<a href="?kwic_query={encoded_kwic_query}" target="_self" class="ngram-concordance-link" title="Open in Concordance Advanced Mode: {kwic_query_str}">🔍 concordance</a>'
+
             html += f"<tr><td>{colored_ngram}</td>"
+            html += f"<td>{concordance_link_html}</td>"
             html += f"<td>{row['Frequency']}</td>"
             html += f"<td>{row['Relative Frequency (per M)']:.2f}</td>"
             
