@@ -501,7 +501,7 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
 
         by_attributes = {}
         if params.get('by_subcorpus', False):
-            con_temp = duckdb.connect(target_path)
+            con_temp = duckdb.connect(target_path, read_only=True)
             attr_cols = get_xml_attribute_columns(con_temp)
             # Filter attributes to only keep those with <= 100 unique values (to avoid doc_id, titles, details, etc.)
             filtered_attr_cols = []
