@@ -371,22 +371,16 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     s_html += f'<span><b>POS:</b> {", ".join(unique_pos)}</span>'
     s_html += f'<span><b>Freq:</b> {total_freq:,} {"(Lemma)" if is_lemma_fallback else ""}</span>'
     s_html += f'<span><b>Rel:</b> {pmw:.2f} pmw {"(Lemma)" if is_lemma_fallback else ""}</span>'
-    zipf_popover_html = (
-        '<details style="display: inline-block; position: relative; margin-left: 2px; cursor: pointer;">'
-        '<summary style="color: #00FFF5; font-size: 0.85em; list-style: none; display: inline-block; font-weight: bold; background: rgba(0, 255, 245, 0.15); border: 1px solid #00FFF5; border-radius: 50%; width: 18px; height: 18px; text-align: center; line-height: 16px;" title="Click for Zipf Band calculation & thresholds">?</summary>'
-        '<div style="position: absolute; top: 24px; left: -100px; z-index: 1000; background: #0f172a; border: 1px solid #00FFF5; padding: 12px 14px; border-radius: 8px; width: 310px; font-size: 0.82em; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.85); line-height: 1.4;">'
-        '<div style="font-weight: bold; color: #00FFF5; margin-bottom: 6px;">📊 Zipf Frequency Band System</div>'
-        '<div style="margin-bottom: 6px;"><b>Formula:</b> <code style="color:#00FFF5;">Zipf = log10(PMW) + 3</code><br><span style="color:#aaa; font-size:0.9em;">(PMW = Per Million Words frequency)</span></div>'
-        '<div style="font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #334155; padding-bottom: 2px;">Threshold Bands:</div>'
-        '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">'
-        '<div><b>Band 5:</b> Zipf ≥ 6.0</div><div>(PMW ≥ 1,000)</div>'
-        '<div><b>Band 4:</b> Zipf 5.0–5.9</div><div>(PMW 100–999)</div>'
-        '<div><b>Band 3:</b> Zipf 4.0–4.9</div><div>(PMW 10–99)</div>'
-        '<div><b>Band 2:</b> Zipf 3.0–3.9</div><div>(PMW 1–9)</div>'
-        '<div><b>Band 1:</b> Zipf < 3.0</div><div>(PMW < 1)</div>'
-        '</div></div></details>'
+    zipf_tooltip_text = (
+        "Zipf Frequency Scale Formula: Zipf = log10(PMW) + 3&#10;&#10;"
+        "Band 5 (Very High): Zipf ≥ 6.0 (PMW ≥ 1,000)&#10;"
+        "Band 4 (High): Zipf 5.0–5.9 (PMW 100–999)&#10;"
+        "Band 3 (Medium): Zipf 4.0–4.9 (PMW 10–99)&#10;"
+        "Band 2 (Low): Zipf 3.0–3.9 (PMW 1–9)&#10;"
+        "Band 1 (Very Low / Rare): Zipf < 3.0 (PMW < 1)"
     )
-    s_html += f'<span style="display: inline-flex; align-items: center; gap: 5px;"><b>Band:</b> {get_zipf_bar_html(band)} {zipf_popover_html}</span>'
+    zipf_help_icon = f'<span title="{zipf_tooltip_text}" style="color: #00FFF5; font-size: 0.8em; cursor: help; font-weight: bold; background: rgba(0, 255, 245, 0.15); border: 1px solid #00FFF5; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; margin-left: 3px;">?</span>'
+    s_html += f'<span style="display: inline-flex; align-items: center; gap: 5px;"><b>Band:</b> {get_zipf_bar_html(band)} {zipf_help_icon}</span>'
     s_html += '</div>'
     
     s_html += '<div style="margin-bottom: 8px;">'
@@ -473,6 +467,22 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     
     # Use st.markdown for natural height growth, preventing clipping
     st.markdown(s_html, unsafe_allow_html=True)
+
+    with st.expander("ℹ️ Zipf Frequency Band Calculation & Thresholds Guide", expanded=False):
+        st.markdown("""
+        ### 📊 Zipf Frequency Scale & Band System
+        CORTEX calculates standard Zipf scores using the formula:
+        $$\\text{Zipf Score} = \\log_{10}(\\text{PMW}) + 3$$
+        *(where $\\text{PMW}$ is the word's frequency Per Million Words).*
+
+        | Zipf Band | Description | Zipf Score Threshold | Per Million Words (PMW) Range |
+        | :--- | :--- | :--- | :--- |
+        | **Band 5 (🟩 Very High)** | Extremely common words | $\\text{Zipf} \\ge 6.0$ | $\\ge 1,000$ PMW |
+        | **Band 4 (🟦 High)** | High frequency vocabulary | $5.0 \\le \\text{Zipf} < 6.0$ | $100 - 999$ PMW |
+        | **Band 3 (🟨 Medium)** | Medium frequency vocabulary | $4.0 \\le \\text{Zipf} < 5.0$ | $10 - 99$ PMW |
+        | **Band 2 (🟧 Low)** | Low frequency vocabulary | $3.0 \\le \\text{Zipf} < 4.0$ | $1 - 9$ PMW |
+        | **Band 1 (🟥 Very Low)** | Rare / Low frequency words | $\\text{Zipf} < 3.0$ | $< 1$ PMW |
+        """)
 
     if not forms_df.empty:
         with st.expander("Word Form Distribution (Total Profile)", expanded=True):
