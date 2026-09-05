@@ -1184,6 +1184,10 @@ def render_visualisation_tab(cluster_results, has_coll_filter=False):
         else:
             st.info("No collocate data found for visualisation.")
 
+    # ---- 3. Concordance Network ----
+    from ui_streamlit.views.concordance_network import render_concordance_network
+    render_concordance_network(cluster_results, has_coll_filter=has_coll_filter)
+
 
 
 def run_concordance_query(identifier, path, name, query, left, right, limit, coll_filter, xml_where, xml_params, show_pos=False, show_lemma=False, source='advanced'):
