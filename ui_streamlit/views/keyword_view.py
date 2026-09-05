@@ -61,7 +61,6 @@ def filter_keyword_dataframe(df, query_str):
             
     return filtered_df
 from ui_streamlit.utils import notify_timing
-importlib.reload(core.modules.keyword)
 from core.modules.keyword import generate_keyword_list, generate_grouped_keyword_list
 from core.visualiser.wordcloud import generate_wordcloud
 from ui_streamlit.components.filters import render_xml_restriction_filters

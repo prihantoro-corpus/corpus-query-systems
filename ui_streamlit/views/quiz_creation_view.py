@@ -6,9 +6,7 @@ from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
 
 import core.modules.quiz_creation
-importlib.reload(core.modules.quiz_creation)
 import core.modules.diffit_generator
-importlib.reload(core.modules.diffit_generator)
 from core.modules.quiz_creation import (
     generate_full_quiz,
     get_corpus_sentences,
