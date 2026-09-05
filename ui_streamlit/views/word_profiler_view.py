@@ -189,8 +189,7 @@ def render_word_profiler_view():
 
                         # --- Visualization ---
                         st.markdown("#### 📊 Visualization")
-                        hide_oov = st.radio("OOV Display", ["Show OOV", "Hide OOV"], horizontal=True, key=f"wp_hide_oov_{wl_name}")
-                        render_word_profiler_chart(df_results, wl_name, hide_oov == "Hide OOV")
+                        render_word_profiler_chart(df_results, wl_name)
 
                         # Download Button for this specific wordlist
                         col_dl1, col_dl2 = st.columns(2)
@@ -262,73 +261,85 @@ def render_word_profiler_view():
                                 with cols[(i // 2) % len(cols)]:
                                     st.metric(cat_name, f"{freq:,}", f"{perc}%")
 
-def render_word_profiler_chart(df, wl_name, hide_oov=False):
+def render_word_profiler_chart(df, wl_name):
     """
-    Renders a bar chart for the Word Profiler results using Altair.
+    Renders an interactive Altair bar chart for Word Profiler results with multi-level filtering and dynamic percentage basis.
     """
     if df.empty:
         return
 
-    # Transform data to long format for Altair
-    # Columns: Segment, Cat1 Freq, Cat1 %, ...
-    cat_cols = [c for c in df.columns if c.endswith(" %")]
-    if hide_oov:
-        cat_cols = [c for c in cat_cols if not c.startswith("OOV")]
+    # Extract all categories present in df
+    cat_names = [c.replace(" %", "") for c in df.columns if c.endswith(" %")]
+    cats_sorted = sorted(cat_names, key=natural_sort_key)
+    if 'OOV' in cats_sorted:
+        cats_sorted.remove('OOV')
+        cats_sorted.append('OOV')
 
+    c_v1, c_v2 = st.columns([2, 1])
+    with c_v1:
+        selected_cats = st.multiselect(
+            "Select Categories / Levels to Display in Chart:",
+            options=cats_sorted,
+            default=cats_sorted,
+            key=f"wp_cats_multiselect_{wl_name}"
+        )
+    with c_v2:
+        pct_basis = st.radio(
+            "Percentage Calculation Basis",
+            ["Selected Levels Only (Sum = 100%)", "% of Total Corpus Tokens"],
+            horizontal=True,
+            key=f"wp_pct_basis_{wl_name}",
+            help="'Selected Levels Only' rescales percentages so the selected levels sum to 100%, allowing direct comparison (e.g. Level 4 vs Level 5). '% of Total Corpus Tokens' preserves original total coverage."
+        )
+
+    if not selected_cats:
+        st.info("Please select at least one category to display in the chart.")
+        return
+
+    rescale_selected = (pct_basis == "Selected Levels Only (Sum = 100%)")
     chart_data = []
+
     for _, row in df.iterrows():
         segment = row['Segment']
-        
-        # Calculate denominator for percentage
-        if hide_oov:
-            plotted_freqs = []
-            for col in cat_cols:
-                freq_col = col.replace(" %", " Freq")
-                plotted_freqs.append(row[freq_col] if freq_col in df.columns else 0)
+
+        if rescale_selected:
+            plotted_freqs = [row[f"{c} Freq"] for c in selected_cats if f"{c} Freq" in row]
             segment_total = sum(plotted_freqs)
         else:
             segment_total = row['Total Tokens'] if 'Total Tokens' in row else 0
 
-        for col in cat_cols:
-            cat_name = col.replace(" %", "")
-            freq_col = col.replace(" %", " Freq")
-            frequency = row[freq_col] if freq_col in df.columns else 0
-            
-            # Recalculate percentage based on segment_total
+        for cat_name in selected_cats:
+            freq_col = f"{cat_name} Freq"
+            frequency = row[freq_col] if freq_col in row else 0
+
             percentage = (frequency / segment_total * 100) if segment_total > 0 else 0
-            
+
             chart_data.append({
                 'Segment': segment,
                 'Category': cat_name,
                 'Percentage': round(percentage, 2),
-                'Frequency': frequency
+                'Frequency': int(frequency)
             })
 
     plot_df = pd.DataFrame(chart_data)
-
-    # Sort Categories to put OOV at the end if possible
-    cats = sorted(plot_df['Category'].unique().tolist(), key=natural_sort_key)
-    if 'OOV' in cats:
-        cats.remove('OOV')
-        cats.append('OOV')
+    cats_plotted = [c for c in cats_sorted if c in selected_cats]
 
     if len(df) == 1:
         # Whole Corpus - Simple Bar Chart (Horizontal)
         chart = alt.Chart(plot_df).mark_bar(color='#00ADB5').encode(
             x=alt.X('Percentage:Q', title='Percentage (%)', scale=alt.Scale(domain=[0, 100])),
-            y=alt.Y('Category:N', title='Category', sort=cats),
+            y=alt.Y('Category:N', title='Category', sort=cats_plotted),
             tooltip=['Category', 'Percentage', 'Frequency']
-        ).properties(height=300)
+        ).properties(height=max(200, len(cats_plotted) * 35))
     else:
         # Multiple Segments - Stacked Bar Chart (Horizontal Stacked)
-        # Calculate dynamic height based on the number of segments to show all values cleanly
         num_segments = len(df)
         dynamic_height = max(150, num_segments * 30)
-        
+
         chart = alt.Chart(plot_df).mark_bar().encode(
-            x=alt.X('Percentage:Q', title='Percentage (%)', stack="normalize"), # Stacked horizontally to 100%
+            x=alt.X('Percentage:Q', title='Percentage (%)', stack="normalize" if rescale_selected else None),
             y=alt.Y('Segment:N', title='Segment', sort=None),
-            color=alt.Color('Category:N', sort=cats, scale=alt.Scale(scheme='category20')),
+            color=alt.Color('Category:N', sort=cats_plotted, scale=alt.Scale(scheme='category20')),
             tooltip=['Segment', 'Category', 'Percentage', 'Frequency']
         ).properties(height=dynamic_height)
 
