@@ -997,74 +997,43 @@ def render_collocate_filter_tables(cluster_results):
 
 
 def render_visualisation_tab(cluster_results, has_coll_filter=False):
-    """Renders horizontal stacked bar charts for absolute frequency and collocate analysis."""
+    """Renders visualisations organized in separate tabs: Bar Charts, Network, and Overlap Size Overview."""
     import plotly.graph_objects as go
+    from ui_streamlit.views.concordance_network import render_concordance_network, render_concordance_overlap_overview
 
-    cluster_names = list(cluster_results.keys())
+    vtab_chart, vtab_net, vtab_overlap = st.tabs([
+        "📊 Frequency Bar Charts",
+        "🕸️ Concordance Network",
+        "🔀 Overlap Size Overview"
+    ])
 
-    # ---- 1. Node word frequency chart ----
-    # Collect all unique node forms across all clusters
-    all_node_forms = set()
-    for res in cluster_results.values():
-        br = res.get('breakdown')
-        if br is not None and not br.empty:
-            target_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
-            all_node_forms.update(br[target_col].tolist())
-            
-    node_forms = sorted(list(all_node_forms))
-    
-    node_totals = {name: cluster_results[name].get('total', 0) for name in cluster_names}
+    with vtab_chart:
+        cluster_names = list(cluster_results.keys())
 
-    if any(v > 0 for v in node_totals.values()):
-        freq_type = st.radio("Frequency Metric for Node Word", ["Absolute Frequency", "Relative Frequency (PMW)"], horizontal=True, key="viz_node_freq_type")
-        is_rel = (freq_type == "Relative Frequency (PMW)")
+        # ---- 1. Node word frequency chart ----
+        all_node_forms = set()
+        for res in cluster_results.values():
+            br = res.get('breakdown')
+            if br is not None and not br.empty:
+                target_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+                all_node_forms.update(br[target_col].tolist())
+                
+        node_forms = sorted(list(all_node_forms))
+        
+        node_totals = {name: cluster_results[name].get('total', 0) for name in cluster_names}
 
-        fig_node = go.Figure()
-        if node_forms:
-            if len(cluster_names) == 1:
-                # Single corpus / no restrictions case: plot variations on Y-axis
-                name = cluster_names[0]
-                br = cluster_results[name].get('breakdown')
-                frequencies = []
-                for form in node_forms:
-                    val = 0.0
-                    if br is not None and not br.empty:
-                        t_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
-                        if is_rel:
-                            col = 'Relative Frequency (per M)' if 'Relative Frequency (per M)' in br.columns else (br.columns[2] if len(br.columns)>2 else None)
-                        else:
-                            col = 'Absolute Frequency' if 'Absolute Frequency' in br.columns else (br.columns[1] if len(br.columns)>1 else None)
-                        
-                        match = br[br[t_col] == form]
-                        if not match.empty and col:
-                            val = float(match[col].iloc[0]) if is_rel else int(match[col].iloc[0])
-                    frequencies.append(val)
-                    
-                text_labels = [f"{f:.2f}" if is_rel else str(int(f)) for f in frequencies]
-                fig_node.add_trace(go.Bar(
-                    y=node_forms,
-                    x=frequencies,
-                    orientation='h',
-                    text=text_labels,
-                    textposition='outside',
-                    marker_color='#FFEA00' # Highlight color
-                ))
-                fig_node.update_layout(
-                    title=f'Node Word Variation {freq_type} ({name})',
-                    xaxis_title=freq_type,
-                    yaxis_title='Token Form',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(size=13),
-                    height=max(300, 45 * len(node_forms) + 100)
-                )
-            else:
-                # Multiple restrictions case: plot grouped bar chart
-                for form in node_forms:
-                    x_vals = []
-                    y_vals = []
-                    for name in cluster_names:
-                        br = cluster_results[name].get('breakdown')
+        if any(v > 0 for v in node_totals.values()):
+            freq_type = st.radio("Frequency Metric for Node Word", ["Absolute Frequency", "Relative Frequency (PMW)"], horizontal=True, key="viz_node_freq_type")
+            is_rel = (freq_type == "Relative Frequency (PMW)")
+
+            fig_node = go.Figure()
+            if node_forms:
+                if len(cluster_names) == 1:
+                    # Single corpus / no restrictions case: plot variations on Y-axis
+                    name = cluster_names[0]
+                    br = cluster_results[name].get('breakdown')
+                    frequencies = []
+                    for form in node_forms:
                         val = 0.0
                         if br is not None and not br.empty:
                             t_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
@@ -1076,111 +1045,150 @@ def render_visualisation_tab(cluster_results, has_coll_filter=False):
                             match = br[br[t_col] == form]
                             if not match.empty and col:
                                 val = float(match[col].iloc[0]) if is_rel else int(match[col].iloc[0])
-                        y_vals.append(name)
-                        x_vals.append(val)
+                        frequencies.append(val)
                         
-                    text_labels = [f"{x:.2f}" if is_rel and x > 0 else (str(int(x)) if x > 0 else "") for x in x_vals]
+                    text_labels = [f"{f:.2f}" if is_rel else str(int(f)) for f in frequencies]
                     fig_node.add_trace(go.Bar(
-                        name=form,
-                        y=y_vals,
-                        x=x_vals,
+                        y=node_forms,
+                        x=frequencies,
                         orientation='h',
                         text=text_labels,
-                        textposition='inside'
+                        textposition='outside',
+                        marker_color='#FFEA00' # Highlight color
+                    ))
+                    fig_node.update_layout(
+                        title=f'Node Word Variation {freq_type} ({name})',
+                        xaxis_title=freq_type,
+                        yaxis_title='Token Form',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(size=13),
+                        height=max(300, 45 * len(node_forms) + 100)
+                    )
+                else:
+                    # Multiple restrictions case: plot grouped bar chart
+                    for form in node_forms:
+                        x_vals = []
+                        y_vals = []
+                        for name in cluster_names:
+                            br = cluster_results[name].get('breakdown')
+                            val = 0.0
+                            if br is not None and not br.empty:
+                                t_col = 'Token Form' if 'Token Form' in br.columns else br.columns[0]
+                                if is_rel:
+                                    col = 'Relative Frequency (per M)' if 'Relative Frequency (per M)' in br.columns else (br.columns[2] if len(br.columns)>2 else None)
+                                else:
+                                    col = 'Absolute Frequency' if 'Absolute Frequency' in br.columns else (br.columns[1] if len(br.columns)>1 else None)
+                                
+                                match = br[br[t_col] == form]
+                                if not match.empty and col:
+                                    val = float(match[col].iloc[0]) if is_rel else int(match[col].iloc[0])
+                            y_vals.append(name)
+                            x_vals.append(val)
+                            
+                        text_labels = [f"{x:.2f}" if is_rel and x > 0 else (str(int(x)) if x > 0 else "") for x in x_vals]
+                        fig_node.add_trace(go.Bar(
+                            name=form,
+                            y=y_vals,
+                            x=x_vals,
+                            orientation='h',
+                            text=text_labels,
+                            textposition='inside'
+                        ))
+                    fig_node.update_layout(
+                        barmode='group',
+                        title=f'Node Word Variation {freq_type} by Restriction',
+                        xaxis_title=freq_type,
+                        yaxis_title='Restriction',
+                        legend_title='Token Form',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(size=13),
+                        height=max(350, 80 * len(cluster_names) + 120)
+                    )
+            else:
+                # Fallback to aggregates if no breakdown exists
+                fig_node = go.Figure()
+                for name in cluster_names:
+                    val = node_totals[name]
+                    fig_node.add_trace(go.Bar(
+                        name=name,
+                        y=[name],
+                        x=[val],
+                        orientation='h',
+                        text=[str(val)],
+                        textposition='outside'
                     ))
                 fig_node.update_layout(
                     barmode='group',
-                    title=f'Node Word Variation {freq_type} by Restriction',
+                    title=f'Node Word {freq_type} by Restriction (Aggregate)',
                     xaxis_title=freq_type,
                     yaxis_title='Restriction',
-                    legend_title='Token Form',
+                    legend_title='Restriction',
+                    showlegend=False,
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     font=dict(size=13),
-                    height=max(350, 80 * len(cluster_names) + 120)
+                    height=max(300, 60 * len(cluster_names) + 100)
                 )
+            st.plotly_chart(fig_node, use_container_width=True)
         else:
-            # Fallback to aggregates if no breakdown exists
-            fig_node = go.Figure()
-            for name in cluster_names:
-                val = node_totals[name]
-                fig_node.add_trace(go.Bar(
-                    name=name,
-                    y=[name],
-                    x=[val],
-                    orientation='h',
-                    text=[str(val)],
-                    textposition='outside'
-                ))
-            fig_node.update_layout(
-                barmode='group',
-                title=f'Node Word {freq_type} by Restriction (Aggregate)',
-                xaxis_title=freq_type,
-                yaxis_title='Restriction',
-                legend_title='Restriction',
-                showlegend=False,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(size=13),
-                height=max(300, 60 * len(cluster_names) + 100)
-            )
-        st.plotly_chart(fig_node, use_container_width=True)
-    else:
-        st.info("No node word frequency data available for visualisation.")
+            st.info("No node word frequency data available for visualisation.")
 
-    # ---- 2. Collocate frequency — stacked horizontal bar per collocate ----
-    if has_coll_filter:
-        cluster_colls = {}
-        all_collocates = set()
-        for cluster_name, res in cluster_results.items():
-            if 'collocate_counts' in res:
-                counts = res['collocate_counts']
+        # ---- 2. Collocate frequency — stacked horizontal bar per collocate ----
+        if has_coll_filter:
+            cluster_colls = {}
+            all_collocates = set()
+            for cluster_name, res in cluster_results.items():
+                if 'collocate_counts' in res:
+                    counts = res['collocate_counts']
+                else:
+                    counts = {}
+                    for row in res.get('rows', []):
+                        coll = row.get('Collocate')
+                        if coll:
+                            counts[coll] = counts.get(coll, 0) + 1
+                cluster_colls[cluster_name] = counts
+                all_collocates.update(counts.keys())
+
+            if all_collocates:
+                # Sort by total frequency descending, take top 30
+                sorted_colls = sorted(
+                    list(all_collocates),
+                    key=lambda c: -sum(cluster_colls[n].get(c, 0) for n in cluster_names)
+                )
+                top_colls = sorted_colls[:30]
+                top_colls_display = list(reversed(top_colls))
+
+                fig_coll = go.Figure()
+                for name in cluster_names:
+                    vals = [cluster_colls[name].get(c, 0) for c in top_colls_display]
+                    fig_coll.add_trace(go.Bar(
+                        name=name,
+                        y=top_colls_display,
+                        x=vals,
+                        orientation='h'
+                    ))
+                fig_coll.update_layout(
+                    barmode='stack',
+                    title='Collocate Absolute Frequency by Restriction (Top 30)',
+                    xaxis_title='Frequency',
+                    yaxis_title='Collocate',
+                    legend_title='Restriction',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=12),
+                    height=max(450, 22 * len(top_colls_display) + 120)
+                )
+                st.plotly_chart(fig_coll, use_container_width=True)
             else:
-                counts = {}
-                for row in res.get('rows', []):
-                    coll = row.get('Collocate')
-                    if coll:
-                        counts[coll] = counts.get(coll, 0) + 1
-            cluster_colls[cluster_name] = counts
-            all_collocates.update(counts.keys())
+                st.info("No collocate data found for visualisation.")
 
-        if all_collocates:
-            # Sort by total frequency descending, take top 30
-            sorted_colls = sorted(
-                list(all_collocates),
-                key=lambda c: -sum(cluster_colls[n].get(c, 0) for n in cluster_names)
-            )
-            top_colls = sorted_colls[:30]
-            # Reverse so highest-frequency collocate is at top of chart
-            top_colls_display = list(reversed(top_colls))
+    with vtab_net:
+        render_concordance_network(cluster_results, has_coll_filter=has_coll_filter)
 
-            fig_coll = go.Figure()
-            for name in cluster_names:
-                vals = [cluster_colls[name].get(c, 0) for c in top_colls_display]
-                fig_coll.add_trace(go.Bar(
-                    name=name,
-                    y=top_colls_display,
-                    x=vals,
-                    orientation='h'
-                ))
-            fig_coll.update_layout(
-                barmode='stack',
-                title='Collocate Absolute Frequency by Restriction (Top 30)',
-                xaxis_title='Frequency',
-                yaxis_title='Collocate',
-                legend_title='Restriction',
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(size=12),
-                height=max(450, 22 * len(top_colls_display) + 120)
-            )
-            st.plotly_chart(fig_coll, use_container_width=True)
-        else:
-            st.info("No collocate data found for visualisation.")
-
-    # ---- 3. Concordance Network ----
-    from ui_streamlit.views.concordance_network import render_concordance_network
-    render_concordance_network(cluster_results, has_coll_filter=has_coll_filter)
+    with vtab_overlap:
+        render_concordance_overlap_overview(cluster_results, has_coll_filter=has_coll_filter)
 
 
 
