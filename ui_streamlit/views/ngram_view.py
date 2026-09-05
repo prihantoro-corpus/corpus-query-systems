@@ -444,7 +444,7 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
             if r_cols[1].button("🔍 concordance", key=f"btn_kwic_redir_{key_suffix}_{idx}"):
                 from ui_streamlit.state_manager import set_state
                 set_state('kwic_search_term', kwic_query_str)
-                set_state('kwic_search_mode', 'Advanced (CQL)')
+                set_state('kwic_search_mode', 'Standard')
                 set_state('current_module', 'Concordance')
                 st.rerun()
                 
