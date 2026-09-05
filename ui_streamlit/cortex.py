@@ -59,10 +59,15 @@ st.set_page_config(
 # Initialize State
 init_session_state()
 
-# Handle Query Params for URL-based Routing (e.g. from Word Trend)
+# Handle Query Params for URL-based Routing (e.g. from Word Trend or N-Gram)
 if 'word' in st.query_params and 'time' in st.query_params and 'attr' in st.query_params:
     ui_streamlit.state_manager.set_state('kwic_search_term', st.query_params['word'])
     ui_streamlit.state_manager.set_state('concordance_forced_xml_where', f" AND CAST({st.query_params['attr']} AS VARCHAR) = '{st.query_params['time']}'")
+    ui_streamlit.state_manager.set_state('current_module', 'Concordance')
+    st.query_params.clear()
+    st.rerun()
+elif 'kwic_query' in st.query_params:
+    ui_streamlit.state_manager.set_state('kwic_search_term', st.query_params['kwic_query'])
     ui_streamlit.state_manager.set_state('current_module', 'Concordance')
     st.query_params.clear()
     st.rerun()
