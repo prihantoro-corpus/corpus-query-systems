@@ -62,9 +62,9 @@ def render_concordance_view():
                     limit_simple_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit_simple")
                 with c_s3:
                     st.write("")
-                    fetch_all_simple = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_simple', True), key="kwic_all_simple_cb")
+                    fetch_all_simple = st.checkbox("Retrieve All (Max 10k)", value=get_state('kwic_fetch_all_simple', False), key="kwic_all_simple_cb")
                 
-                limit_simple = 999999999 if fetch_all_simple else limit_simple_input
+                limit_simple = 10000 if fetch_all_simple else limit_simple_input
 
                 if st.button("Generate Concordance", type="primary", key="btn_generate_simple", use_container_width=True):
                     set_state('kwic_search_term', search_term_simple)
@@ -110,9 +110,9 @@ def render_concordance_view():
                              limit_rule_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit_rule")
                         with col4:
                              st.write("")
-                             fetch_all_rule = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_rule', True), key="kwic_all_rule_cb")
+                             fetch_all_rule = st.checkbox("Retrieve All (Max 10k)", value=get_state('kwic_fetch_all_rule', False), key="kwic_all_rule_cb")
 
-                        limit = 999999999 if fetch_all_rule else limit_rule_input
+                        limit = 10000 if fetch_all_rule else limit_rule_input
 
                         # Annotation Tag Guide Popover
                         from ui_streamlit.components.pos_help import render_annotation_help_button
@@ -211,9 +211,9 @@ def render_concordance_view():
                             limit_ai_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit_ai")
                         with c_ai3:
                             st.write("")
-                            fetch_all_ai = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_ai', True), key="kwic_all_ai_cb")
+                            fetch_all_ai = st.checkbox("Retrieve All (Max 10k)", value=get_state('kwic_fetch_all_ai', False), key="kwic_all_ai_cb")
 
-                        limit_ai = 999999999 if fetch_all_ai else limit_ai_input
+                        limit_ai = 10000 if fetch_all_ai else limit_ai_input
                             
                         c_ai3, c_ai4 = st.columns(2)
                         with c_ai3:
@@ -290,9 +290,9 @@ def render_concordance_view():
                              limit_standard_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit")
                         with col4:
                              st.write("")
-                             fetch_all_standard = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_standard', True), key="kwic_all_standard_cb")
+                             fetch_all_standard = st.checkbox("Retrieve All (Max 10k)", value=get_state('kwic_fetch_all_standard', False), key="kwic_all_standard_cb")
 
-                        limit = 999999999 if fetch_all_standard else limit_standard_input
+                        limit = 10000 if fetch_all_standard else limit_standard_input
 
                         # Annotation Tag Guide Popover
                         from ui_streamlit.components.pos_help import render_annotation_help_button

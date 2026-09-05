@@ -465,13 +465,15 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
             con.close()
             return ([], 0, raw_target_input, literal_freq, [], pd.DataFrame())
 
+        # Cap KWIC context row rendering to 10,000 max lines for UI responsiveness
+        effective_limit = min(limit, 10000)
         display_spans = match_spans
-        if do_random_sample and total_matches > limit:
+        if do_random_sample and total_matches > effective_limit:
             import random
             random.seed(42)
-            display_spans = random.sample(match_spans, limit)
+            display_spans = random.sample(match_spans, effective_limit)
         else:
-             display_spans = match_spans[:limit]
+             display_spans = match_spans[:effective_limit]
 
         # Use the variable lengths in the context query
         # We need a custom VALUES list with [id, len] pairs
