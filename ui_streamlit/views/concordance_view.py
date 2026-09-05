@@ -3,6 +3,7 @@ import re
 import pandas as pd
 import os
 import itertools
+import math
 from ui_streamlit.state_manager import get_state, set_state
 from ui_streamlit.utils import notify_timing
 from ui_streamlit.caching import cached_generate_kwic, cached_get_subcorpus_size
@@ -186,13 +187,21 @@ def render_concordance_view():
                     from ui_streamlit.components.pos_help import render_annotation_help_button
                     render_annotation_help_button(corpus_path, "concordance_ai")
 
-                    # Display Options for AI Mode
-                    with st.expander("Display Options"):
-                        wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_ai")
-                        set_state('kwic_wrap_mode', wrap_mode)
-                        
-                        focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_ai", help="Only preserve the exact sentence containing the keyword in context")
-                        set_state('kwic_focus_sentence', focus_sentence)
+                    # Display & Search Options for AI Mode
+                    with st.expander("Search & Display Options", expanded=True):
+                        c_ai1, c_ai2 = st.columns(2)
+                        with c_ai1:
+                            window_size_ai = st.slider("Context Window", 1, 20, get_state('kwic_window', 5), key="kwic_window_ai")
+                        with c_ai2:
+                            limit_ai = st.number_input("Max Lines", 10, 5000, get_state('kwic_limit', 100), step=10, key="kwic_limit_ai")
+                            
+                        c_ai3, c_ai4 = st.columns(2)
+                        with c_ai3:
+                            wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_ai")
+                            set_state('kwic_wrap_mode', wrap_mode)
+                        with c_ai4:
+                            focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_ai", help="Only preserve the exact sentence containing the keyword in context")
+                            set_state('kwic_focus_sentence', focus_sentence)
 
                     col_ai1, col_ai2 = st.columns([1, 4])
                     with col_ai1:
@@ -229,10 +238,11 @@ def render_concordance_view():
 
                                 # Window/Limit defaults
                                 try:
-                                    win = int(params.get('window', 5))
+                                    win = int(params.get('window', window_size_ai))
                                 except (ValueError, TypeError):
-                                    win = 5
+                                    win = window_size_ai
                                 set_state('kwic_window', win)
+                                set_state('kwic_limit', limit_ai)
 
                                 # Sort
                                 sort = params.get('sort_order', 'Node')
@@ -243,7 +253,7 @@ def render_concordance_view():
 
                                 # Defer execution until after XML filters are rendered below
                                 _deferred_nl_query = {
-                                    'query': query, 'window': win, 'limit': 100,
+                                    'query': query, 'window': win, 'limit': limit_ai,
                                     'coll_filter': '', 'show_pos': False, 'show_lemma': False
                                 }
                             else:
@@ -1280,12 +1290,106 @@ def render_concordance_column(results, search_term, key_suffix=""):
              reverse=(sort_dir == 'desc')
          )
 
+         # --- PAGINATION & VIEW CONTROLS ---
+         st.markdown("---")
+         c_pag1, c_pag2, c_pag3 = st.columns([2, 3, 2])
+         
+         page_size_options = [25, 50, 100, 250, 500, "All"]
+         saved_ps = get_state(f'kwic_page_size_{key_suffix}', 50)
+         try:
+             default_idx = page_size_options.index(saved_ps)
+         except ValueError:
+             default_idx = 1
+             
+         with c_pag1:
+             selected_ps = st.selectbox(
+                 "Rows per page",
+                 options=page_size_options,
+                 index=default_idx,
+                 key=f"kwic_ps_select_{key_suffix}"
+             )
+             set_state(f'kwic_page_size_{key_suffix}', selected_ps)
+             
+             if selected_ps == "All":
+                 page_size = len(sorted_rows) if sorted_rows else 1
+             else:
+                 page_size = int(selected_ps)
+
+         total_items = len(sorted_rows)
+         total_pages = max(1, math.ceil(total_items / page_size)) if page_size > 0 else 1
+         
+         current_page = get_state(f'kwic_page_num_{key_suffix}', 1)
+         if current_page > total_pages: current_page = total_pages
+         if current_page < 1: current_page = 1
+
+         start_idx = (current_page - 1) * page_size
+         end_idx = min(current_page * page_size, total_items)
+         display_start = start_idx + 1 if total_items > 0 else 0
+
+         with c_pag2:
+             st.markdown(
+                 f"<div style='text-align: center; margin-top: 10px; font-weight: bold; color: #00FFF5;'>"
+                 f"Page {current_page} of {total_pages} ({display_start}-{end_idx} of {total_items:,} matches shown)"
+                 f"</div>",
+                 unsafe_allow_html=True
+             )
+
+         with c_pag3:
+             b_prev, b_next = st.columns(2)
+             with b_prev:
+                 if st.button("◀ Prev", key=f"btn_prev_top_{key_suffix}", disabled=(current_page <= 1), use_container_width=True):
+                     set_state(f'kwic_page_num_{key_suffix}', current_page - 1)
+                     st.rerun()
+             with b_next:
+                 if st.button("Next ▶", key=f"btn_next_top_{key_suffix}", disabled=(current_page >= total_pages), use_container_width=True):
+                     set_state(f'kwic_page_num_{key_suffix}', current_page + 1)
+                     st.rerun()
+
+         # Slice rows for current page display
+         page_rows = sorted_rows[start_idx:end_idx]
+
          wrap_style = "white-space: normal !important; overflow-wrap: break-word;" if get_state('kwic_wrap_mode', True) else "white-space: nowrap;"
          
          html = f"""
          <style>
-         .kwic-table {{ width: 100%; min-width: 800px; font-family: 'Courier New', monospace; font-size: 0.9em; border-collapse: collapse; table-layout: auto; }}
-         .kwic-table td {{ padding: 8px 10px; border-bottom: 1px solid #333; vertical-align: middle; line-height: 1.6; }}
+         .kwic-table-wrapper {{
+             max-height: 600px;
+             overflow-y: auto;
+             overflow-x: auto;
+             border: 1px solid #334155;
+             border-radius: 8px;
+             margin-top: 10px;
+             margin-bottom: 12px;
+             background-color: #0f172a;
+         }}
+         .kwic-table {{
+             width: 100%;
+             min-width: 800px;
+             font-family: 'Courier New', monospace;
+             font-size: 0.9em;
+             border-collapse: collapse;
+             table-layout: auto;
+         }}
+         .kwic-table thead tr {{
+             position: sticky;
+             top: 0;
+             background-color: #1e293b;
+             z-index: 10;
+             box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+         }}
+         .kwic-table th {{
+             padding: 10px;
+             border-bottom: 2px solid #00ADB5;
+             color: #00FFF5;
+             font-weight: bold;
+             text-align: center;
+         }}
+         .kwic-table td {{
+             padding: 8px 10px;
+             border-bottom: 1px solid #333;
+             vertical-align: middle;
+             line-height: 1.6;
+         }}
          .meta-col {{ text-align: left; width: 15%; font-size: 0.8em; border-right: 1px solid #444; color: #e2e8f0; vertical-align: top; display: {'table-cell' if show_meta else 'none'}; }}
          .ctx-l {{ text-align: right; width: 35%; color: #bbb; {wrap_style} }}
          .node {{ text-align: center; width: auto; white-space: nowrap; font-weight: bold; background-color: #222; color: #FFEA00; border-left: 1px solid #444; border-right: 1px solid #444; padding: 8px 15px; }}
@@ -1296,14 +1400,23 @@ def render_concordance_column(results, search_term, key_suffix=""):
          .ann-input {{ background: #1e293b; color: white; border: 1px solid #334155; padding: 2px 4px; font-size: 11px; border-radius: 3px; }}
          </style>
          <div class='sort-info'>Sorted by <b>{sort_col}</b> ({'Ascending' if sort_dir == 'asc' else 'Descending'})</div>
-         <div style="overflow-x: auto;">
+         <div class="kwic-table-wrapper">
           <table class="kwic-table">
+            <thead>
+              <tr>
+                <th style="display: {'table-cell' if show_meta else 'none'}; text-align: left;">Metadata</th>
+                <th style="text-align: right;">Left Context</th>
+                <th style="text-align: center;">Node</th>
+                <th style="text-align: left;">Right Context</th>
+              </tr>
+            </thead>
+            <tbody>
          """
          
          ann_mode = get_state('kwic_ann_mode', False)
          kwic_annotations = st.session_state.get('kwic_annotations', {})
 
-         for i, row in enumerate(sorted_rows):
+         for i, row in enumerate(page_rows):
              l_text = row['Left']
              r_text = row['Right']
              m_id = str(row['match_id'])
@@ -1327,19 +1440,10 @@ def render_concordance_column(results, search_term, key_suffix=""):
              
              ann_cell_html = ""
              if ann_mode:
-                 # We use st.text_input but it's hard to put IN the HTML table safely with Streamlit
-                 # So we'll use a placeholder or handle it outside. 
-                 # Wait, for a true annotation experience, we need these to be editable.
-                 # I'll use a trick: placeholders in HTML and then individual Streamlit widgets.
-                 # OR, I use st.columns for the whole row. Let's try st.columns for better interaction.
                  pass
              
              html += f"<tr><td class='meta-col'>{meta_html}</td><td class='ctx-l'>{l_text}</td><td class='node'>{row['Node']}</td><td class='ctx-r'>{r_text}</td></tr>"
-         html += "</table></div>"
-         
-         # actually, rendering 100 rows with 2 inputs each using st.text_input is SLOW in Streamlit.
-         # I will stick to the HTML table for speed, and if ann_mode is ON, I will render 
-         # a more interactive version using st.columns or a custom component.
+         html += "</tbody></table></div>"
          
          if not ann_mode:
             st.markdown(html, unsafe_allow_html=True)
@@ -1353,7 +1457,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
                 save_annotations(results, kwic_annotations)
 
             show_meta_active = show_meta
-            for i, row in enumerate(sorted_rows):
+            for i, row in enumerate(page_rows):
                 m_id = str(row['match_id'])
                 if show_meta_active:
                     col_m, col_l, col_n, col_r, col_a = st.columns([1, 3.5, 2, 3.5, 2])
@@ -1399,6 +1503,27 @@ def render_concordance_column(results, search_term, key_suffix=""):
             st.markdown("---")
             if st.button("💾 Save Annotation Progress", key=f"save_ann_bottom_{key_suffix}", type="primary", use_container_width=True):
                 save_annotations(results, st.session_state['kwic_annotations'])
+
+         # Bottom Pagination Bar
+         if total_pages > 1:
+             c_bot1, c_bot2, c_bot3 = st.columns([2, 3, 2])
+             with c_bot2:
+                 st.markdown(
+                     f"<div style='text-align: center; margin-top: 5px; font-weight: bold; color: #00FFF5;'>"
+                     f"Page {current_page} of {total_pages}"
+                     f"</div>",
+                     unsafe_allow_html=True
+                 )
+             with c_bot3:
+                 b_prev_b, b_next_b = st.columns(2)
+                 with b_prev_b:
+                     if st.button("◀ Prev", key=f"btn_prev_bot_{key_suffix}", disabled=(current_page <= 1), use_container_width=True):
+                         set_state(f'kwic_page_num_{key_suffix}', current_page - 1)
+                         st.rerun()
+                 with b_next_b:
+                     if st.button("Next ▶", key=f"btn_next_bot_{key_suffix}", disabled=(current_page >= total_pages), use_container_width=True):
+                         set_state(f'kwic_page_num_{key_suffix}', current_page + 1)
+                         st.rerun()
      else:
          st.info("No matches found.")
          
