@@ -711,12 +711,11 @@ def load_built_in_corpus(name, url, progress_callback=None):
                     import tempfile
                     import json
                     
-                    unique_filename = f"corpus_{uuid.uuid4().hex}.duckdb"
-                    temp_db_path = os.path.join(tempfile.gettempdir(), unique_filename)
-                    shutil.copy(local_path, temp_db_path)
+                    # For pre-built DuckDB database files, use local_path directly without copying to temp
+                    temp_db_path = local_path
                     
-                    # Read metadata directly from the pre-built database
-                    con = duckdb.connect(temp_db_path)
+                    # Read metadata directly from the pre-built database in read-only mode
+                    con = duckdb.connect(temp_db_path, read_only=True)
                     try:
                         # 1. Get language
                         tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
@@ -740,11 +739,9 @@ def load_built_in_corpus(name, url, progress_callback=None):
                                 except Exception as e:
                                     print(f"Error restoring xml_structure: {e}")
                                     
-                        # 3. Get Stats
+                        # 3. Get Stats (O(1) count instead of O(N) grouping 100M tokens into RAM)
                         total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
-                        token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
-                        token_counts = {row[0]: row[1] for row in token_freqs}
-                        stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
+                        stats = {'token_counts': {}, 'total_tokens': total_tokens}
                         
                     except Exception as e:
                         con.close()
