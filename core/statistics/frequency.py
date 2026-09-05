@@ -14,21 +14,21 @@ def pmw_to_zipf(pmw):
 def zipf_to_band(zipf):
     """
     Assign 1–5 Zipf band based on score:
-    Band 1: 7.0–7.9
-    Band 2: 6.0–6.9
-    Band 3: 5.0–5.9
-    Band 4: 4.0–4.9
-    Band 5: 1.0–3.9
+    Band 5 (Highest Frequency): Zipf >= 6.0 (PMW >= 1,000)
+    Band 4 (High Frequency):    Zipf 5.0–5.9 (PMW 100–999)
+    Band 3 (Medium Frequency):  Zipf 4.0–4.9 (PMW 10–99)
+    Band 2 (Low Frequency):     Zipf 3.0–3.9 (PMW 1–9)
+    Band 1 (Very Low / Rare):   Zipf < 3.0   (PMW < 1)
     """
     if pd.isna(zipf):
         return np.nan
-    elif zipf >= 7.0:
-        return 1
     elif zipf >= 6.0:
-        return 2
-    elif zipf >= 5.0:
-        return 3
-    elif zipf >= 4.0:
-        return 4
-    else: 
         return 5
+    elif zipf >= 5.0:
+        return 4
+    elif zipf >= 4.0:
+        return 3
+    elif zipf >= 3.0:
+        return 2
+    else: 
+        return 1
