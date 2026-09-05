@@ -40,7 +40,7 @@ def render_word_profiler_view():
             metadata_col = None
             if basis == "By Metadata":
                 import duckdb
-                con = duckdb.connect(corpus_path)
+                con = duckdb.connect(corpus_path, read_only=True)
                 attr_cols = get_xml_attribute_columns(con)
                 if attr_cols:
                     selected_cols = st.multiselect("Select Metadata Attribute(s)", attr_cols, default=[attr_cols[0]] if attr_cols else [], key="wp_metadata_cols")
