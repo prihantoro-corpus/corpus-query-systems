@@ -402,29 +402,9 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
             "#A8E6CF",  # Light green
         ]
         
-        # Build custom HTML table with larger fonts and colors
-        html = """
+        # Inject CSS for token badges
+        st.markdown("""
         <style>
-        .ngram-table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: 16px;
-        }
-        .ngram-table th { 
-            background-color: #2C3E50; 
-            color: white; 
-            padding: 12px; 
-            text-align: left;
-            font-weight: 600;
-        }
-        .ngram-table td { 
-            padding: 10px; 
-            border-bottom: 1px solid #ddd;
-        }
-        .ngram-table tr:hover td { 
-            background-color: #f8f9fa;
-        }
         .ngram-token {
             font-weight: 500;
             padding: 4px 8px;
@@ -434,42 +414,19 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
             min-width: 100px;
             text-align: center;
         }
-        .ngram-concordance-link {
-            color: #00FFF5 !important;
-            font-weight: 600;
-            text-decoration: none !important;
-            padding: 4px 10px;
-            background: rgba(0, 255, 245, 0.1);
-            border: 1px solid rgba(0, 255, 245, 0.3);
-            border-radius: 6px;
-            font-size: 0.85rem;
-            display: inline-block;
-            transition: all 0.2s ease;
-        }
-        .ngram-concordance-link:hover {
-            background: rgba(0, 255, 245, 0.25);
-            border-color: #00FFF5;
-            transform: translateY(-1px);
-        }
         </style>
-        <table class="ngram-table">
-        <thead>
-            <tr>
-                <th>N-Gram</th>
-                <th>Concordance</th>
-                <th>Frequency</th>
-                <th>Relative Freq (PMW)</th>
-        """
+        """, unsafe_allow_html=True)
         
-        # Add optional columns if they exist
-        if 'Zipf Score' in df.columns:
-            html += "<th>Zipf Score</th>"
-        if 'Zipf Law Frequency Band' in df.columns:
-            html += "<th>Frequency Band</th>"
+        # Render N-Gram results table with in-memory Streamlit buttons to prevent browser page reload and loss of uploaded files
+        header_cols = st.columns([3.5, 1.5, 1.2, 1.5, 1.5])
+        header_cols[0].markdown("**N-Gram**")
+        header_cols[1].markdown("**Concordance**")
+        header_cols[2].markdown("**Frequency**")
+        header_cols[3].markdown("**Relative Freq (PMW)**")
+        header_cols[4].markdown("**Zipf Band / Score**")
+        st.markdown("<hr style='margin: 4px 0 12px 0; border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
         
-        html += "</tr></thead><tbody>"
-        
-        for _, row in df_display.iterrows():
+        for idx, row in df_display.iterrows():
             ngram_col = [col for col in df.columns if col.startswith('Pos')][0] if any(col.startswith('Pos') for col in df.columns) else df.columns[0]
             ngram_text = str(row[ngram_col])
             
@@ -481,24 +438,28 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
                 colored_ngram += f'<span class="ngram-token" style="background-color: {color}20; border-left: 3px solid {color};">{token}</span> '
             
             kwic_query_str = format_ngram_to_concordance_query(ngram_text, positional_bases=pos_bases, global_basis=global_basis)
-            encoded_kwic_query = urllib.parse.quote(kwic_query_str)
-            concordance_link_html = f'<a href="?kwic_query={encoded_kwic_query}" target="_self" class="ngram-concordance-link" title="Open in Concordance Advanced Mode: {kwic_query_str}">🔍 concordance</a>'
-
-            html += f"<tr><td>{colored_ngram}</td>"
-            html += f"<td>{concordance_link_html}</td>"
-            html += f"<td>{row['Frequency']}</td>"
-            html += f"<td>{row['Relative Frequency (per M)']:.2f}</td>"
             
-            if 'Zipf Score' in df.columns:
-                html += f"<td>{row['Zipf Score']:.2f}</td>"
+            r_cols = st.columns([3.5, 1.5, 1.2, 1.5, 1.5])
+            r_cols[0].markdown(colored_ngram, unsafe_allow_html=True)
+            
+            if r_cols[1].button("🔍 concordance", key=f"btn_kwic_redir_{key_suffix}_{idx}"):
+                from ui_streamlit.state_manager import set_state
+                set_state('kwic_search_term', kwic_query_str)
+                set_state('kwic_search_mode', 'Advanced (CQL)')
+                set_state('current_module', 'Concordance')
+                st.rerun()
+                
+            r_cols[2].write(f"{row['Frequency']:,}")
+            r_cols[3].write(f"{row['Relative Frequency (per M)']:.2f}")
+            
+            zipf_val = ""
             if 'Zipf Law Frequency Band' in df.columns:
-                html += f"<td>{row['Zipf Law Frequency Band']}</td>"
+                zipf_val = str(row['Zipf Law Frequency Band'])
+            elif 'Zipf Score' in df.columns:
+                zipf_val = f"{row['Zipf Score']:.2f}"
+            r_cols[4].write(zipf_val)
             
-            html += "</tr>"
-        
-        html += "</tbody></table>"
-        
-        st.markdown(html, unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 4px 0; border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
         
         # Limit export to 100,000 rows to prevent Excel and Memory crashes
         df_export = df.head(100000)
