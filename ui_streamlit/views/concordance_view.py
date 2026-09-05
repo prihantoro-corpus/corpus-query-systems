@@ -55,7 +55,17 @@ def render_concordance_view():
             tab_simple, tab_advanced = st.tabs(["Simple", "Advanced"])
 
             with tab_simple:
-                search_term_simple = st.text_input("Node Word(s)", value=get_state('kwic_search_term', ''), key="kwic_input_simple", help="Search word or phrase")
+                c_s1, c_s2, c_s3 = st.columns([2, 1, 1])
+                with c_s1:
+                    search_term_simple = st.text_input("Node Word(s)", value=get_state('kwic_search_term', ''), key="kwic_input_simple", help="Search word or phrase")
+                with c_s2:
+                    limit_simple_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit_simple")
+                with c_s3:
+                    st.write("")
+                    fetch_all_simple = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_simple', True), key="kwic_all_simple_cb")
+                
+                limit_simple = 999999999 if fetch_all_simple else limit_simple_input
+
                 if st.button("Generate Concordance", type="primary", key="btn_generate_simple", use_container_width=True):
                     set_state('kwic_search_term', search_term_simple)
                     st.session_state['last_kwic_results_cluster'] = None
@@ -71,7 +81,7 @@ def render_concordance_view():
                         query=search_term_simple,
                         left=5,
                         right=5,
-                        limit=100,
+                        limit=limit_simple,
                         coll_filter="",
                         xml_where="",
                         xml_params=[],
@@ -91,13 +101,18 @@ def render_concordance_view():
                     st.caption("Fast, deterministic parsing without AI. Supports: 'followed by', 'preceded by', 'before', 'after', and POS terms like 'noun', 'verb', 'adjective'.")
 
                     with st.expander("Search Controls", expanded=True):
-                        col1, col2, col3 = st.columns([2, 1, 1])
+                        col1, col2, col3, col4 = st.columns([2.5, 1.5, 1.2, 1.2])
                         with col1:
                              nl_query = st.text_input("Natural Language Query", value=get_state('kwic_nl_query_rule', ''), key="kwic_nl_input_rule", help="e.g. any word followed by 'adjective'")
                         with col2:
                              window_size = st.slider("Context Window", 1, 20, 5, key="kwic_window_rule")
                         with col3:
-                             limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit_rule")
+                             limit_rule_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit_rule")
+                        with col4:
+                             st.write("")
+                             fetch_all_rule = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_rule', True), key="kwic_all_rule_cb")
+
+                        limit = 999999999 if fetch_all_rule else limit_rule_input
 
                         # Annotation Tag Guide Popover
                         from ui_streamlit.components.pos_help import render_annotation_help_button
@@ -189,11 +204,16 @@ def render_concordance_view():
 
                     # Display & Search Options for AI Mode
                     with st.expander("Search & Display Options", expanded=True):
-                        c_ai1, c_ai2 = st.columns(2)
+                        c_ai1, c_ai2, c_ai3 = st.columns([2, 1.2, 1.2])
                         with c_ai1:
                             window_size_ai = st.slider("Context Window", 1, 20, get_state('kwic_window', 5), key="kwic_window_ai")
                         with c_ai2:
-                            limit_ai = st.number_input("Max Lines", 10, 5000, get_state('kwic_limit', 100), step=10, key="kwic_limit_ai")
+                            limit_ai_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit_ai")
+                        with c_ai3:
+                            st.write("")
+                            fetch_all_ai = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_ai', True), key="kwic_all_ai_cb")
+
+                        limit_ai = 999999999 if fetch_all_ai else limit_ai_input
                             
                         c_ai3, c_ai4 = st.columns(2)
                         with c_ai3:
@@ -261,13 +281,18 @@ def render_concordance_view():
 
                 if search_mode == "Standard":
                     with st.expander("Search Controls", expanded=True):
-                        col1, col2, col3 = st.columns([2, 1, 1])
+                        col1, col2, col3, col4 = st.columns([2.5, 1.5, 1.2, 1.2])
                         with col1:
                              search_term = st.text_input("Node Word(s)", value=get_state('kwic_search_term'), key="kwic_input", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma, token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN type=\"human\">)")
                         with col2:
                              window_size = st.slider("Context Window", 1, 20, 5, key="kwic_window")
                         with col3:
-                             limit = st.number_input("Max Lines", 10, 5000, 100, step=10, key="kwic_limit")
+                             limit_standard_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit")
+                        with col4:
+                             st.write("")
+                             fetch_all_standard = st.checkbox("Retrieve All (No Limit)", value=get_state('kwic_fetch_all_standard', True), key="kwic_all_standard_cb")
+
+                        limit = 999999999 if fetch_all_standard else limit_standard_input
 
                         # Annotation Tag Guide Popover
                         from ui_streamlit.components.pos_help import render_annotation_help_button
@@ -511,47 +536,6 @@ def render_concordance_view():
                             set_state('show_ann_upload', False)
                             st.rerun()
 
-                if results:
-                    # Annotation Mode Toggle
-                    col_ann1, col_ann2, col_ann3 = st.columns([1, 1, 2])
-                    with col_ann1:
-                        ann_mode = st.toggle("✍️ Annotation Mode", value=get_state('kwic_ann_mode', False), key="kwic_ann_mode_toggle")
-                        set_state('kwic_ann_mode', ann_mode)
-
-                    with col_ann2:
-                        if ann_mode:
-                            if st.button("🏛️ Apply to Session", help="Add these annotations to the active working corpus for all tabs"):
-                                set_state('show_db_save_confirm', True)
-
-                    if get_state('show_db_save_confirm'):
-                        with st.container(border=True):
-                            st.info("ℹ️ **Apply to Active Session**")
-                            st.write("This will add these labels to the current working corpus in this session. They will be visible in the Overview and Restricted Search tabs.")
-                            st.write("⚠️ *Note: These changes are not saved to the source XML. If you re-upload the corpus, you will need to restore your annotations from a backup file.*")
-                            st.checkbox("I understand and want to proceed", key="db_save_confirm_check")
-
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                if st.button("🚀 Apply Labels", type="primary", disabled=not st.session_state.get('db_save_confirm_check')):
-                                    import importlib
-                                    import core.modules.concordance as cm
-                                    importlib.reload(cm) 
-                                    if hasattr(cm, 'persist_annotations_to_db'):
-                                        success, msg = cm.persist_annotations_to_db(results['path'], st.session_state.get('kwic_annotations', {}))
-                                    else:
-                                        success, msg = False, "Internal Error: Persistence function not found in module after reload."
-                                    if success:
-                                        st.success(f"✅ {msg}")
-                                        set_state('show_db_save_confirm', False)
-                                        # Reset some caches to make sure other modules see the change
-                                        st.cache_data.clear() 
-                                    else:
-                                        st.error(f"❌ {msg}")
-                            with c2:
-                                if st.button("Cancel"):
-                                    set_state('show_db_save_confirm', False)
-                                    st.rerun()
-
             # --- Results Display / Annotation Resume ---
             results = st.session_state.get('last_kwic_results_primary')
             cluster_results = st.session_state.get('last_kwic_results_cluster')
@@ -560,6 +544,46 @@ def render_concordance_view():
             if 'kwic_annotations' not in st.session_state:
                 st.session_state['kwic_annotations'] = {}
             kwic_annotations = st.session_state['kwic_annotations']
+
+            # Annotation Mode Toggle
+            col_ann1, col_ann2, col_ann3 = st.columns([1, 1, 2])
+            with col_ann1:
+                ann_mode = st.toggle("✍️ Annotation Mode", value=get_state('kwic_ann_mode', False), key="kwic_ann_mode_toggle")
+                set_state('kwic_ann_mode', ann_mode)
+
+            with col_ann2:
+                if ann_mode:
+                    if st.button("🏛️ Apply to Session", help="Add these annotations to the active working corpus for all tabs"):
+                        set_state('show_db_save_confirm', True)
+
+            if get_state('show_db_save_confirm'):
+                with st.container(border=True):
+                    st.info("ℹ️ **Apply to Active Session**")
+                    st.write("This will add these labels to the current working corpus in this session. They will be visible in the Overview and Restricted Search tabs.")
+                    st.write("⚠️ *Note: These changes are not saved to the source XML. If you re-upload the corpus, you will need to restore your annotations from a backup file.*")
+                    st.checkbox("I understand and want to proceed", key="db_save_confirm_check")
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("🚀 Apply Labels", type="primary", disabled=not st.session_state.get('db_save_confirm_check')):
+                            import importlib
+                            import core.modules.concordance as cm
+                            importlib.reload(cm) 
+                            if hasattr(cm, 'persist_annotations_to_db'):
+                                success, msg = cm.persist_annotations_to_db(results['path'], st.session_state.get('kwic_annotations', {}))
+                            else:
+                                success, msg = False, "Internal Error: Persistence function not found in module after reload."
+                            if success:
+                                st.success(f"✅ {msg}")
+                                set_state('show_db_save_confirm', False)
+                                # Reset some caches to make sure other modules see the change
+                                st.cache_data.clear() 
+                            else:
+                                st.error(f"❌ {msg}")
+                    with c2:
+                        if st.button("Cancel"):
+                            set_state('show_db_save_confirm', False)
+                            st.rerun()
 
             # Case A: Cluster Mode Results -- 3 TABS
             if cluster_results:
@@ -1243,6 +1267,12 @@ def render_concordance_column(results, search_term, key_suffix=""):
      }])
      st.table(summary_df)
 
+     if total > len(kwic_rows):
+         st.warning(
+             f"⚠️ **Results Truncated**: Showing **{len(kwic_rows):,}** sample lines out of **{total:,}** total matches in the corpus. "
+             f"To retrieve all {total:,} matches, check **'Retrieve All (No Limit)'** in Search Controls."
+         )
+
      if not breakdown.empty:
          with st.expander("Token Breakdown Stats", expanded=True):
              st.dataframe(breakdown.head(20), use_container_width=True, hide_index=True)
@@ -1294,12 +1324,12 @@ def render_concordance_column(results, search_term, key_suffix=""):
          st.markdown("---")
          c_pag1, c_pag2, c_pag3 = st.columns([2, 3, 2])
          
-         page_size_options = [25, 50, 100, 250, 500, "All"]
-         saved_ps = get_state(f'kwic_page_size_{key_suffix}', 50)
+         page_size_options = ["All", 25, 50, 100, 250, 500]
+         saved_ps = get_state(f'kwic_page_size_{key_suffix}', "All")
          try:
              default_idx = page_size_options.index(saved_ps)
          except ValueError:
-             default_idx = 1
+             default_idx = 0
              
          with c_pag1:
              selected_ps = st.selectbox(
@@ -1353,8 +1383,6 @@ def render_concordance_column(results, search_term, key_suffix=""):
          html = f"""
          <style>
          .kwic-table-wrapper {{
-             max-height: 600px;
-             overflow-y: auto;
              overflow-x: auto;
              border: 1px solid #334155;
              border-radius: 8px;
