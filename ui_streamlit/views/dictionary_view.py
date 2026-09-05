@@ -371,7 +371,22 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     s_html += f'<span><b>POS:</b> {", ".join(unique_pos)}</span>'
     s_html += f'<span><b>Freq:</b> {total_freq:,} {"(Lemma)" if is_lemma_fallback else ""}</span>'
     s_html += f'<span><b>Rel:</b> {pmw:.2f} pmw {"(Lemma)" if is_lemma_fallback else ""}</span>'
-    s_html += f'<span style="display: inline-flex; align-items: center; gap: 5px;"><b>Band:</b> {get_zipf_bar_html(band)}</span>'
+    zipf_popover_html = (
+        '<details style="display: inline-block; position: relative; margin-left: 2px; cursor: pointer;">'
+        '<summary style="color: #00FFF5; font-size: 0.85em; list-style: none; display: inline-block; font-weight: bold; background: rgba(0, 255, 245, 0.15); border: 1px solid #00FFF5; border-radius: 50%; width: 18px; height: 18px; text-align: center; line-height: 16px;" title="Click for Zipf Band calculation & thresholds">?</summary>'
+        '<div style="position: absolute; top: 24px; left: -100px; z-index: 1000; background: #0f172a; border: 1px solid #00FFF5; padding: 12px 14px; border-radius: 8px; width: 310px; font-size: 0.82em; color: #f8fafc; box-shadow: 0 10px 25px rgba(0,0,0,0.85); line-height: 1.4;">'
+        '<div style="font-weight: bold; color: #00FFF5; margin-bottom: 6px;">📊 Zipf Frequency Band System</div>'
+        '<div style="margin-bottom: 6px;"><b>Formula:</b> <code style="color:#00FFF5;">Zipf = log10(PMW) + 3</code><br><span style="color:#aaa; font-size:0.9em;">(PMW = Per Million Words frequency)</span></div>'
+        '<div style="font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #334155; padding-bottom: 2px;">Threshold Bands:</div>'
+        '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">'
+        '<div><b>Band 5:</b> Zipf ≥ 6.0</div><div>(PMW ≥ 1,000)</div>'
+        '<div><b>Band 4:</b> Zipf 5.0–5.9</div><div>(PMW 100–999)</div>'
+        '<div><b>Band 3:</b> Zipf 4.0–4.9</div><div>(PMW 10–99)</div>'
+        '<div><b>Band 2:</b> Zipf 3.0–3.9</div><div>(PMW 1–9)</div>'
+        '<div><b>Band 1:</b> Zipf < 3.0</div><div>(PMW < 1)</div>'
+        '</div></div></details>'
+    )
+    s_html += f'<span style="display: inline-flex; align-items: center; gap: 5px;"><b>Band:</b> {get_zipf_bar_html(band)} {zipf_popover_html}</span>'
     s_html += '</div>'
     
     s_html += '<div style="margin-bottom: 8px;">'
