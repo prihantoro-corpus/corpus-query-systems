@@ -418,12 +418,11 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
         """, unsafe_allow_html=True)
         
         # Render N-Gram results table with in-memory Streamlit buttons to prevent browser page reload and loss of uploaded files
-        header_cols = st.columns([3.5, 1.5, 1.2, 1.5, 1.5])
+        header_cols = st.columns([4, 2, 2, 2])
         header_cols[0].markdown("**N-Gram**")
         header_cols[1].markdown("**Concordance**")
         header_cols[2].markdown("**Frequency**")
         header_cols[3].markdown("**Relative Freq (PMW)**")
-        header_cols[4].markdown("**Zipf Band / Score**")
         st.markdown("<hr style='margin: 4px 0 12px 0; border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
         
         for idx, row in df_display.iterrows():
@@ -439,7 +438,7 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
             
             kwic_query_str = format_ngram_to_concordance_query(ngram_text, positional_bases=pos_bases, global_basis=global_basis)
             
-            r_cols = st.columns([3.5, 1.5, 1.2, 1.5, 1.5])
+            r_cols = st.columns([4, 2, 2, 2])
             r_cols[0].markdown(colored_ngram, unsafe_allow_html=True)
             
             if r_cols[1].button("🔍 concordance", key=f"btn_kwic_redir_{key_suffix}_{idx}"):
@@ -451,13 +450,6 @@ def render_ngram_results_column(df, n_val, corpus_name, key_suffix=""):
                 
             r_cols[2].write(f"{row['Frequency']:,}")
             r_cols[3].write(f"{row['Relative Frequency (per M)']:.2f}")
-            
-            zipf_val = ""
-            if 'Zipf Law Frequency Band' in df.columns:
-                zipf_val = str(row['Zipf Law Frequency Band'])
-            elif 'Zipf Score' in df.columns:
-                zipf_val = f"{row['Zipf Score']:.2f}"
-            r_cols[4].write(zipf_val)
             
             st.markdown("<hr style='margin: 4px 0; border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
         
