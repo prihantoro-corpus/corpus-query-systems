@@ -58,19 +58,19 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
                 key=f"kwic_net_shared_only_{key_suffix}"
             )
 
-        f1, f2 = st.columns([1, 1])
-        with f1:
+        max_cats = len(cluster_names)
+        if max_cats > 2:
             min_shared = st.slider(
                 "Minimum Shared Categories",
                 min_value=2,
-                max_value=max(2, len(cluster_names)),
+                max_value=max_cats,
                 value=2,
                 disabled=not show_shared_only,
                 help="Only show KWIC items shared across at least this number of categories.",
                 key=f"kwic_net_min_shared_{key_suffix}"
             )
-        with f2:
-            st.write("")
+        else:
+            min_shared = 2
 
     data_by_category = {}
     
@@ -327,17 +327,19 @@ def render_concordance_overlap_overview(cluster_results, has_coll_filter=False, 
                 key=f"kwic_ov_shared_only_{key_suffix}"
             )
 
-        f1, f2 = st.columns([1, 1])
-        with f1:
+        max_cats = len(cluster_names)
+        if max_cats > 2:
             min_shared = st.slider(
                 "Minimum Shared Categories",
                 min_value=2,
-                max_value=max(2, len(cluster_names)),
+                max_value=max_cats,
                 value=2,
                 disabled=not show_shared_only,
                 help="Only show items shared across at least this number of categories.",
                 key=f"kwic_ov_min_shared_{key_suffix}"
             )
+        else:
+            min_shared = 2
 
     # Data collection per category
     category_item_counts = {}
