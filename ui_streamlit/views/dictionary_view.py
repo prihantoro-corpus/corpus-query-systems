@@ -373,11 +373,12 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
     s_html += f'<span><b>Rel:</b> {pmw:.2f} pmw {"(Lemma)" if is_lemma_fallback else ""}</span>'
     zipf_tooltip_text = (
         "Zipf Frequency Scale Formula: Zipf = log10(PMW) + 3&#10;&#10;"
-        "Band 5 (Very High): Zipf ≥ 6.0 (PMW ≥ 1,000)&#10;"
-        "Band 4 (High): Zipf 5.0–5.9 (PMW 100–999)&#10;"
-        "Band 3 (Medium): Zipf 4.0–4.9 (PMW 10–99)&#10;"
-        "Band 2 (Low): Zipf 3.0–3.9 (PMW 1–9)&#10;"
-        "Band 1 (Very Low / Rare): Zipf < 3.0 (PMW < 1)"
+        "Band 6 (Extremely High): Zipf ≥ 6.0 (PMW ≥ 1,000)&#10;"
+        "Band 5 (High): Zipf 5.0–5.9 (PMW 100–999)&#10;"
+        "Band 4 (Medium-High): Zipf 4.0–4.9 (PMW 10–99)&#10;"
+        "Band 3 (Medium): Zipf 3.0–3.9 (PMW 1–9)&#10;"
+        "Band 2 (Low): Zipf 2.0–2.9 (PMW 0.1–0.99)&#10;"
+        "Band 1 (Very Low / Rare): Zipf < 2.0 (PMW < 0.1)"
     )
     zipf_help_icon = f'<span title="{zipf_tooltip_text}" style="color: #00FFF5; font-size: 0.8em; cursor: help; font-weight: bold; background: rgba(0, 255, 245, 0.15); border: 1px solid #00FFF5; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; margin-left: 3px;">?</span>'
     s_html += f'<span style="display: inline-flex; align-items: center; gap: 5px;"><b>Band:</b> {get_zipf_bar_html(band)} {zipf_help_icon}</span>'
@@ -477,11 +478,12 @@ def render_dictionary_result_column(path, corpus_name, current_term, xml_where, 
 
         | Zipf Band | Description | Zipf Score Threshold | Per Million Words (PMW) Range |
         | :--- | :--- | :--- | :--- |
-        | **Band 5 (🟩 Very High)** | Extremely common words | $\\text{Zipf} \\ge 6.0$ | $\\ge 1,000$ PMW |
-        | **Band 4 (🟦 High)** | High frequency vocabulary | $5.0 \\le \\text{Zipf} < 6.0$ | $100 - 999$ PMW |
-        | **Band 3 (🟨 Medium)** | Medium frequency vocabulary | $4.0 \\le \\text{Zipf} < 5.0$ | $10 - 99$ PMW |
-        | **Band 2 (🟧 Low)** | Low frequency vocabulary | $3.0 \\le \\text{Zipf} < 4.0$ | $1 - 9$ PMW |
-        | **Band 1 (🟥 Very Low)** | Rare / Low frequency words | $\\text{Zipf} < 3.0$ | $< 1$ PMW |
+        | **Band 6 (🟨 Extremely High)** | Top frequency vocabulary | $\\text{Zipf} \\ge 6.0$ | $\\ge 1,000$ PMW |
+        | **Band 5 (🟩 High)** | High frequency vocabulary | $5.0 \\le \\text{Zipf} < 6.0$ | $100 - 999$ PMW |
+        | **Band 4 (🟦 Medium-High)** | Medium-high frequency vocabulary | $4.0 \\le \\text{Zipf} < 5.0$ | $10 - 99$ PMW |
+        | **Band 3 (🟨 Medium)** | Medium frequency vocabulary | $3.0 \\le \\text{Zipf} < 4.0$ | $1 - 9$ PMW |
+        | **Band 2 (🟧 Low)** | Low frequency vocabulary | $2.0 \\le \\text{Zipf} < 3.0$ | $0.1 - 0.99$ PMW |
+        | **Band 1 (🟥 Very Low)** | Rare / Low frequency words | $\\text{Zipf} < 2.0$ | $< 0.1$ PMW |
         """)
 
     if not forms_df.empty:
