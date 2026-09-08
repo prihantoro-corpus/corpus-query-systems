@@ -1,0 +1,27 @@
+{
+  "tagger_type": "Rule-Based",
+  "files": {
+    "Lexicon.txt": {
+      "type": "lexicon",
+      "content": "I\tPRON\tI\nam\tVERB\tbe\na\tART\ta\nan\tART\ta\nWhite House\tNOUN\tWhite House\nsaw\tNOUN\tsaw\tVERB\tsee\nto\tPREP\tto\n"
+    },
+    "Word-form.txt": {
+      "type": "word_form",
+      "content": "flying\tVERB\tfly\nflies\tVERB\tfly\nseeing\tVERB\tsee\nsees\tVERB\tsee\n"
+    },
+    "Guesser-regex.txt": {
+      "type": "guesser_regex",
+      "content": "VERB\ting\nNOUN\ttion\nADJ\tal\n"
+    },
+    "Guesser1.txt": {
+      "type": "guesser_one_tag",
+      "content": "NOUN\n"
+    }
+  },
+  "priority_order": [
+    "Lexicon.txt",
+    "Word-form.txt",
+    "Guesser-regex.txt",
+    "Guesser1.txt"
+  ]
+}

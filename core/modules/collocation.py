@@ -286,8 +286,8 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
                         query_where.append(f"regexp_matches({col_target}, ?)")
                         query_params.append('(?i)^' + re.escape(val) + '$')
                     else:
-                        query_where.append(f"{col_target} = ?")
-                        query_params.append(val)
+                        query_where.append(f"regexp_matches({col_target}, ?)")
+                        query_params.append(r'(?i)(^|\s)' + re.escape(val) + r'($|\s)')
 
         try: con.execute("DROP TABLE IF EXISTS search_matches")
         except: pass

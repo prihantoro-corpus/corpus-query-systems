@@ -403,11 +403,20 @@ def build_online_corpus(mode_type, params, progress_callback=None):
     
     if mode_type == "detik":
         from core.modules.detik_scraper import build_detik_corpus_xml
+        scrape_mode = params.get('scrape_mode', 'tag')
         tag = params.get('tag', 'ppds')
+        section_target = params.get('section_target', 'news')
         target_count = params.get('target_count', 100)
-        xml_content, df_summary, total_count = build_detik_corpus_xml(tag, target_count=target_count, progress_callback=progress_callback)
+        xml_content, df_summary, total_count = build_detik_corpus_xml(
+            tag=tag, 
+            section_target=section_target, 
+            scrape_mode=scrape_mode, 
+            target_count=target_count, 
+            progress_callback=progress_callback
+        )
         if xml_content:
-            builder.add_content(f"detik_{tag}_corpus.xml", xml_content)
+            target_label = section_target if scrape_mode == 'section' else tag
+            builder.add_content(f"detik_{scrape_mode}_{target_label}_corpus.xml", xml_content)
         return builder.downloaded_files, warning
         
     elif mode_type == "youtube":

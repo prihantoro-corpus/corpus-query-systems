@@ -1,0 +1,7 @@
+I	PRON	I
+am	VERB	be
+a	ART	a
+an	ART	a
+White House	NOUN	White House
+saw	NOUN	saw	VERB	see
+to	PREP	to

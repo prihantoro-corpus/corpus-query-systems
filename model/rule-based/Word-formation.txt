@@ -1,0 +1,4 @@
+V013	VERB	<D1>ing	# fly > fl > + ing > flying
+V013	VERB	<D1>ies	# fly > fl > + ies > flies
+V014	VERB	ing	# see > +ing > seeing
+V014	VERB	s	# see > +is > sees

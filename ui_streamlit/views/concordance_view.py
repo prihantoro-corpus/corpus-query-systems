@@ -1221,6 +1221,34 @@ def run_concordance_query(identifier, path, name, query, left, right, limit, col
             focus_sentence=focus_sentence,
             show_duplicates=show_duplicates
         )
+        
+        if not kwic_rows:
+            import core.modules.concordance as cm
+            import importlib
+            importlib.reload(cm)
+            raw_rows, raw_total, raw_q, raw_lit_freq, raw_sent_ids, raw_breakdown = cm.generate_kwic(
+                corpus_db_path=path,
+                raw_target_input=query,
+                kwic_left=left,
+                kwic_right=right,
+                corpus_name=name,
+                pattern_collocate_input=coll_filter,
+                pattern_window=left,
+                limit=limit,
+                xml_where_clause=xml_where,
+                xml_params=list(xml_params) if xml_params else [],
+                show_pos=show_pos,
+                show_lemma=show_lemma,
+                hide_symbols=hide_symbols,
+                focus_sentence=focus_sentence,
+                show_duplicates=show_duplicates
+            )
+            if raw_rows:
+                try:
+                    st.cache_data.clear()
+                except:
+                    pass
+                kwic_rows, total, raw_q, lit_freq, sent_ids, breakdown_df = raw_rows, raw_total, raw_q, raw_lit_freq, raw_sent_ids, raw_breakdown
         st.session_state[f'last_kwic_results_{identifier}'] = {
             'rows': kwic_rows,
             'total': total,

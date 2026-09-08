@@ -210,7 +210,7 @@ def annotate_ner_tags_in_db(db_path, all_entities):
     if not all_entities:
         return False
         
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         # 1. Group entities by (Filename, sent_id) for efficient lookup
         from collections import defaultdict

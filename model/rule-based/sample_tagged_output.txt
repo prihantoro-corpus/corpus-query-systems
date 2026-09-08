@@ -1,0 +1,12 @@
+I	PRON	I
+am	VERB	be
+flying	VERB	fly
+to	PREP	to
+White House	NOUN	White House
+,	SYM	,
+John	NOUN	john
+.	SYM	.
+
+National	ADJ	national
+emergency	NOUN	emergency
+.	SYM	.

@@ -47,6 +47,11 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     if custom_tagger_config:
         if 'pre_trained_tagger' in custom_tagger_config:
             custom_tagger = custom_tagger_config['pre_trained_tagger']
+        elif custom_tagger_config.get('custom_type') == 'Rule-Based':
+            from core.preprocessing.custom_tagger import CustomRuleBasedTagger
+            custom_tagger = custom_tagger_config.get('rule_based_tagger')
+            if custom_tagger is None:
+                custom_tagger = CustomRuleBasedTagger()
         else:
             from core.preprocessing.custom_tagger import CustomDataDrivenTagger
             custom_tagger = CustomDataDrivenTagger(
@@ -67,7 +72,10 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
 
     def make_custom_tagger_wrapper(tagger, s_lang):
         def custom_tagger_wrapper(text, lang_code=None):
-            sentences = tagging.tokenize_text_only(text, s_lang)
+            if hasattr(tagger, 'tokenize_with_mwu'):
+                sentences = tagger.tokenize_with_mwu(text, s_lang)
+            else:
+                sentences = tagging.tokenize_text_only(text, s_lang)
             tagged_results = []
             sent_id = 0
             
@@ -403,7 +411,10 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     if 'current_is_tagged' in locals() and current_is_tagged or 'Vertical' in selected_format:
         actual_tagger = "Pre-tagged (User Provided)"
     elif custom_tagger:
-        actual_tagger = "Custom Data-Driven Tagger"
+        if getattr(custom_tagger, 'tagger_type', None) == "Rule-Based":
+            actual_tagger = "Custom Rule-Based Tagger"
+        else:
+            actual_tagger = "Custom Data-Driven Tagger"
     else:
         if 'stanza_warning' in locals() and stanza_warning and 'switching to SpaCy' in stanza_warning:
             actual_tagger = "SpaCy (Fallback from TreeTagger)"

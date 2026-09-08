@@ -58,8 +58,8 @@ def clean_detik_url(url):
 
 def is_valid_detik_news_link(href):
     """
-    Validates if a URL is a Detik news article link containing 'berita' or '/d-' article ID,
-    excluding video, photo, tv, and infografis URLs.
+    Validates if a URL is a Detik news article link containing '/d-' article ID or 'berita',
+    excluding video, photo, tv, infografis, and index URLs.
     """
     if not href or not isinstance(href, str):
         return False
@@ -68,16 +68,99 @@ def is_valid_detik_news_link(href):
     if not (href.startswith('http://') or href.startswith('https://')):
         return False
 
-    # Skip non-article sections
-    bad_keywords = ['/detiktv/', '/foto/', '/fotohealth/', '/infografis/', '/video/', '/tv/', '/wawancara-khusus/']
+    # Skip non-article sections and index pages
+    bad_keywords = ['/detiktv/', '/foto/', '/fotohealth/', '/infografis/', '/video/', '/tv/', '/wawancara-khusus/', '/indeks']
     if any(bad in href for bad in bad_keywords):
         return False
 
-    # Must contain berita or article ID /d-
-    if ('/berita' in href or 'berita-' in href or '/d-' in href):
+    # Check for article ID pattern /d-\d+ or berita
+    if re.search(r'/d-\d+', href) or '/berita' in href or 'berita-' in href:
         return True
 
     return False
+
+def discover_detik_section_links(section_target, target_count=100, progress_callback=None):
+    """
+    Crawls section index pages (e.g., https://news.detik.com/indeks?page={num} or custom section URL)
+    and extracts unique news article links up to target_count.
+    """
+    if not section_target:
+        return []
+    
+    section_map = {
+        'news': 'https://news.detik.com/indeks',
+        'food': 'https://food.detik.com/indeks',
+        'hikmah': 'https://www.detik.com/hikmah/indeks',
+        'finance': 'https://finance.detik.com/indeks',
+        'health': 'https://health.detik.com/indeks',
+        'inet': 'https://inet.detik.com/indeks',
+        'hot': 'https://hot.detik.com/indeks',
+        'sport': 'https://sport.detik.com/indeks',
+        'travel': 'https://travel.detik.com/indeks',
+        'oto': 'https://oto.detik.com/indeks',
+        'wolipop': 'https://wolipop.detik.com/indeks',
+        'edu': 'https://edu.detik.com/indeks',
+        'properti': 'https://properti.detik.com/indeks',
+    }
+    
+    base_url = section_map.get(section_target.strip().lower(), section_target.strip())
+    if not base_url.startswith('http'):
+        base_url = f"https://{base_url}"
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
+    found_links = []
+    page = 1
+    max_pages = 50
+    
+    if isinstance(target_count, str) and 'all' in target_count.lower():
+        max_articles = 500
+    else:
+        try:
+            max_articles = int(target_count)
+        except Exception:
+            max_articles = 100
+
+    while len(found_links) < max_articles and page <= max_pages:
+        if '?' in base_url:
+            page_url = f"{base_url}&page={page}"
+        else:
+            page_url = f"{base_url}?page={page}"
+
+        if progress_callback:
+            progress_callback(f"Crawling Detik.com Section Page {page}...", min(0.3, (page / 15)))
+
+        try:
+            res = requests.get(page_url, headers=headers, timeout=10)
+            if res.status_code != 200:
+                break
+            
+            soup = BeautifulSoup(res.content, 'html.parser')
+            article_anchors = soup.find_all('a', href=True)
+            
+            new_links_in_page = 0
+            for a in article_anchors:
+                href = a['href']
+                if is_valid_detik_news_link(href):
+                    cleaned_link = clean_detik_url(href)
+                    if cleaned_link not in found_links:
+                        found_links.append(cleaned_link)
+                        new_links_in_page += 1
+                        if len(found_links) >= max_articles:
+                            break
+
+            if new_links_in_page == 0:
+                break
+                
+            page += 1
+            time.sleep(0.3)
+        except Exception as e:
+            print(f"[WARN] Error crawling section page {page}: {e}")
+            break
+
+    return found_links
 
 def discover_detik_tag_links(tag, target_count=100, progress_callback=None):
     """
@@ -194,9 +277,9 @@ def scrape_detik_article(url, headers=None):
         print(f"[ERROR] Failed to scrape article {url}: {e}")
         return None
 
-def build_detik_corpus_xml(tag, target_count=100, start_date=None, end_date=None, progress_callback=None, **kwargs):
+def build_detik_corpus_xml(tag=None, target_count=100, start_date=None, end_date=None, progress_callback=None, scrape_mode="tag", section_target=None, **kwargs):
     """
-    Crawls Detik tag, scrapes articles, applies optional date filter, and packages exact target_count valid articles into an XML string.
+    Crawls Detik tag or section, scrapes articles, applies optional date filter, and packages exact target_count valid articles into an XML string.
     Returns: (xml_content, df_summary, total_articles)
     """
     if isinstance(target_count, str) and 'all' in target_count.lower():
@@ -209,15 +292,22 @@ def build_detik_corpus_xml(tag, target_count=100, start_date=None, end_date=None
 
     # Discover extra candidate links (up to 3x or 500) to account for invalid articles or date filter skips
     candidate_target = min(500, max_articles * 3) if max_articles < 500 else 500
-    links = discover_detik_tag_links(tag, target_count=candidate_target, progress_callback=progress_callback)
+
+    if scrape_mode == "section":
+        target_name = section_target or tag or "section"
+        links = discover_detik_section_links(target_name, target_count=candidate_target, progress_callback=progress_callback)
+    else:
+        target_name = tag or "detik"
+        links = discover_detik_tag_links(target_name, target_count=candidate_target, progress_callback=progress_callback)
+
     if not links:
         return None, pd.DataFrame(), 0
 
     articles_data = []
     xml_parts = []
-    escaped_tag = html.escape(str(tag), quote=True)
+    escaped_target = html.escape(str(target_name), quote=True)
     xml_parts.append(f'<?xml version="1.0" encoding="UTF-8"?>')
-    xml_parts.append(f'<corpus tag="{escaped_tag}" source="Detik.com">')
+    xml_parts.append(f'<corpus tag="{escaped_target}" source="Detik.com" mode="{html.escape(str(scrape_mode), quote=True)}">')
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'

@@ -262,7 +262,7 @@ def apply_reading_ease_annotation(db_path, filenames, sent_ids, levels):
     """
     Applies the annotated levels back into the DuckDB database under the reading_ease_level column.
     """
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         # Create column if missing
         try:
@@ -308,7 +308,7 @@ def annotate_reading_ease_by_chunks(db_path, chunk_size=1000):
     import pandas as pd
     import re
     
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path, read_only=False)
     try:
         # Fetch all tokens in order of ID
         df = con.execute("SELECT id, token, filename, sent_id FROM corpus ORDER BY id").fetch_df()
