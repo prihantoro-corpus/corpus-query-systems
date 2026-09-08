@@ -923,6 +923,9 @@ class CustomDataDrivenTagger:
         """
         Creates a new CustomDataDrivenTagger instance and loads its state from a serialized JSON dictionary.
         """
+        if isinstance(data, dict) and data.get('tagger_type') == 'Rule-Based':
+            return CustomRuleBasedTagger.from_json(data)
+            
         import collections
         
         tagger = cls(
@@ -973,3 +976,382 @@ class CustomDataDrivenTagger:
         tagger.hmm_lambdas = data.get('hmm_lambdas', [0.0, 0.0, 0.0])
         
         return tagger
+
+
+class CustomRuleBasedTagger:
+    def __init__(self):
+        self.tagger_type = "Rule-Based"
+        self.files = {}  # filename -> {'type': file_type, 'content': content}
+        self.priority_order = []  # list of filenames in priority order
+        self.mwu_set = set()  # set of multi-word string tokens (lowercased)
+        self.raw_mwu_map = {}  # lowercased mwu -> raw mwu token string
+        self.parsed_data = {}  # filename -> parsed data dict
+        self.annotated_corpus_text = ""
+
+    def add_file(self, filename, content, file_type):
+        """
+        Adds or updates a rule file.
+        file_type: 'lexicon', 'lemma', 'word_formation', 'word_form', 'guesser_regex', 'guesser_one_tag'
+        """
+        self.files[filename] = {
+            'type': file_type,
+            'content': content
+        }
+        if filename not in self.priority_order:
+            self.priority_order.append(filename)
+        self._reparse_all()
+
+    def remove_file(self, filename):
+        if filename in self.files:
+            del self.files[filename]
+        if filename in self.priority_order:
+            self.priority_order.remove(filename)
+        self._reparse_all()
+
+    def set_priority_order(self, order):
+        valid_order = [fn for fn in order if fn in self.files]
+        for fn in self.files:
+            if fn not in valid_order:
+                valid_order.append(fn)
+        self.priority_order = valid_order
+
+    def _reparse_all(self):
+        self.mwu_set = set()
+        self.raw_mwu_map = {}
+        self.parsed_data = {}
+
+        for filename, info in self.files.items():
+            ftype = info['type']
+            content = info['content']
+            parsed = self._parse_file_content(content, ftype)
+            self.parsed_data[filename] = parsed
+
+            # Extract MWUs from dictionary entries
+            if ftype in ('lexicon', 'word_form'):
+                dict_entries = parsed.get('dictionary', {})
+                for word in dict_entries:
+                    if ' ' in word:
+                        w_lower = word.lower()
+                        self.mwu_set.add(w_lower)
+                        self.raw_mwu_map[w_lower] = word
+
+    def _parse_file_content(self, content, ftype):
+        if not content:
+            return {}
+
+        lines = content.splitlines()
+
+        if ftype in ('lexicon', 'word_form'):
+            dict_entries = {}
+            for line in lines:
+                if '#' in line:
+                    line = line.split('#', 1)[0]
+                line_str = line.strip()
+                if not line_str:
+                    continue
+
+                if '\t' in line_str:
+                    parts = [p.strip() for p in line_str.split('\t') if p.strip()]
+                else:
+                    parts = [p.strip() for p in line_str.split() if p.strip()]
+
+                if len(parts) >= 2:
+                    word = parts[0]
+                    pairs = []
+                    if len(parts) == 2:
+                        pairs.append((parts[1], word))
+                    elif len(parts) == 3:
+                        tags = parts[1].split('|')
+                        lemmas = parts[2].split('|')
+                        if len(tags) == len(lemmas):
+                            for t, l in zip(tags, lemmas):
+                                pairs.append((t, l))
+                        else:
+                            pairs.append((parts[1], parts[2]))
+                    else:
+                        idx = 1
+                        while idx + 1 < len(parts):
+                            pairs.append((parts[idx], parts[idx+1]))
+                            idx += 2
+
+                    if word not in dict_entries:
+                        dict_entries[word] = []
+                    for t, l in pairs:
+                        if (t, l) not in dict_entries[word]:
+                            dict_entries[word].append((t, l))
+
+            return {'dictionary': dict_entries}
+
+        elif ftype == 'lemma':
+            lemma_entries = {}
+            for line in lines:
+                if '#' in line:
+                    line = line.split('#', 1)[0]
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                parts = [p.strip() for p in line_str.split('\t' if '\t' in line_str else None) if p.strip()]
+                if len(parts) >= 2:
+                    code = parts[0]
+                    if len(parts) == 2:
+                        pos = None
+                        lem = parts[1]
+                    else:
+                        pos = parts[1]
+                        lem = parts[2]
+
+                    if code not in lemma_entries:
+                        lemma_entries[code] = []
+                    lemma_entries[code].append((pos, lem))
+            return {'lemma_map': lemma_entries}
+
+        elif ftype == 'word_formation':
+            rules = []
+            for line in lines:
+                if '#' in line:
+                    line = line.split('#', 1)[0]
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                parts = [p.strip() for p in line_str.split('\t' if '\t' in line_str else None) if p.strip()]
+                if len(parts) >= 3:
+                    code = parts[0]
+                    output_tag = parts[1]
+                    rule = parts[2]
+                    rules.append({'code': code, 'tag': output_tag, 'rule': rule})
+            return {'rules': rules}
+
+        elif ftype == 'guesser_regex':
+            regex_rules = []
+            for line in lines:
+                if '#' in line:
+                    line = line.split('#', 1)[0]
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                parts = [p.strip() for p in line_str.split('\t' if '\t' in line_str else None) if p.strip()]
+                if len(parts) >= 2:
+                    tag = parts[0]
+                    pattern = parts[1]
+                    if any(c in pattern for c in '^$*+?[]()'):
+                        rx = re.compile(pattern, re.IGNORECASE)
+                    else:
+                        rx = re.compile(r".*" + re.escape(pattern) + r"$", re.IGNORECASE)
+                    regex_rules.append({'tag': tag, 'pattern': pattern, 'regex': rx})
+            return {'rules': regex_rules}
+
+        elif ftype == 'guesser_one_tag':
+            default_tag = "UNKNOWN"
+            for line in lines:
+                if '#' in line:
+                    line = line.split('#', 1)[0]
+                line_str = line.strip()
+                if line_str:
+                    default_tag = line_str.split()[0]
+                    break
+            return {'default_tag': default_tag}
+
+        return {}
+
+    @staticmethod
+    def generate_word_form_dictionary(lemma_contents_list, word_formation_contents_list):
+        """
+        Step 1: Combines Lemma and Word Formation contents to synthesize an inflected word form dictionary string.
+        Format: word_form tab tag tab lemma
+        """
+        temp_tagger = CustomRuleBasedTagger()
+        lemma_map = {}
+        for content in lemma_contents_list:
+            parsed = temp_tagger._parse_file_content(content, 'lemma')
+            for k, v in parsed.get('lemma_map', {}).items():
+                if k not in lemma_map:
+                    lemma_map[k] = []
+                lemma_map[k].extend(v)
+
+        rules = []
+        for content in word_formation_contents_list:
+            parsed = temp_tagger._parse_file_content(content, 'word_formation')
+            rules.extend(parsed.get('rules', []))
+
+        generated_lines = []
+        seen = set()
+
+        for r in rules:
+            code = r['code']
+            output_tag = r['tag']
+            rule_str = r['rule']
+
+            if code in lemma_map:
+                for opt_pos, lemma in lemma_map[code]:
+                    del_match = re.match(r'^<D(\d+)>(.*)$', rule_str)
+                    if del_match:
+                        del_count = int(del_match.group(1))
+                        suffix = del_match.group(2)
+                        if del_count == 1 and lemma.endswith('y') and suffix == 'ing':
+                            word_form = lemma + suffix
+                        else:
+                            stem = lemma[:-del_count] if del_count > 0 and len(lemma) >= del_count else lemma
+                            word_form = stem + suffix
+                    else:
+                        word_form = lemma + rule_str
+
+                    key = (word_form, output_tag, lemma)
+                    if key not in seen:
+                        seen.add(key)
+                        generated_lines.append(f"{word_form}\t{output_tag}\t{lemma}")
+
+        return "\n".join(generated_lines)
+
+    def tokenize_with_mwu(self, text, lang_code=None):
+        """
+        Pure deterministic rule-based tokenizer:
+        1. First tokenize based on Multi-Word entries (containing spaces) in active Lexicon/Word-Form files.
+        2. Then apply deterministic whitespace & symbol separation to remaining non-MWU units.
+        """
+        if not text:
+            return []
+
+        mwu_list = sorted(list(self.mwu_set), key=len, reverse=True)
+        raw_sentences = [s.strip() for s in re.split(r'[\r\n]+|(?<=[.!?])\s+', text) if s.strip()]
+        
+        tokenized_sentences = []
+        for raw_sent in raw_sentences:
+            tokens = self._tokenize_sentence_deterministic(raw_sent, mwu_list)
+            if tokens:
+                tokenized_sentences.append(tokens)
+
+        return tokenized_sentences
+
+    def _tokenize_sentence_deterministic(self, sentence_text, mwu_list):
+        placeholders = {}
+        processed_text = sentence_text
+
+        # Step 1: Match MWU entries first
+        for idx, mwu_lower in enumerate(mwu_list):
+            pattern = r'\b' + re.escape(mwu_lower) + r'\b'
+            matches = list(re.finditer(pattern, processed_text, flags=re.IGNORECASE))
+            if matches:
+                for match in reversed(matches):
+                    matched_str = match.group(0)
+                    ph_key = f"___MWU_{idx}_{len(placeholders)}___"
+                    placeholders[ph_key] = matched_str
+                    processed_text = processed_text[:match.start()] + ph_key + processed_text[match.end():]
+
+        # Step 2: Apply whitespace & symbol tokenization to non-MWU units
+        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', processed_text)
+        raw_tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+
+        # Step 3: Restore MWU tokens
+        final_tokens = []
+        for t in raw_tokens:
+            if t in placeholders:
+                final_tokens.append(placeholders[t])
+            else:
+                final_tokens.append(t)
+
+        return final_tokens
+
+    def tag(self, sentence_tokens):
+        if not sentence_tokens:
+            return []
+
+        n = len(sentence_tokens)
+        results = [None] * n
+        rule_source = [None] * n
+
+        # Step 1: Check Punctuation / Symbol tokens
+        for idx, tok in enumerate(sentence_tokens):
+            if bool(re.match(r'^[^\w\s]+$', tok)):
+                results[idx] = {
+                    'pos': 'SYM',
+                    'lemma': tok,
+                    'confidence': 1.0
+                }
+                rule_source[idx] = 'SYM (Punctuation)'
+
+        # Step 2: Apply Priority Order Rules
+        for filename in self.priority_order:
+            if filename not in self.files or filename not in self.parsed_data:
+                continue
+
+            ftype = self.files[filename]['type']
+            parsed = self.parsed_data[filename]
+
+            if ftype in ('lexicon', 'word_form'):
+                dict_entries = parsed.get('dictionary', {})
+                for idx, tok in enumerate(sentence_tokens):
+                    if results[idx] is not None:
+                        continue
+                    matches = dict_entries.get(tok, dict_entries.get(tok.lower()))
+                    if matches:
+                        tags = []
+                        lemmas = []
+                        for t, l in matches:
+                            if t not in tags:
+                                tags.append(t)
+                            if l not in lemmas:
+                                lemmas.append(l)
+                        results[idx] = {
+                            'pos': "|".join(tags),
+                            'lemma': "|".join(lemmas),
+                            'confidence': 1.0
+                        }
+                        rule_source[idx] = filename
+
+            elif ftype == 'guesser_regex':
+                regex_rules = parsed.get('rules', [])
+                for idx, tok in enumerate(sentence_tokens):
+                    if results[idx] is not None:
+                        continue
+                    for r in regex_rules:
+                        if r['regex'].search(tok):
+                            results[idx] = {
+                                'pos': r['tag'],
+                                'lemma': tok.lower(),
+                                'confidence': 1.0
+                            }
+                            rule_source[idx] = f"{filename} ({r['tag']} -> {r['pattern']})"
+                            break
+
+            elif ftype == 'guesser_one_tag':
+                default_tag = parsed.get('default_tag', 'UNKNOWN')
+                for idx, tok in enumerate(sentence_tokens):
+                    if results[idx] is not None:
+                        continue
+                    results[idx] = {
+                        'pos': default_tag,
+                        'lemma': tok.lower(),
+                        'confidence': 1.0
+                    }
+                    rule_source[idx] = f"{filename} ({default_tag})"
+
+        # Step 3: Fallback UNKNOWN
+        for idx, tok in enumerate(sentence_tokens):
+            if results[idx] is None:
+                results[idx] = {
+                    'pos': 'UNKNOWN',
+                    'lemma': tok,
+                    'confidence': 0.0
+                }
+                rule_source[idx] = 'UNKNOWN (Fallback)'
+            results[idx]['rule_source'] = rule_source[idx]
+
+        return results
+
+    def to_json(self):
+        return {
+            'tagger_type': 'Rule-Based',
+            'files': self.files,
+            'priority_order': self.priority_order
+        }
+
+    @classmethod
+    def from_json(cls, data):
+        tagger = cls()
+        files = data.get('files', {})
+        priority = data.get('priority_order', [])
+        for fn, info in files.items():
+            tagger.add_file(fn, info.get('content', ''), info.get('type', 'lexicon'))
+        tagger.set_priority_order(priority)
+        return tagger
+

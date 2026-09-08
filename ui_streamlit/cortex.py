@@ -277,6 +277,10 @@ def main():
     st.markdown(
         """
         <div style="text-align: right; margin-bottom: 0.5rem;">
+            <a href="https://docs.google.com/document/d/1HjF20hLgsPUORqLAXKmY-uqh_RKoQZNmb4uuaRiWyq0/edit?usp=sharing" target="_blank"
+               style="color:#00FFF5; font-weight:700; text-decoration:none; margin-right: 15px;">
+                Citation
+            </a>
             <a href="https://docs.google.com/document/d/1kRlyuVXN4G7QBH4bd1hEFeblegc8ai1_rMKspW1C9-E/edit?usp=sharing" target="_blank"
                style="color:#00FFF5; font-weight:700; text-decoration:none; margin-right: 15px;">
                 ACKNOWLEDGEMENT

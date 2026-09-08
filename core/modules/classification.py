@@ -321,94 +321,118 @@ def apply_classification_to_db(db_path, id_list, topics, sentiments):
     """
     Updates the DuckDB corpus table with new 'topic' and 'sentiment' columns.
     """
-    con = duckdb.connect(db_path, read_only=True)
-    
-    # 1. Create columns if they don't exist
+    con = duckdb.connect(db_path)
     try:
-        con.execute("ALTER TABLE corpus ADD COLUMN topic VARCHAR")
-    except: pass # Already exists
-    
-    try:
-        con.execute("ALTER TABLE corpus ADD COLUMN sentiment VARCHAR")
-    except: pass
-    
-    # 2. Update rows
-    # Bulk update is tricky in SQL without temp table.
-    # Approach: Create a temporary DataFrame -> Table, then Update Join.
-    
-    update_df = pd.DataFrame({
-        'id': id_list,
-        'new_topic': topics,
-        'new_sentiment': sentiments
-    })
-    
-    con.register('update_df', update_df)
-    
-    con.execute("""
-        UPDATE corpus
-        SET topic = update_df.new_topic,
-            sentiment = update_df.new_sentiment
-        FROM update_df
-        WHERE corpus.id = update_df.id
-    """)
-    
-    con.unregister('update_df')
-    con.close()
-    return True
+        # 1. Create columns if they don't exist
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+        existing_cols = {c[1].lower() for c in cols_info}
+        
+        if topics is not None and 'topic' not in existing_cols:
+            try: con.execute("ALTER TABLE corpus ADD COLUMN topic VARCHAR")
+            except Exception as e: print(f"Column topic add note: {e}")
+            
+        if sentiments is not None and 'sentiment' not in existing_cols:
+            try: con.execute("ALTER TABLE corpus ADD COLUMN sentiment VARCHAR")
+            except Exception as e: print(f"Column sentiment add note: {e}")
+        
+        # Verify actual columns in table catalog after ALTER TABLE
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+        actual_cols = {c[1].lower() for c in cols_info}
+
+        # 2. Update rows
+        data = {'id': id_list}
+        set_clauses = []
+        
+        if topics is not None and 'topic' in actual_cols:
+            data['new_topic'] = topics
+            set_clauses.append("topic = update_df.new_topic")
+            
+        if sentiments is not None and 'sentiment' in actual_cols:
+            data['new_sentiment'] = sentiments
+            set_clauses.append("sentiment = update_df.new_sentiment")
+            
+        if not set_clauses:
+            return True
+
+        update_df = pd.DataFrame(data)
+        con.register('update_df', update_df)
+        
+        con.execute(f"""
+            UPDATE corpus
+            SET {', '.join(set_clauses)}
+            FROM update_df
+            WHERE corpus.id = update_df.id
+        """)
+        
+        con.unregister('update_df')
+        return True
+    finally:
+        con.close()
 
 def apply_classification_by_sentence(db_path, filenames, sent_ids, topics=None, sentiments=None):
     """
     Updates the DuckDB corpus table with new 'topic' and 'sentiment' columns
     assigned at the sentence level. Supports updating one or both.
     """
-    con = duckdb.connect(db_path, read_only=True)
-    
-    # 1. Create columns if they don't exist
-    if topics is not None:
-        try: con.execute("ALTER TABLE corpus ADD COLUMN topic VARCHAR")
-        except: pass
-    
-    if sentiments is not None:
-        try: con.execute("ALTER TABLE corpus ADD COLUMN sentiment VARCHAR")
-        except: pass
-    
-    # 2. Update rows
-    data = {'filename': filenames, 'sent_id': sent_ids}
-    set_clauses = []
-    
-    if topics is not None:
-        data['new_topic'] = topics
-        set_clauses.append("topic = update_df.new_topic")
-    
-    if sentiments is not None:
-        data['new_sentiment'] = sentiments
-        set_clauses.append("sentiment = update_df.new_sentiment")
+    con = duckdb.connect(db_path)
+    try:
+        # 1. Check existing columns and create missing ones
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+        existing_cols = {c[1].lower() for c in cols_info}
         
-    if not set_clauses:
-        con.close()
+        if topics is not None and 'topic' not in existing_cols:
+            try:
+                con.execute("ALTER TABLE corpus ADD COLUMN topic VARCHAR")
+            except Exception as e:
+                print(f"Failed to add column 'topic': {e}")
+        
+        if sentiments is not None and 'sentiment' not in existing_cols:
+            try:
+                con.execute("ALTER TABLE corpus ADD COLUMN sentiment VARCHAR")
+            except Exception as e:
+                print(f"Failed to add column 'sentiment': {e}")
+        
+        # Re-fetch actual columns directly from database catalog
+        cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
+        actual_cols = {c[1].lower() for c in cols_info}
+
+        # 2. Update rows
+        data = {'filename': filenames, 'sent_id': sent_ids}
+        set_clauses = []
+        
+        if topics is not None and 'topic' in actual_cols:
+            data['new_topic'] = topics
+            set_clauses.append("topic = update_df.new_topic")
+        
+        if sentiments is not None and 'sentiment' in actual_cols:
+            data['new_sentiment'] = sentiments
+            set_clauses.append("sentiment = update_df.new_sentiment")
+            
+        if not set_clauses:
+            return True
+
+        update_df = pd.DataFrame(data)
+        con.register('update_df', update_df)
+        
+        con.execute(f"""
+            UPDATE corpus
+            SET {', '.join(set_clauses)}
+            FROM update_df
+            WHERE corpus.filename = update_df.filename 
+              AND corpus.sent_id = update_df.sent_id
+        """)
+        
+        con.unregister('update_df')
+
+        # 3. Add Indices for Performance
+        if topics is not None and 'topic' in actual_cols:
+            try: con.execute("CREATE INDEX IF NOT EXISTS idx_topic ON corpus(topic)")
+            except: pass
+            
+        if sentiments is not None and 'sentiment' in actual_cols:
+            try: con.execute("CREATE INDEX IF NOT EXISTS idx_sentiment ON corpus(sentiment)")
+            except: pass
+
         return True
-
-    update_df = pd.DataFrame(data)
-    con.register('update_df', update_df)
-    
-    con.execute(f"""
-        UPDATE corpus
-        SET {', '.join(set_clauses)}
-        FROM update_df
-        WHERE corpus.filename = update_df.filename 
-          AND corpus.sent_id = update_df.sent_id
-    """)
-    
-    con.unregister('update_df')
-
-    # 3. Add Indices for Performance
-    if topics is not None:
-        try: con.execute("CREATE INDEX IF NOT EXISTS idx_topic ON corpus(topic)")
-        except: pass
-        
-    if sentiments is not None:
-        try: con.execute("CREATE INDEX IF NOT EXISTS idx_sentiment ON corpus(sentiment)")
-        except: pass
-
-    con.close()
-    return True
+    finally:
+        con.close()

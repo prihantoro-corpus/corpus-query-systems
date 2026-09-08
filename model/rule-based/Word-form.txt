@@ -1,0 +1,4 @@
+flying	VERB	fly
+flies	VERB	fly
+seeing	VERB	see
+sees	VERB	see

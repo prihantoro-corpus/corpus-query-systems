@@ -157,8 +157,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                      query_where.append(f"regexp_matches({alias}._token_low, ?)")
                      query_params.append(regex_pat)
                  else:
-                     query_where.append(f"{alias}._token_low = ?")
-                     query_params.append(t_val)
+                     query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                     query_params.append(r'(?i)(^|\s)' + re.escape(t_val) + r'($|\s)')
                  
                  # POS SQL
                  if not is_raw_mode: 
@@ -217,8 +217,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     query_where.append(f"regexp_matches({alias}._token_low, ?)")
                     query_params.append(regex_pat)
                 else:
-                    query_where.append(f"{alias}._token_low = ?")
-                    query_params.append(val)
+                    query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                    query_params.append(r'(?i)(^|\s)' + re.escape(val) + r'($|\s)')
             elif comp['type'] == 'lemma' and not is_raw_mode:
                 val = comp['val']
                 if '*' in val or '|' in val:
@@ -228,8 +228,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                     query_params.append(regex_pat)
                 else:
-                    query_where.append(f"lower({alias}.lemma) = ?")
-                    query_params.append(val)
+                    query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
+                    query_params.append(r'(?i)(^|\s)' + re.escape(val) + r'($|\s)')
             elif comp['type'] == 'lemma_pos':
                  l_val = comp['lemma']
                  p_val = comp['pos']
@@ -241,8 +241,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                          query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                          query_params.append(regex_pat)
                      else:
-                         query_where.append(f"lower({alias}.lemma) = ?")
-                         query_params.append(l_val)
+                         query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
+                         query_params.append(r'(?i)(^|\s)' + re.escape(l_val) + r'($|\s)')
                  else:
                      if '*' in l_val or '|' in l_val:
                          parts = [p.strip() for p in l_val.split('|') if p.strip()]
@@ -251,8 +251,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                          query_where.append(f"regexp_matches({alias}._token_low, ?)")
                          query_params.append(regex_pat)
                      else:
-                         query_where.append(f"{alias}._token_low = ?")
-                         query_params.append(l_val)
+                         query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                         query_params.append(r'(?i)(^|\s)' + re.escape(l_val) + r'($|\s)')
                  if not is_raw_mode:
                      if '|' in p_val or '*' in p_val:
                          pats = [p.strip() for p in p_val.split('|') if p.strip()]
@@ -433,6 +433,21 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
             f_debug.write(f"--- QUERY START ---\nFinal Query: {final_query}\nParams: {full_params}\n")
         
         df_matches = con.execute(final_query, full_params).fetch_df()
+        
+        # If multi-token query was entered, also check for single MWU tokens matching the full phrase
+        if primary_target_len > 1:
+            try:
+                mwu_pat = r'(?i)(^|\s)' + re.escape(raw_target_input.strip().lower()) + r'($|\s)'
+                mwu_query = f"SELECT DISTINCT c0.id, 1 as total_len, c0.token as match_token FROM corpus c0 WHERE regexp_matches(c0._token_low, ?)"
+                mwu_params = [mwu_pat]
+                if c0_xml_where:
+                    mwu_query += c0_xml_where
+                    mwu_params += xml_params
+                df_mwu = con.execute(mwu_query, mwu_params).fetch_df()
+                if not df_mwu.empty:
+                    df_matches = pd.concat([df_matches, df_mwu], ignore_index=True).drop_duplicates(subset=['id'])
+            except Exception as e:
+                print(f"Error querying MWU tokens in concordance: {e}")
         
         # Apply symbol filtering if requested
         if hide_symbols and not df_matches.empty:

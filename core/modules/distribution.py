@@ -112,8 +112,8 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
                      query_where.append(f"regexp_matches({alias}._token_low, ?)")
                      query_params.append('^' + re.escape(t_val).replace(r'\*', '.*') + '$')
                  else:
-                     query_where.append(f"{alias}._token_low = ?")
-                     query_params.append(t_val)
+                     query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                     query_params.append(r'(?i)(^|\s)' + re.escape(t_val) + r'($|\s)')
                  
                  # POS SQL
                  if not is_raw_mode: 
@@ -152,8 +152,8 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
                     query_where.append(f"regexp_matches({alias}._token_low, ?)")
                     query_params.append(regex_pat)
                 else:
-                    query_where.append(f"{alias}._token_low = ?")
-                    query_params.append(val)
+                    query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                    query_params.append(r'(?i)(^|\s)' + re.escape(val) + r'($|\s)')
             elif comp['type'] == 'lemma' and not is_raw_mode:
                 val = comp['val']
                 if '*' in val:
@@ -161,8 +161,8 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
                     query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                     query_params.append(regex_pat)
                 else:
-                    query_where.append(f"lower({alias}.lemma) = ?")
-                    query_params.append(val)
+                    query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
+                    query_params.append(r'(?i)(^|\s)' + re.escape(val) + r'($|\s)')
             elif comp['type'] == 'lemma_pos':
                  l_val = comp['lemma']
                  p_val = comp['pos']
@@ -172,16 +172,16 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
                          query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                          query_params.append(regex_pat)
                      else:
-                         query_where.append(f"lower({alias}.lemma) = ?")
-                         query_params.append(l_val)
+                         query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
+                         query_params.append(r'(?i)(^|\s)' + re.escape(l_val) + r'($|\s)')
                  else:
                      if '*' in l_val:
                          regex_pat = '^' + re.escape(l_val).replace(r'\*', '.*') + '$'
                          query_where.append(f"regexp_matches({alias}._token_low, ?)")
                          query_params.append(regex_pat)
                      else:
-                         query_where.append(f"{alias}._token_low = ?")
-                         query_params.append(l_val)
+                         query_where.append(f"regexp_matches({alias}._token_low, ?)")
+                         query_params.append(r'(?i)(^|\s)' + re.escape(l_val) + r'($|\s)')
                  if not is_raw_mode:
                       if '|' in p_val or '*' in p_val:
                           pats = [p.strip() for p in p_val.split('|') if p.strip()]

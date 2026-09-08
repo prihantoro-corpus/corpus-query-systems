@@ -433,14 +433,6 @@ Processing the data revealed a **{strength.lower()} {direction.lower()} correlat
                         if df_matrix.empty:
                             st.error("No data found for clustering. Check if the corpus is empty or filters are too strict.")
                         else:
-                            st.session_state['last_cluster_results'] = {
-                                'matrix': df_matrix,
-                                'top_words': top_words,
-                                'metric': metric_code,
-                                'grouping': grouping_key,
-                                'z_score': z_score
-                            }
-
                             # 2. Perform Clustering (to get linkage Z)
                             res = notify_timing("Clustering performed")(perform_clustering)(
                                 df_matrix, 
@@ -452,7 +444,15 @@ Processing the data revealed a **{strength.lower()} {direction.lower()} correlat
                             if 'error' in res:
                                 st.error(res['error'])
                             else:
-                                st.session_state['last_cluster_results'].update(res)
+                                cluster_results = {
+                                    'matrix': df_matrix,
+                                    'top_words': top_words,
+                                    'metric': metric_code,
+                                    'grouping': grouping_key,
+                                    'z_score': z_score
+                                }
+                                cluster_results.update(res)
+                                st.session_state['last_cluster_results'] = cluster_results
                                 st.success(f"✅ clustered {len(df_matrix)} segments based on {len(top_words)} words.")
 
                     except Exception as e:
@@ -461,7 +461,7 @@ Processing the data revealed a **{strength.lower()} {direction.lower()} correlat
                         st.code(traceback.format_exc())
 
             # --- Display Results ---
-            if 'last_cluster_results' in st.session_state:
+            if 'last_cluster_results' in st.session_state and isinstance(st.session_state['last_cluster_results'], dict) and 'linkage' in st.session_state['last_cluster_results']:
                 res = st.session_state['last_cluster_results']
                 matrix = res['matrix']
                 Z = res['linkage']
@@ -1050,7 +1050,6 @@ Processing the data revealed a **{strength.lower()} {direction.lower()} correlat
                     plot_df['Label'] = [str(l) for l in res['labels']]
                     plot_df['Type'] = ["Known" if str(l).strip().upper() != "QUESTIONED" else "Questioned" for l in res['labels']]
 
-                    import plotly.express as px
                     fig_pca = px.scatter(
                         plot_df, x='PC1', y='PC2',
                         color='Label',

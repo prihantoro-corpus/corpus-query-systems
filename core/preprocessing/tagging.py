@@ -433,12 +433,13 @@ def tokenize_text_with_stanza(text, lang_code):
     except Exception:
         return None
 
-def tokenize_text_only(text, lang_code):
+def tokenize_text_only(text, lang_code=None, fast=False):
     """
-    Splits text into sentences and tokens, bypassing tagging & parsing.
+    Splits text into sentences and tokens.
+    If fast=True or lang_code=="OTHER", uses high-speed regex tokenization (<0.001s).
     Returns: list of list of str (list of sentences, where each sentence is a list of tokens)
     """
-    if not lang_code or lang_code == "OTHER":
+    if fast or not lang_code or lang_code == "OTHER":
         import re
         sentences = split_sentences_custom(text)
         results = []

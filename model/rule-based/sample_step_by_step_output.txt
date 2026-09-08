@@ -1,0 +1,29 @@
+=== Step-by-Step Tagging Pipeline Trace ===
+
+Input Corpus:
+"I am flying to White House, John. National emergency."
+
+MWU Tokenization Overriding:
+[Tokens]: ["I", "am", "flying", "to", "White House", ",", "John", ".", "National", "emergency", "."]
+
+Priority Evaluation Order:
+  1. Lexicon.txt
+  2. Word-form.txt
+  3. Guesser-regex.txt
+  4. Guesser1.txt
+
+--------------------------------------------------------------------------------
+Token          | Tagged POS | Lemma       | Applied Rule / Source File
+--------------------------------------------------------------------------------
+I              | PRON       | I           | Lexicon.txt (Exact Match)
+am             | VERB       | be          | Lexicon.txt (Exact Match)
+flying         | VERB       | fly         | Word-form.txt (Synthesized from Lemma + Word Formation)
+to             | PREP       | to          | Lexicon.txt (Exact Match)
+White House    | NOUN       | White House | Lexicon.txt (Multi-Word Unit Override)
+,              | SYM        | ,           | SYM (Automatic Punctuation Tag)
+John           | NOUN       | john        | Guesser1.txt (One-Tag Guesser Fallback)
+.              | SYM        | .           | SYM (Automatic Punctuation Tag)
+National       | ADJ        | national    | Guesser-regex.txt (ADJ -> al)
+emergency      | NOUN       | emergency   | Guesser1.txt (One-Tag Guesser Fallback)
+.              | SYM        | .           | SYM (Automatic Punctuation Tag)
+--------------------------------------------------------------------------------

@@ -233,9 +233,8 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     m2.metric("Types", f"{display_stats.get('unique_types', 0):,}")
     m3.metric("TTR", f"{display_stats.get('ttr', 0):.4f}")
 
-    # Show database download button for user-uploaded/built corpora
-    source_type = get_state('source_type')
-    if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
+    # Show database download button for active corpus database
+    if path and os.path.exists(path):
         st.write("") # spacing
         
         col_db, col_txt = st.columns(2)
@@ -252,19 +251,26 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
                 )
         with col_txt:
             xml_cache_key = f"xml_export_{key_suffix}"
-            if get_state(xml_cache_key):
-                st.download_button(
-                    label="📥 Download Annotated Corpus (.txt)",
-                    data=get_state(xml_cache_key),
-                    file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
-                    mime="text/plain",
-                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma) including XML tags for NER, Sentiment, etc.",
-                    use_container_width=True,
-                    key=f"dl_txt_btn_{key_suffix}"
-                )
+            cached_xml = get_state(xml_cache_key)
+            if cached_xml:
+                dl_c1, dl_c2 = st.columns([4, 1])
+                with dl_c1:
+                    st.download_button(
+                        label="📥 Download Annotated Corpus (.txt)",
+                        data=cached_xml,
+                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
+                        mime="text/plain",
+                        help="Download the raw tagged corpus text including all annotations (POS, Lemma, Sentiment, Topic, NER, Dependencies, etc.).",
+                        use_container_width=True,
+                        key=f"dl_txt_btn_{key_suffix}"
+                    )
+                with dl_c2:
+                    if st.button("🔄", key=f"regen_xml_btn_{key_suffix}", help="Regenerate annotated corpus from updated database"):
+                        set_state(xml_cache_key, None)
+                        st.rerun()
             else:
-                if st.button("⚙️ Generate Annotated Corpus (.txt)", key=f"gen_xml_btn_{key_suffix}", use_container_width=True, help="Compiles the current database (with all new annotations like NER and Sentiment) into a downloadable XML-tagged text file."):
-                    with st.spinner("Compiling database into XML format (this may take a moment for large corpora)..."):
+                if st.button("⚙️ Generate Annotated Corpus (.txt)", key=f"gen_xml_btn_{key_suffix}", use_container_width=True, help="Compiles the current database (with all annotations: Lemma, POS, NER, Sentiment, Topic, Dependencies, etc.) into a downloadable vertical XML text file."):
+                    with st.spinner("Compiling database into vertical XML format..."):
                         import sys
                         sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
                         from core.preprocessing.export_service import export_db_to_vertical_xml
@@ -456,8 +462,6 @@ def _render_corpus_narration(name, path, display_stats, structure, condensed=Fal
         tagger, tagset = infer_tagger_and_tagset(path)
         tagger_text = f"This corpus was part-of-speech tagged using {tagger} ({tagset})."
 
-        con.close()
-        
         # --- Constructing the Final Template ---
         if not condensed:
             narration_text = (
@@ -511,9 +515,8 @@ def render_full_overview(name, path, stats, structure, error):
     col2.metric("Unique Types", f"{display_stats.get('unique_types', 0):,}")
     col3.metric("Type/Token Ratio (TTR)", f"{display_stats.get('ttr', 0):.4f}")
     
-    # Show database download button for user-uploaded/built corpora
-    source_type = get_state('source_type')
-    if source_type in ["Upload Files", "Online Corpus"] and path and os.path.exists(path):
+    # Show database download button for active corpus database
+    if path and os.path.exists(path):
         st.write("") # spacing
         
         col_db, col_txt = st.columns(2)
@@ -530,19 +533,26 @@ def render_full_overview(name, path, stats, structure, error):
                 )
         with col_txt:
             xml_cache_key = "xml_export_full"
-            if get_state(xml_cache_key):
-                st.download_button(
-                    label="📥 Download Annotated Corpus (.txt)",
-                    data=get_state(xml_cache_key),
-                    file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
-                    mime="text/plain",
-                    help="Download the raw tagged corpus text (Word\\tPOS\\tLemma) including XML tags for NER, Sentiment, etc.",
-                    use_container_width=True,
-                    key="dl_txt_btn_full"
-                )
+            cached_xml = get_state(xml_cache_key)
+            if cached_xml:
+                dl_c1, dl_c2 = st.columns([4, 1])
+                with dl_c1:
+                    st.download_button(
+                        label="📥 Download Annotated Corpus (.txt)",
+                        data=cached_xml,
+                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
+                        mime="text/plain",
+                        help="Download the raw tagged corpus text including all annotations (POS, Lemma, Sentiment, Topic, NER, Dependencies, etc.).",
+                        use_container_width=True,
+                        key="dl_txt_btn_full"
+                    )
+                with dl_c2:
+                    if st.button("🔄", key="regen_xml_btn_full", help="Regenerate annotated corpus from updated database"):
+                        set_state(xml_cache_key, None)
+                        st.rerun()
             else:
-                if st.button("⚙️ Generate Annotated Corpus (.txt)", key="gen_xml_btn_full", use_container_width=True, help="Compiles the current database (with all new annotations like NER and Sentiment) into a downloadable XML-tagged text file."):
-                    with st.spinner("Compiling database into XML format (this may take a moment for large corpora)..."):
+                if st.button("⚙️ Generate Annotated Corpus (.txt)", key="gen_xml_btn_full", use_container_width=True, help="Compiles the current database (with all annotations: Lemma, POS, NER, Sentiment, Topic, Dependencies, etc.) into a downloadable vertical XML text file."):
+                    with st.spinner("Compiling database into vertical XML format..."):
                         import sys
                         sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
                         from core.preprocessing.export_service import export_db_to_vertical_xml
@@ -954,10 +964,6 @@ def _render_classification_tab(db_path, key_suffix):
                 key=f"bertopic_min_size_{key_suffix}",
                 help="Higher values = fewer, more distinct topics"
             )
-            try:
-                with duckdb.connect(db_path) as con:
-                    con.execute("ALTER TABLE corpus DROP COLUMN sentiment")
-            except: pass
     
     # Run Labeling Button
     if st.button("🚀 Run Labeling", key=f"run_cls_{key_suffix}", disabled=not (do_sent or do_topic)):
@@ -1098,6 +1104,8 @@ def _render_classification_tab(db_path, key_suffix):
                         st.success("Corpus updated successfully!")
                         set_state(f'cls_preview_{key_suffix}', None)
                         set_state(f'cls_topic_info_{key_suffix}', None)
+                        set_state(f'xml_export_{key_suffix}', None)
+                        set_state('xml_export_full', None)
                         st.toast("Applied! Refreshing...", icon="💾")
                         st.rerun()
                     else:
@@ -1315,7 +1323,286 @@ def render_upload_ui():
             )
             
             if custom_type == "Rule-Based":
-                st.warning("⚠️ Rule-based custom tagging is currently under construction.")
+                st.markdown("### 📜 Rule-Based Custom Tagger")
+                st.caption("Upload lexicons, lemma mappings, word formation rules, and guessers. Synthesize dictionaries and reorder rule priorities.")
+
+                from core.preprocessing.custom_tagger import CustomRuleBasedTagger
+                if 'rule_based_tagger' not in st.session_state:
+                    st.session_state['rule_based_tagger'] = CustomRuleBasedTagger()
+                
+                rule_tagger = st.session_state['rule_based_tagger']
+
+                rb_mode = st.radio(
+                    "Rule-Based Mode",
+                    ["Upload & Configure Rules", "Load Existing Model (.json/.pkl)"],
+                    index=0,
+                    horizontal=True,
+                    key="rb_mode_radio"
+                )
+
+                if rb_mode == "Upload & Configure Rules":
+                    if 'removed_filenames' not in st.session_state:
+                        st.session_state['removed_filenames'] = set()
+                    removed_set = st.session_state['removed_filenames']
+
+                    # Helper to safely register uploaded files without re-adding removed ones
+                    def process_uploads(uploader_files, file_type):
+                        if uploader_files:
+                            for f in uploader_files:
+                                if f.name not in removed_set:
+                                    content = f.read().decode('utf-8', errors='ignore')
+                                    rule_tagger.add_file(f.name, content, file_type)
+
+                    # 1. Upload Section
+                    st.markdown("#### 1. Upload Rule Files")
+                    u_col1, u_col2 = st.columns(2)
+
+                    with u_col1:
+                        st.markdown("**1) Pre-annotated Lexicon** *(TreeTagger format, multi-word units & ambiguity supported)*")
+                        lex_files = st.file_uploader(
+                            "Upload Lexicon Files (.txt)",
+                            type=["txt"],
+                            accept_multiple_files=True,
+                            key="rb_lexicon_uploader",
+                            help="Format: word [tab] tag [tab] lemma. Supports multi-word tokens (e.g. White House)."
+                        )
+                        process_uploads(lex_files, 'lexicon')
+
+                        st.markdown("**2) Lemma Form File(s)**")
+                        lemma_files = st.file_uploader(
+                            "Upload Lemma Files (.txt)",
+                            type=["txt"],
+                            accept_multiple_files=True,
+                            key="rb_lemma_uploader",
+                            help="Format: CODE [tab] lemma (e.g., V013 fly)."
+                        )
+                        process_uploads(lemma_files, 'lemma')
+
+                        st.markdown("**3) Word Formation File(s)**")
+                        wf_files = st.file_uploader(
+                            "Upload Word Formation Files (.txt)",
+                            type=["txt"],
+                            accept_multiple_files=True,
+                            key="rb_wf_uploader",
+                            help="Format: CODE [tab] output_tag [tab] rule_regex (e.g., V013 VERB <D1>ing)."
+                        )
+                        process_uploads(wf_files, 'word_formation')
+
+                    with u_col2:
+                        st.markdown("**4) Regex Guesser File(s)**")
+                        regex_files = st.file_uploader(
+                            "Upload Regex Guesser Files (.txt)",
+                            type=["txt"],
+                            accept_multiple_files=True,
+                            key="rb_regex_uploader",
+                            help="Format: TAG [tab] suffix_or_regex (e.g., VERB ing, NOUN tion)."
+                        )
+                        process_uploads(regex_files, 'guesser_regex')
+
+                        st.markdown("**5) One Tag Guesser File(s)**")
+                        onetag_files = st.file_uploader(
+                            "Upload One Tag Guesser Files (.txt)",
+                            type=["txt"],
+                            accept_multiple_files=True,
+                            key="rb_onetag_uploader",
+                            help="Format: single label line (e.g. NOUN or OTHER)."
+                        )
+                        process_uploads(onetag_files, 'guesser_one_tag')
+
+                        st.markdown("**Optionally Upload Pre-built Word Form Dictionary (.txt)**")
+                        wf_dict_files = st.file_uploader(
+                            "Upload Pre-built Word Form Dictionary Files (.txt)",
+                            type=["txt"],
+                            accept_multiple_files=True,
+                            key="rb_wf_dict_uploader",
+                            help="Format: word_form [tab] tag [tab] lemma"
+                        )
+                        process_uploads(wf_dict_files, 'word_form')
+
+                    # 2. Step 1: Dictionary Generation (Lemma + Word Formation -> Word-Form)
+                    has_lemma = any(info['type'] == 'lemma' for info in rule_tagger.files.values() if info['type'] == 'lemma')
+                    has_wf = any(info['type'] == 'word_formation' for info in rule_tagger.files.values() if info['type'] == 'word_formation')
+                    wf_dict_present = [fn for fn, info in rule_tagger.files.items() if info['type'] == 'word_form']
+
+                    if has_lemma and has_wf:
+                        st.write("---")
+                        st.info("⚙️ **Step 1: Generate Word Form Dictionary from Lemma & Word Formation**")
+                        st.write("Synthesize full-form inflected dictionary entries (TreeTagger format) from your lemma and word formation rules.")
+                        
+                        gen_col1, gen_col2 = st.columns([3, 1])
+                        with gen_col1:
+                            out_dict_name = st.text_input("Enter Word Form Dictionary Name", value="word-form.txt", key="out_dict_name_input")
+                        with gen_col2:
+                            st.write("") # spacer
+                            gen_btn = st.button("⚡ Generate Word Form Dictionary", key="gen_wf_dict_btn", type="primary")
+
+                        if gen_btn:
+                            lemma_contents = [info['content'] for info in rule_tagger.files.values() if info['type'] == 'lemma']
+                            wf_contents = [info['content'] for info in rule_tagger.files.values() if info['type'] == 'word_formation']
+                            
+                            generated_wf_str = CustomRuleBasedTagger.generate_word_form_dictionary(lemma_contents, wf_contents)
+                            st.session_state['generated_word_form_str'] = generated_wf_str
+                            st.session_state['generated_word_form_name'] = out_dict_name
+
+                            # Add generated word-form to rule_tagger and remove lemma/word_formation from priority
+                            rule_tagger.add_file(out_dict_name, generated_wf_str, 'word_form')
+                            
+                            to_remove = [fn for fn, info in list(rule_tagger.files.items()) if info['type'] in ('lemma', 'word_formation')]
+                            for fn in to_remove:
+                                st.session_state['removed_filenames'].add(fn)
+                                rule_tagger.remove_file(fn)
+
+                            st.success(f"✅ Generated '{out_dict_name}' successfully! Lemma and Word Formation files removed from Priority list.")
+                            st.rerun()
+
+                    # Display Word Form Dictionary Section when generated or uploaded
+                    if wf_dict_present or 'generated_word_form_str' in st.session_state:
+                        st.write("---")
+                        st.markdown("#### 4) Word Form Dictionary File(s) (Direct inflected word form list)")
+                        st.caption("Generated/Uploaded full-form inflected lexicons active in the tagger.")
+                        
+                        for fn in wf_dict_present:
+                            content = rule_tagger.files[fn]['content']
+                            st.write(f"📄 **{fn}** ({len(content.splitlines())} entries)")
+                            st.code(content[:400] + ("\n..." if len(content) > 400 else ""), language="text")
+                            st.download_button(
+                                label=f"📥 Download {fn}",
+                                data=content,
+                                file_name=fn,
+                                mime="text/plain",
+                                key=f"dl_btn_{fn}"
+                            )
+
+                    # 3. Priority Box
+                    st.write("---")
+                    st.markdown("#### 📋 Priority Box")
+                    st.caption("Only files in the Priority Box are used during tagging. Use ⬆️ / ⬇️ to reorder and ❌ Remove to remove files.")
+
+                    if rule_tagger.priority_order:
+                        for idx, fn in enumerate(list(rule_tagger.priority_order)):
+                            p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns([1, 4, 1, 1, 1])
+                            with p_col1:
+                                st.write(f"**#{idx+1}**")
+                            with p_col2:
+                                ftype_label = rule_tagger.files.get(fn, {}).get('type', 'unknown')
+                                st.write(f"📄 **{fn}** (`{ftype_label}`)")
+                            with p_col3:
+                                if idx > 0:
+                                    if st.button("⬆️ Up", key=f"btn_up_{fn}_{idx}"):
+                                        order = list(rule_tagger.priority_order)
+                                        order[idx], order[idx-1] = order[idx-1], order[idx]
+                                        rule_tagger.set_priority_order(order)
+                                        st.rerun()
+                            with p_col4:
+                                if idx < len(rule_tagger.priority_order) - 1:
+                                    if st.button("⬇️ Down", key=f"btn_down_{fn}_{idx}"):
+                                        order = list(rule_tagger.priority_order)
+                                        order[idx], order[idx+1] = order[idx+1], order[idx]
+                                        rule_tagger.set_priority_order(order)
+                                        st.rerun()
+                            with p_col5:
+                                if st.button("❌ Remove", key=f"btn_rem_{fn}_{idx}"):
+                                    st.session_state['removed_filenames'].add(fn)
+                                    rule_tagger.remove_file(fn)
+                                    st.rerun()
+
+                        if st.button("💾 Save Priority Setting", key="save_priority_btn", type="secondary"):
+                            st.success("✅ Priority setting saved!")
+                    else:
+                        st.info("No rule files active in Priority Box.")
+
+                # 4. Build & Test Sandbox
+                st.write("---")
+                st.markdown("#### 🧪 Build & Test Custom Rule-Based Tagger")
+                test_corpus_input = st.text_area(
+                    "Test Corpus Text",
+                    value="I am flying to White House, John. National emergency.",
+                    height=100,
+                    key="rb_test_corpus_input"
+                )
+
+                rb_t_col1, rb_t_col2 = st.columns(2)
+                with rb_t_col1:
+                    run_rb_test_btn = st.button("▶️ Test Tagger on Sample Text", key="run_rb_test_btn", type="secondary", use_container_width=True)
+                with rb_t_col2:
+                    run_rb_tag_corpus_btn = st.button("⚡ Process Uploaded Files", key="run_rb_tag_corpus_btn", type="primary", use_container_width=True)
+
+                if run_rb_test_btn:
+                    if not rule_tagger.priority_order:
+                        st.warning("Please upload at least one rule file before testing.")
+                    else:
+                        sentences = rule_tagger.tokenize_with_mwu(test_corpus_input, "en")
+                        test_results = []
+                        for s_tokens in sentences:
+                            res = rule_tagger.tag(s_tokens)
+                            for t_idx, item in enumerate(res):
+                                test_results.append({
+                                    "Token": s_tokens[t_idx],
+                                    "POS Tag": item['pos'],
+                                    "Lemma": item['lemma'],
+                                    "Rule Source": item['rule_source']
+                                })
+                        st.markdown("**Tagging Results:**")
+                        st.dataframe(test_results, use_container_width=True)
+
+                # 5. Export Model Buttons
+                st.write("---")
+                m_col1, m_col2 = st.columns(2)
+                with m_col1:
+                    import json
+                    model_json_str = json.dumps(rule_tagger.to_json(), indent=2)
+                    st.download_button(
+                        label="📥 Export Rule-Based Model (.json)",
+                        data=model_json_str,
+                        file_name="rule_based_tagger_model.json",
+                        mime="application/json",
+                        key="export_rb_json_btn"
+                    )
+                with m_col2:
+                    import pickle
+                    model_pkl_bytes = pickle.dumps(rule_tagger)
+                    st.download_button(
+                        label="📥 Export Rule-Based Model (.pkl)",
+                        data=model_pkl_bytes,
+                        file_name="rule_based_tagger_model.pkl",
+                        mime="application/octet-stream",
+                        key="export_rb_pkl_btn"
+                    )
+
+                custom_config = {
+                    'custom_type': 'Rule-Based',
+                    'rule_based_tagger': rule_tagger
+                }
+
+                if rb_mode != "Upload & Configure Rules":
+                    st.write("**Load Pre-trained / Configured Rule-Based Model (.json or .pkl)**")
+                    uploaded_rb_file = st.file_uploader(
+                        "Upload Model File",
+                        type=["json", "pkl"],
+                        key="uploaded_rb_model_file_uploader",
+                        help="Upload a previously saved rule-based tagger model file."
+                    )
+
+                    if uploaded_rb_file:
+                        try:
+                            fn = uploaded_rb_file.name.lower()
+                            if fn.endswith('.json'):
+                                import json
+                                from core.preprocessing.custom_tagger import CustomRuleBasedTagger
+                                data = json.loads(uploaded_rb_file.read().decode('utf-8'))
+                                loaded_tagger = CustomRuleBasedTagger.from_json(data)
+                            else:
+                                import pickle
+                                loaded_tagger = pickle.loads(uploaded_rb_file.read())
+
+                            st.session_state['rule_based_tagger'] = loaded_tagger
+                            custom_config = {
+                                'custom_type': 'Rule-Based',
+                                'rule_based_tagger': loaded_tagger
+                            }
+                            st.success("✅ Rule-Based tagger model loaded successfully!")
+                        except Exception as e:
+                            st.error(f"Error loading rule-based model: {e}")
             else:
                 custom_mode = st.radio(
                     "Model Reusability Mode",
@@ -1454,11 +1741,29 @@ def render_upload_ui():
                             
 
     
-    if uploaded_files:
-        st.write("") # spacing
-        if st.button("Process Uploaded Files", type="primary", use_container_width=True):
-            if not is_db_upload and tagger_tool == "Custom Tagger" and not custom_config:
-                if custom_mode == "Train New Model":
+    st.write("---")
+    main_process_clicked = st.button("⚡ Process Uploaded Files", key="main_process_uploaded_files_btn", type="primary", use_container_width=True)
+
+    rb_sandbox_clicked = ('run_rb_tag_corpus_btn' in locals() and run_rb_tag_corpus_btn)
+
+    if main_process_clicked or rb_sandbox_clicked:
+        if not uploaded_files:
+            st.error("⚠️ No corpus file(s) selected! Please upload your raw corpus file(s) (.txt, .xml, .csv, etc.) under 'Choose files' at the top of this tab before processing.")
+            st.stop()
+
+        if not is_db_upload and tagger_tool == "Custom Tagger":
+            if custom_type == "Rule-Based":
+                rule_tagger = st.session_state.get('rule_based_tagger')
+                if not rule_tagger or not rule_tagger.priority_order:
+                    st.error("⚠️ Please upload at least one rule file or load a model in the Rule-Based Custom Tagger before processing.")
+                    st.stop()
+                custom_config = {
+                    'custom_type': 'Rule-Based',
+                    'rule_based_tagger': rule_tagger
+                }
+            elif not custom_config:
+                c_mode = st.session_state.get('custom_tagger_mode', 'Train New Model')
+                if c_mode == "Train New Model":
                     st.error("Please upload a pre-annotated corpus first to use the Custom Tagger.")
                 else:
                     st.error("Please upload a pre-trained model file (.pkl) first.")
@@ -1619,6 +1924,10 @@ def render_upload_ui():
                                 set_state('comp_corpus_name', "Comparison")
                                 set_state('comp_xml_structure_data', result.get('structure'))
                         
+                        try:
+                            st.cache_data.clear()
+                        except:
+                            pass
                         st.success("Corpus Loaded Successfully!")
                         st.rerun()
 
@@ -1701,14 +2010,47 @@ def render_online_builder_ui():
     st.subheader(f"🌐 Online Corpus Builder: {mode}")
     
     if mode.startswith("Detik"):
-        st.markdown("### 📰 Detik.com Tag Scraper & Corpus Builder")
-        st.caption("Automatically crawl news articles by tag on Detik.com, convert multi-page articles, extract title/author/date/content, and build an annotated XML corpus ready for analysis.")
+        st.markdown("### 📰 Detik.com Scraper & Corpus Builder")
+        st.caption("Automatically crawl news articles by Tag or Section on Detik.com, convert multi-page articles, extract title/author/date/content, and build an annotated XML corpus ready for analysis.")
         
         # Step 1: Scraper Settings
         st.markdown("#### 1️⃣ Scraper Settings")
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            tag_val = st.text_input("Detik Tag / Category Keyword", value="ppds", placeholder="e.g. ppds, kesehatan, politik, teknologi", key="detik_tag_input", help="Base URL will be https://www.detik.com/tag/{tag}")
+        
+        detik_mode = st.radio("Select Scraping Mode", ["By Tag", "By Section"], index=0, horizontal=True, key="detik_scrape_mode")
+        
+        col1, col2 = st.columns([1.2, 1.8])
+        if detik_mode == "By Tag":
+            with col1:
+                tag_val = st.text_input("Detik Tag / Category Keyword", value="ppds", placeholder="e.g. ppds, kesehatan, politik, teknologi", key="detik_tag_input", help="Base URL will be https://www.detik.com/tag/{tag}")
+                st.caption("💡 **Note**: If your tag has more than one word, separate using `-` as in `abu-vulkanik`.")
+                section_val = ""
+        else:
+            with col1:
+                section_options = [
+                    "News (https://news.detik.com/indeks)",
+                    "Food (https://food.detik.com/indeks)",
+                    "Hikmah (https://www.detik.com/hikmah/indeks)",
+                    "Finance (https://finance.detik.com/indeks)",
+                    "Health (https://health.detik.com/indeks)",
+                    "Inet (https://inet.detik.com/indeks)",
+                    "Hot (https://hot.detik.com/indeks)",
+                    "Sport (https://sport.detik.com/indeks)",
+                    "Travel (https://travel.detik.com/indeks)",
+                    "Oto (https://oto.detik.com/indeks)",
+                    "Wolipop (https://wolipop.detik.com/indeks)",
+                    "Edu (https://edu.detik.com/indeks)",
+                    "Properti (https://properti.detik.com/indeks)",
+                    "Custom Section URL..."
+                ]
+                selected_sec = st.selectbox("Select Detik Section", section_options, index=0, key="detik_section_select")
+                if selected_sec == "Custom Section URL...":
+                    section_val = st.text_input("Enter Custom Section Index URL", value="https://food.detik.com/indeks", key="detik_custom_sec_input")
+                else:
+                    m = re.search(r'\((https?://[^\)]+)\)', selected_sec)
+                    section_val = m.group(1) if m else selected_sec
+                st.caption(f"Crawling section: `{section_val}` across pagination (`?page=1`, `?page=2`, etc.)")
+                tag_val = ""
+
         with col2:
             target_count_opt = st.radio("Target Article Count", [10, 50, 100, 150, 200, 300, "All (Max 500)"], index=0, horizontal=True, key="detik_count_radio")
             
@@ -1725,8 +2067,11 @@ def render_online_builder_ui():
         st.warning("⚠️ **Note**: Scraping larger article counts takes more processing time depending on network speed. Results are retrieved dynamically from live news feeds.")
 
         if st.button("🔍 Step 1: Scrape Detik.com News Articles", type="primary", key="btn_scrape_detik"):
-            if not tag_val.strip():
+            mode_kw = "tag" if detik_mode == "By Tag" else "section"
+            if detik_mode == "By Tag" and not tag_val.strip():
                 st.error("Please enter a tag keyword.")
+            elif detik_mode == "By Section" and not section_val.strip():
+                st.error("Please select or enter a valid section URL.")
             else:
                 import importlib
                 import core.modules.detik_scraper as detik_scraper_mod
@@ -1738,9 +2083,12 @@ def render_online_builder_ui():
                     progress_bar.progress(min(max(p, 0.0), 1.0))
                     status.caption(m)
 
-                with st.spinner("Scraping Detik.com news articles..."):
+                target_label = tag_val.strip() if detik_mode == "By Tag" else section_val.strip()
+                with st.spinner(f"Scraping Detik.com news articles ({detik_mode})..."):
                     xml_content, df_summary, total_scraped = build_detik_corpus_xml(
-                        tag=tag_val, 
+                        tag=tag_val.strip(),
+                        section_target=section_val.strip(),
+                        scrape_mode=mode_kw,
                         target_count=target_count_opt, 
                         start_date=start_date,
                         end_date=end_date,
@@ -1750,11 +2098,12 @@ def render_online_builder_ui():
                 if xml_content and total_scraped > 0:
                     set_state('last_detik_xml_content', xml_content)
                     set_state('last_detik_df_summary', df_summary)
-                    set_state('last_detik_tag', tag_val)
-                    st.success(f"🎉 Successfully scraped {total_scraped} news articles for tag '{tag_val}'! Now configure language and tagger below before processing.")
+                    clean_label = target_label.replace('https://', '').replace('/', '_')
+                    set_state('last_detik_tag', clean_label)
+                    st.success(f"🎉 Successfully scraped {total_scraped} news articles for {detik_mode} '{target_label}'! Now configure language and tagger below before processing.")
                     st.rerun()
                 else:
-                    st.error(f"Could not retrieve articles for tag '{tag_val}'. Please check tag spelling or try another keyword.")
+                    st.error(f"Could not retrieve articles for {detik_mode} '{target_label}'. Please check spelling/URL or try another selection.")
 
         df_summary = get_state('last_detik_df_summary')
         xml_content = get_state('last_detik_xml_content')
