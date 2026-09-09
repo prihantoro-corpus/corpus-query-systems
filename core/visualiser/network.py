@@ -62,7 +62,7 @@ def prepare_standalone_pyvis_html(net, height_px=550, bg_color="#222222"):
 
     return raw_html
 
-def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL", font_size=38):
+def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL", font_size=26):
     try:
         from pyvis.network import Network
     except ImportError:
