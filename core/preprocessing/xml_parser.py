@@ -273,8 +273,8 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
         detected_attrs[k].add(v)
 
     elements_to_process = []
-    pass1_tags = {'sent', 's', 'u', 'utterance'}
-    pass2_tags = {'p', 'para', 'ab', 'div'} 
+    pass1_tags = {'sent', 's', 'u', 'utterance', 'turn'}
+    pass2_tags = {'p', 'para', 'ab', 'div', 'dialogue'} 
     pass3_tags = {'text'}
 
     def traverse_and_collect(element, current_attrs, target_tags):
