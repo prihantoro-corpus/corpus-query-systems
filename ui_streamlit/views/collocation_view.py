@@ -1781,24 +1781,29 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
         
         physics_json = """
         {
+          "nodes": { "borderWidth": 2, "font": { "size": 38 } },
+          "edges": { "width": 3, "smooth": { "type": "dynamic" } },
           "physics": {
-            "enabled": false
+            "solver": "barnesHut",
+            "barnesHut": {
+              "gravitationalConstant": -3500,
+              "centralGravity": 0.3,
+              "springLength": 130,
+              "springConstant": 0.04,
+              "damping": 0.9,
+              "avoidOverlap": 0.3
+            },
+            "stabilization": {
+              "enabled": true,
+              "iterations": 100,
+              "updateInterval": 25
+            }
           },
           "interaction": {
             "hover": true,
             "navigationButtons": true,
-            "zoomView": true
-          },
-          "edges": {
-            "color": {
-              "color": "rgba(255, 255, 255, 0.18)",
-              "hover": "rgba(0, 255, 245, 0.8)",
-              "highlight": "rgba(0, 255, 245, 0.8)"
-            },
-            "width": 1.2,
-            "smooth": {
-              "type": "continuous"
-            }
+            "zoomView": true,
+            "dragNodes": true
           }
         }
         """

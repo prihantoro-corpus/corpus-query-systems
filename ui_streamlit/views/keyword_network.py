@@ -196,17 +196,17 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
     for i, cat_name in enumerate(keywords_by_category.keys()):
         if cat_name == "Overall":
             color = "#E2E8F0"
-            size = 70
+            size = 50
         else:
             color = CATEGORY_COLORS[i % len(CATEGORY_COLORS)]
-            size = 65
+            size = 45
             
         G.add_node(
             cat_name,
             label=str(cat_name),
             color=color,
             size=size,
-            font={'size': 108 if cat_name == "Overall" else 102, 'color': '#ffffff', 'strokeWidth': 6, 'strokeColor': '#000000'},
+            font={'size': 52 if cat_name == "Overall" else 48, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category: {cat_name}"
         )
@@ -222,22 +222,22 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
 
             if word not in added_keywords:
                 is_shared = count > 1
-                node_size = 40 + (count * 8) if is_shared else 30
+                node_size = 28 + (count * 4) if is_shared else 20
                 node_color = "#FFFF00" if is_shared else "#a5b4fc"
-                font_size = 90 if is_shared else 72
+                font_size = 40 if is_shared else 28
                 
                 G.add_node(
                     word,
                     label=str(word),
                     color=node_color,
                     size=node_size,
-                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 5 if is_shared else 3, 'strokeColor': '#000000'},
+                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 3 if is_shared else 2, 'strokeColor': '#000000'},
                     shape="dot",
                     title=f"Keyword: {word}\nShared by {count} categories"
                 )
                 added_keywords.add(word)
 
-            edge_width = 5 if count > 1 else 3
+            edge_width = 4 if count > 1 else 2
             edge_color = "#FFFF00" if count > 1 else "rgba(165, 180, 252, 0.4)"
             G.add_edge(cat_name, word, width=edge_width, color=edge_color)
 
@@ -263,18 +263,23 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
         
         physics_json = """
         {
-          "nodes": { "borderWidth": 3, "font": { "size": 85 } },
+          "nodes": { "borderWidth": 2, "font": { "size": 38 } },
           "edges": { "smooth": { "type": "dynamic" } },
           "physics": {
+            "solver": "barnesHut",
             "barnesHut": {
-              "gravitationalConstant": -18000,
+              "gravitationalConstant": -3500,
               "centralGravity": 0.3,
-              "springLength": 250,
+              "springLength": 130,
               "springConstant": 0.04,
-              "damping": 0.85,
-              "avoidOverlap": 0.7
+              "damping": 0.9,
+              "avoidOverlap": 0.3
             },
-            "minVelocity": 0.75
+            "stabilization": {
+              "enabled": true,
+              "iterations": 100,
+              "updateInterval": 25
+            }
           },
           "interaction": {
             "hover": true,
