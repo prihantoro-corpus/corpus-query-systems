@@ -81,6 +81,13 @@ def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"
     var options = {{
       "nodes": {{"borderWidth": 2, "size": 25, "font": {{"size": {coll_font_size}}}}},
       "edges": {{"width": 4, "smooth": {{"type": "dynamic"}}}},
+      "interaction": {{
+        "zoomView": false,
+        "navigationButtons": true,
+        "hover": true,
+        "dragNodes": true,
+        "dragView": true
+      }},
       "physics": {{
         "solver": "barnesHut",
         "barnesHut": {{
