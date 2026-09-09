@@ -849,10 +849,11 @@ def render_collocation_results_column(results, key_suffix=""):
                  plot_top_measure(df[df['Direction'].isin(['R', 'B'])], "Right-Dominant", "lightgreen")
              
          with tab_graph:
+             graph_font_size = st.slider("Node Font Size", min_value=14, max_value=80, value=38, step=2, key=f"coll_single_font_{key_suffix}")
              subtab_all, subtab_left, subtab_right = st.tabs(["🌐 Overall Network", "⬅️ Left Network", "➡️ Right Network"])
              with subtab_all:
                  st.caption("Overall Collocation Network (Top 30)")
-                 graph_html = create_pyvis_graph(node, df.head(30), measure_col=y_col, measure_name=stat_measure)
+                 graph_html = create_pyvis_graph(node, df.head(30), measure_col=y_col, measure_name=stat_measure, font_size=graph_font_size)
                  if graph_html:
                      st.components.v1.html(graph_html, height=600)
                  else:
@@ -861,7 +862,7 @@ def render_collocation_results_column(results, key_suffix=""):
                  st.caption("Left-Dominant Collocation Network (Top 25)")
                  df_l = df[df['Direction'].isin(['L', 'B'])].head(25)
                  if not df_l.empty:
-                     graph_html_l = create_pyvis_graph(node, df_l, measure_col=y_col, measure_name=stat_measure)
+                     graph_html_l = create_pyvis_graph(node, df_l, measure_col=y_col, measure_name=stat_measure, font_size=graph_font_size)
                      if graph_html_l:
                          st.components.v1.html(graph_html_l, height=600)
                      else:
@@ -872,7 +873,7 @@ def render_collocation_results_column(results, key_suffix=""):
                  st.caption("Right-Dominant Collocation Network (Top 25)")
                  df_r = df[df['Direction'].isin(['R', 'B'])].head(25)
                  if not df_r.empty:
-                     graph_html_r = create_pyvis_graph(node, df_r, measure_col=y_col, measure_name=stat_measure)
+                     graph_html_r = create_pyvis_graph(node, df_r, measure_col=y_col, measure_name=stat_measure, font_size=graph_font_size)
                      if graph_html_r:
                          st.components.v1.html(graph_html_r, height=600)
                      else:
@@ -1655,7 +1656,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
     )
     
     # 1. Controls
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
         top_n = st.number_input(
             "Top N Collocates",
@@ -1670,6 +1671,15 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
             value=False,
             help="Hides collocates that are unique to a single node word.",
             key=f"coll_net_shared_{key_suffix}"
+        )
+    with c3:
+        font_size = st.slider(
+            "Node Font Size",
+            min_value=14,
+            max_value=80,
+            value=38,
+            step=2,
+            key=f"coll_multi_net_font_{key_suffix}"
         )
         
     # Parse Degree column (which may contain string fractions like '4/4') as an integer
@@ -1715,7 +1725,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
             label=str(node),
             color=color,
             size=35,
-            font={'size': 44, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
+            font={'size': font_size + 6, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Node Word: {node}"
         )
@@ -1738,7 +1748,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
                 label=str(coll),
                 color=node_color,
                 size=node_size,
-                font={'size': 36, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
+                font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
                 shape="dot",
                 title=f"Collocate: {coll}\nShared by {degree} nodes\nCombined Score: {combined_score:.2f}"
             )
@@ -1779,33 +1789,33 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
         )
         net.from_nx(G)
         
-        physics_json = """
-        {
-          "nodes": { "borderWidth": 2, "font": { "size": 38 } },
-          "edges": { "width": 3, "smooth": { "type": "dynamic" } },
-          "physics": {
+        physics_json = f"""
+        {{
+          "nodes": {{ "borderWidth": 2, "font": {{ "size": {font_size} }} }},
+          "edges": {{ "width": 3, "smooth": {{ "type": "dynamic" }} }},
+          "physics": {{
             "solver": "barnesHut",
-            "barnesHut": {
+            "barnesHut": {{
               "gravitationalConstant": -3500,
               "centralGravity": 0.3,
               "springLength": 130,
               "springConstant": 0.04,
               "damping": 0.9,
               "avoidOverlap": 0.3
-            },
-            "stabilization": {
+            }},
+            "stabilization": {{
               "enabled": true,
               "iterations": 100,
               "updateInterval": 25
-            }
-          },
-          "interaction": {
+            }}
+          }},
+          "interaction": {{
             "hover": true,
             "navigationButtons": true,
             "zoomView": true,
             "dragNodes": true
-          }
-        }
+          }}
+        }}
         """
         net.set_options(physics_json)
         

@@ -62,7 +62,7 @@ def prepare_standalone_pyvis_html(net, height_px=550, bg_color="#222222"):
 
     return raw_html
 
-def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"):
+def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL", font_size=38):
     try:
         from pyvis.network import Network
     except ImportError:
@@ -74,30 +74,33 @@ def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"
     min_score = coll_df[measure_col].min()
     score_range = max_score - min_score
     
-    net.set_options("""
-    var options = {
-      "nodes": {"borderWidth": 2, "size": 25, "font": {"size": 38}},
-      "edges": {"width": 4, "smooth": {"type": "dynamic"}},
-      "physics": {
+    target_font_size = int(font_size * 1.25)
+    coll_font_size = int(font_size)
+
+    net.set_options(f"""
+    var options = {{
+      "nodes": {{"borderWidth": 2, "size": 25, "font": {{"size": {coll_font_size}}}}},
+      "edges": {{"width": 4, "smooth": {{"type": "dynamic"}}}},
+      "physics": {{
         "solver": "barnesHut",
-        "barnesHut": {
+        "barnesHut": {{
           "gravitationalConstant": -3500,
           "centralGravity": 0.3,
           "springLength": 130,
           "springConstant": 0.04,
           "damping": 0.9,
           "avoidOverlap": 0.3
-        },
-        "stabilization": {
+        }},
+        "stabilization": {{
           "enabled": true,
           "iterations": 100,
           "updateInterval": 25
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """)
     
-    net.add_node(target_word, label=target_word, size=45, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'size': 48, 'color': 'black'})
+    net.add_node(target_word, label=target_word, size=45, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'size': target_font_size, 'color': 'black'})
     
     LEFT_BIAS = -500; RIGHT_BIAS = 500
     all_directions = coll_df['Direction'].unique()
@@ -132,7 +135,7 @@ def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"
             f"Dominant Direction: {direction}"
         )
 
-        net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_title, x=x_position)
+        net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_title, x=x_position, font={'size': coll_font_size, 'color': 'white'})
         net.add_edge(target_word, collocate, value=score_val, width=5, title=f"{measure_name}: {score_val:.2f}")
 
     return prepare_standalone_pyvis_html(net, height_px=550, bg_color="#222222")
