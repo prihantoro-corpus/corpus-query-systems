@@ -5,6 +5,19 @@ from pyvis.network import Network
 import tempfile
 import os
 import re
+try:
+    from core.visualiser.network import prepare_standalone_pyvis_html
+except ImportError:
+    def prepare_standalone_pyvis_html(net, height_px=550, bg_color="#0f172a"):
+        raw_html = net.generate_html()
+        raw_html = re.sub(r'<script[^>]*src=["\']?lib/bindings/utils\.js["\']?[^>]*>\s*</script>', '', raw_html)
+        raw_html = re.sub(r'<script[^>]*src=["\']?\.\./node_modules/[^>]*>\s*</script>', '', raw_html)
+        raw_html = re.sub(r'<link[^>]*href=["\']?\.\./node_modules/[^>]*>', '', raw_html)
+        raw_html = re.sub(r'<link[^>]*bootstrap[^>]*>', '', raw_html)
+        raw_html = re.sub(r'<script[^>]*bootstrap[^>]*></script>', '', raw_html)
+        raw_html = raw_html.replace('<div class="card" style="width: 100%">', f'<div style="width: 100%; height: {height_px}px; background-color: {bg_color};">')
+        dark_css = f"""<style>*, *::before, *::after {{ box-sizing: border-box !important; }} html, body {{ background-color: {bg_color} !important; color: #ffffff !important; margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }} .card, .card-body {{ background-color: {bg_color} !important; border: none !important; padding: 0 !important; margin: 0 !important; width: 100% !important; height: 100% !important; }} #mynetwork {{ width: 100% !important; height: {height_px}px !important; background-color: {bg_color} !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; }}</style>"""
+        return raw_html.replace("</head>", dark_css + "</head>") if "</head>" in raw_html else dark_css + raw_html
 
 def render_concordance_network(cluster_results, has_coll_filter=False, key_suffix=""):
     """
@@ -229,7 +242,8 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
             width="100%", 
             bgcolor="#0f172a", 
             font_color="#ffffff", 
-            notebook=False
+            notebook=False,
+            cdn_resources="in_line"
         )
         net.from_nx(G)
         
@@ -255,19 +269,7 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
         net.set_options(physics_json)
 
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
-                tmp_path = tmp.name
-            net.write_html(tmp_path)
-            
-            with open(tmp_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-                
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-                
-            html_content = html_content.replace("background-color: #ffffff;", "background-color: #0f172a;")
-            html_content = html_content.replace("border: 1px solid lightgray;", "border: 1px solid rgba(255, 255, 255, 0.1);")
-            
+            html_content = prepare_standalone_pyvis_html(net, height_px=850, bg_color="#0f172a")
             st.components.v1.html(html_content, height=870, scrolling=False)
             
         except Exception as e:

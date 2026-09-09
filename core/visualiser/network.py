@@ -1,7 +1,66 @@
 import os
+import re
 import tempfile
 import pandas as pd
 from core.visualiser.styles import POS_COLOR_MAP
+
+def prepare_standalone_pyvis_html(net, height_px=550, bg_color="#222222"):
+    """
+    Generates completely self-contained, offline-compatible, dark-mode Pyvis HTML
+    that will NEVER display a white box or fail due to external CDN or relative path issues.
+    """
+    raw_html = net.generate_html()
+
+    # Remove broken relative script and stylesheet references
+    raw_html = re.sub(r'<script[^>]*src=["\']?lib/bindings/utils\.js["\']?[^>]*>\s*</script>', '', raw_html)
+    raw_html = re.sub(r'<script[^>]*src=["\']?\.\./node_modules/[^>]*>\s*</script>', '', raw_html)
+    raw_html = re.sub(r'<link[^>]*href=["\']?\.\./node_modules/[^>]*>', '', raw_html)
+    raw_html = re.sub(r'<link[^>]*bootstrap[^>]*>', '', raw_html)
+    raw_html = re.sub(r'<script[^>]*bootstrap[^>]*></script>', '', raw_html)
+
+    # Replace Bootstrap card wrapper
+    raw_html = raw_html.replace(
+        '<div class="card" style="width: 100%">',
+        f'<div style="width: 100%; height: {height_px}px; background-color: {bg_color};">'
+    )
+
+    # Enforce dark mode CSS reset
+    dark_css = f"""
+    <style>
+    *, *::before, *::after {{
+        box-sizing: border-box !important;
+    }}
+    html, body {{
+        background-color: {bg_color} !important;
+        color: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        overflow: hidden !important;
+    }}
+    .card, .card-body {{
+        background-color: {bg_color} !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }}
+    #mynetwork {{
+        width: 100% !important;
+        height: {height_px}px !important;
+        background-color: {bg_color} !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }}
+    </style>
+    """
+    if "</head>" in raw_html:
+        raw_html = raw_html.replace("</head>", dark_css + "</head>")
+    else:
+        raw_html = dark_css + raw_html
+
+    return raw_html
 
 def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"):
     try:
@@ -9,7 +68,7 @@ def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"
     except ImportError:
         return ""
 
-    net = Network(height="100%", width="100%", bgcolor="#222222", font_color="white", cdn_resources='local')
+    net = Network(height="550px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='in_line')
     if coll_df.empty: return ""
     max_score = coll_df[measure_col].max()
     min_score = coll_df[measure_col].min()
@@ -61,14 +120,4 @@ def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"
         net.add_node(collocate, label=collocate, size=node_size, color=color, title=tooltip_title, x=x_position)
         net.add_edge(target_word, collocate, value=score_val, width=5, title=f"{measure_name}: {score_val:.2f}")
 
-    html_content = ""; temp_path = None
-    try:
-        temp_filename = "pyvis_graph.html"
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, temp_filename)
-        net.write_html(temp_path, notebook=False)
-        with open(temp_path, 'r', encoding='utf-8') as f: html_content = f.read()
-    finally:
-        if temp_path and os.path.exists(temp_path): os.remove(temp_path)
-
-    return html_content
+    return prepare_standalone_pyvis_html(net, height_px=550, bg_color="#222222")
