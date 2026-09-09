@@ -146,6 +146,8 @@ TREETAGGER_LANG_MAP = {
     'en': 'english/english.par'
 }
 
+_TT_TEXT_CACHE = {}
+
 def tag_text_with_treetagger(text, lang_code):
     """
     Process text with TreeTagger. Detects OS and uses correct binary.
@@ -153,6 +155,10 @@ def tag_text_with_treetagger(text, lang_code):
     """
     if lang_code not in TREETAGGER_LANG_MAP:
         return None, f"Language '{lang_code}' not supported by local TreeTagger."
+
+    cache_key = (text.strip(), lang_code)
+    if cache_key in _TT_TEXT_CACHE:
+        return _TT_TEXT_CACHE[cache_key], None
 
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     tt_dir = os.path.join(base_dir, 'treetagger')
@@ -218,8 +224,10 @@ def tag_text_with_treetagger(text, lang_code):
         with open(output_path, 'r', encoding='utf-8') as f:
             output_text = f.read()
             
-        os.remove(input_path)
-        os.remove(output_path)
+        try: os.remove(input_path)
+        except Exception: pass
+        try: os.remove(output_path)
+        except Exception: pass
         
         # Parse vertical output: token \t pos \t lemma
         results = []
@@ -246,6 +254,7 @@ def tag_text_with_treetagger(text, lang_code):
             if token in ['.', '!', '?']:
                 sent_id += 1
                 
+        _TT_TEXT_CACHE[cache_key] = results
         return results, None
         
     except subprocess.CalledProcessError as e:
@@ -255,27 +264,19 @@ def tag_text_with_treetagger(text, lang_code):
 
 def tag_text_with_stanza(text, lang_code):
     """
-    Process text. Tries TreeTagger first, then SpaCy, then Stanza.
+    Process text. Tries SpaCy first (fast in-memory pipeline), then TreeTagger, then Stanza.
     Returns a tuple (list of dicts, error_msg)
     """
-    # 1. Try TreeTagger first (Highest Priority)
-    tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
-    if tt_results is not None:
-        print(f"Text tagged successfully using TreeTagger for '{lang_code}'.")
-        return tt_results, None
-        
-    print(f"TreeTagger not available/failed for '{lang_code}' (Error: {tt_err}). Falling back to SpaCy/Stanza...")
-
-    # 2. Try SpaCy
+    # 1. Try SpaCy first (In-memory, ~40x faster)
     spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
     if spacy_results is not None:
-        print(f"Text tagged successfully using SpaCy for '{lang_code}'.")
-        # If TreeTagger failed but was attempted, we could pass the warning. 
-        # But we must return the result. We'll return the error string as warning.
-        return spacy_results, f"treetagger fail, switching to SpaCy. {tt_err}"
+        return spacy_results, None
+
+    # 2. Try TreeTagger
+    tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
+    if tt_results is not None:
+        return tt_results, None
         
-    print(f"SpaCy not available/failed for '{lang_code}' (Error: {spacy_err}). Falling back to Stanza...")
-    
     # 3. Try Stanza
     try:
         nlp = get_stanza_pipeline(lang_code)
@@ -293,18 +294,10 @@ def tag_text_with_stanza(text, lang_code):
                         'sent_id': sent_id,
                         'ent_type': ""
                     })
-            print(f"Text tagged successfully using Stanza for '{lang_code}'.")
-            return results, f"treetagger fail, switching to Stanza. {tt_err}" if tt_err else None
+            return results, f"treetagger/spacy fail, switching to Stanza. {tt_err}" if tt_err else None
     except Exception as e:
         print(f"Stanza error for {lang_code}: {str(e)}")
         
-    # 3. Try Custom JSON or PKL Model as Last Resort if Stanza fails/is disabled
-    import os
-    import json
-    from core.preprocessing.custom_tagger import CustomDataDrivenTagger
-    
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    json_path = os.path.join(base_dir, 'model', f'{lang_code}-hmm.json')
     pkl_path = os.path.join(base_dir, 'model', f'{lang_code}-hmm.pkl')
     
     custom_tagger = None
