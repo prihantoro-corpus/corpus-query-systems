@@ -76,13 +76,13 @@ def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"
     
     net.set_options("""
     var options = {
-      "nodes": {"borderWidth": 2, "size": 15, "font": {"size": 30}},
-      "edges": {"width": 5, "smooth": {"type": "dynamic"}},
-      "physics": {"barnesHut": {"gravitationalConstant": -10000, "centralGravity": 0.3, "springLength": 95, "springConstant": 0.04, "damping": 0.9, "avoidOverlap": 0.5}, "minVelocity": 0.75}
+      "nodes": {"borderWidth": 3, "size": 30, "font": {"size": 90}},
+      "edges": {"width": 6, "smooth": {"type": "dynamic"}},
+      "physics": {"barnesHut": {"gravitationalConstant": -15000, "centralGravity": 0.3, "springLength": 220, "springConstant": 0.04, "damping": 0.85, "avoidOverlap": 0.7}, "minVelocity": 0.75}
     }
     """)
     
-    net.add_node(target_word, label=target_word, size=40, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'color': 'black'})
+    net.add_node(target_word, label=target_word, size=60, color='#FFFF00', title=f"Target: {target_word}", x=0, y=0, fixed=True, font={'size': 90, 'color': 'black'})
     
     LEFT_BIAS = -500; RIGHT_BIAS = 500
     all_directions = coll_df['Direction'].unique()
