@@ -119,3 +119,5 @@ scratch/
 !corpora/english/ICNALE_WE.db  
 !corpora/english/sm_icnale.db
 !corpora/english/BNC Spoken.db
+!corpora/english/EN-BPPT-tagged.db
+!corpora/indonesian/ID-BPPT-tagged.db

@@ -5,7 +5,21 @@ from ui_streamlit.caching import cached_generate_collocation
 from ui_streamlit.components.filters import render_xml_restriction_filters
 from core.preprocessing.xml_parser import apply_xml_restrictions
 from core.ai_service import interpret_results_llm, parse_nl_query, parse_nl_query_rules_only
-from core.visualiser.network import create_pyvis_graph
+try:
+    from core.visualiser.network import create_pyvis_graph, prepare_standalone_pyvis_html
+except ImportError:
+    import re
+    from core.visualiser.network import create_pyvis_graph
+    def prepare_standalone_pyvis_html(net, height_px=550, bg_color="#0f172a"):
+        raw_html = net.generate_html()
+        raw_html = re.sub(r'<script[^>]*src=["\']?lib/bindings/utils\.js["\']?[^>]*>\s*</script>', '', raw_html)
+        raw_html = re.sub(r'<script[^>]*src=["\']?\.\./node_modules/[^>]*>\s*</script>', '', raw_html)
+        raw_html = re.sub(r'<link[^>]*href=["\']?\.\./node_modules/[^>]*>', '', raw_html)
+        raw_html = re.sub(r'<link[^>]*bootstrap[^>]*>', '', raw_html)
+        raw_html = re.sub(r'<script[^>]*bootstrap[^>]*></script>', '', raw_html)
+        raw_html = raw_html.replace('<div class="card" style="width: 100%">', f'<div style="width: 100%; height: {height_px}px; background-color: {bg_color};">')
+        dark_css = f"""<style>*, *::before, *::after {{ box-sizing: border-box !important; }} html, body {{ background-color: {bg_color} !important; color: #ffffff !important; margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }} .card, .card-body {{ background-color: {bg_color} !important; border: none !important; padding: 0 !important; margin: 0 !important; width: 100% !important; height: 100% !important; }} #mynetwork {{ width: 100% !important; height: {height_px}px !important; background-color: {bg_color} !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; }}</style>"""
+        return raw_html.replace("</head>", dark_css + "</head>") if "</head>" in raw_html else dark_css + raw_html
 import core.modules.collocation_patterns
 from core.io_utils import df_to_excel_bytes
 from ui_streamlit.caching import cached_generate_kwic, cached_get_subcorpus_size
@@ -1760,7 +1774,8 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
             width="100%", 
             bgcolor="#0f172a", 
             font_color="#ffffff", 
-            notebook=False
+            notebook=False,
+            cdn_resources="in_line"
         )
         net.from_nx(G)
         
@@ -1790,26 +1805,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
         net.set_options(physics_json)
         
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
-                tmp_path = tmp.name
-            net.write_html(tmp_path)
-            
-            with open(tmp_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-                
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-                
-            # Replace white background styles from pyvis template
-            html_content = html_content.replace(
-                "background-color: #ffffff;",
-                "background-color: #0f172a;"
-            )
-            html_content = html_content.replace(
-                "border: 1px solid lightgray;",
-                "border: 1px solid rgba(255, 255, 255, 0.1);"
-            )
-            
+            html_content = prepare_standalone_pyvis_html(net, height_px=1200, bg_color="#0f172a")
             st.components.v1.html(html_content, height=1240, scrolling=False)
             
         except Exception as e:
