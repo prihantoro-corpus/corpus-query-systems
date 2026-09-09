@@ -24,8 +24,8 @@ def prepare_standalone_pyvis_html(net, height_px=550, bg_color="#222222"):
         f'<div style="width: 100%; height: {height_px}px; background-color: {bg_color};">'
     )
 
-    # Enforce dark mode CSS reset
-    dark_css = f"""
+    # Enforce dark mode CSS reset & wheel scroll forwarding script
+    dark_css_and_script = f"""
     <style>
     *, *::before, *::after {{
         box-sizing: border-box !important;
@@ -54,11 +54,37 @@ def prepare_standalone_pyvis_html(net, height_px=550, bg_color="#222222"):
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
     }}
     </style>
+    <script>
+    (function() {{
+        function forwardWheel(e) {{
+            try {{
+                if (window.parent && window.parent !== window) {{
+                    let dy = e.deltaY;
+                    let dx = e.deltaX;
+                    if (e.deltaMode === 1) {{
+                        dy *= 16;
+                        dx *= 16;
+                    }} else if (e.deltaMode === 2) {{
+                        dy *= window.innerHeight;
+                        dx *= window.innerWidth;
+                    }}
+                    window.parent.scrollBy({{
+                        top: dy,
+                        left: dx,
+                        behavior: 'auto'
+                    }});
+                }}
+            }} catch(err) {{}}
+        }}
+        window.addEventListener('wheel', forwardWheel, {{ passive: true, capture: true }});
+        document.addEventListener('wheel', forwardWheel, {{ passive: true, capture: true }});
+    }})();
+    </script>
     """
     if "</head>" in raw_html:
-        raw_html = raw_html.replace("</head>", dark_css + "</head>")
+        raw_html = raw_html.replace("</head>", dark_css_and_script + "</head>")
     else:
-        raw_html = dark_css + raw_html
+        raw_html = dark_css_and_script + raw_html
 
     return raw_html
 
