@@ -194,56 +194,52 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
 
     # Add category nodes
     for i, cat_name in enumerate(keywords_by_category.keys()):
-        # Separate color for overall node
         if cat_name == "Overall":
-            color = "#E2E8F0"  # Silver/White for central overall node
-            size = 45
+            color = "#E2E8F0"
+            size = 50
         else:
             color = CATEGORY_COLORS[i % len(CATEGORY_COLORS)]
-            size = 35
+            size = 45
             
         G.add_node(
             cat_name,
             label=str(cat_name),
             color=color,
             size=size,
-            font={'size': 38, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
+            font={'size': 36 if cat_name == "Overall" else 34, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category: {cat_name}"
         )
 
-    # Filter and add keyword nodes and edges
     added_keywords = set()
-    edges_to_add = []
 
     for cat_name, words in keywords_by_category.items():
         for word in words:
             count = word_counts.get(word, 0)
 
-            # Apply filters
-            if show_shared_only:
-                if count < min_shared:
-                    continue
+            if show_shared_only and count < min_shared:
+                continue
 
             if word not in added_keywords:
-                # Size word nodes proportional to how much they are shared
-                node_size = 12 + (count * 4)
-                node_color = "#00FFF5" if count > 1 else "#a5b4fc"
+                is_shared = count > 1
+                node_size = 24 + (count * 6) if is_shared else 20
+                node_color = "#FFFF00" if is_shared else "#a5b4fc"
+                font_size = 30 if is_shared else 24
                 
                 G.add_node(
                     word,
                     label=str(word),
                     color=node_color,
                     size=node_size,
-                    font={'size': 32, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
+                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 4 if is_shared else 2, 'strokeColor': '#000000'},
                     shape="dot",
                     title=f"Keyword: {word}\nShared by {count} categories"
                 )
                 added_keywords.add(word)
 
-            edges_to_add.append((cat_name, word))
-
-    G.add_edges_from(edges_to_add)
+            edge_width = 4 if count > 1 else 2
+            edge_color = "#FFFF00" if count > 1 else "rgba(165, 180, 252, 0.4)"
+            G.add_edge(cat_name, word, width=edge_width, color=edge_color)
 
     # Clean up categories that have no connected keywords
     isolated_nodes = [node for node in G.nodes() if G.degree(node) == 0]
@@ -252,13 +248,6 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
     if len(G.nodes) == 0:
         st.info("The network is empty. Try toggling off 'Show Only Shared Keywords' or reducing 'Minimum Shared Categories'.")
         return
-
-    # Pre-calculate positions using networkx spring layout for static presentation without initial movement
-    # Using a moderate k and scaling multiplier for balanced branch lengths
-    pos = nx.spring_layout(G, k=1.4 / (len(G.nodes) ** 0.5) if len(G.nodes) > 0 else 0.25, iterations=50)
-    for node, coords in pos.items():
-        G.nodes[node]['x'] = float(coords[0] * 750)
-        G.nodes[node]['y'] = float(coords[1] * 750)
 
     # Render using Pyvis
     with st.spinner("Generating network visualization..."):
@@ -274,24 +263,24 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
         
         physics_json = """
         {
+          "nodes": { "borderWidth": 2 },
+          "edges": { "smooth": { "type": "dynamic" } },
           "physics": {
-            "enabled": false
+            "barnesHut": {
+              "gravitationalConstant": -12000,
+              "centralGravity": 0.3,
+              "springLength": 120,
+              "springConstant": 0.04,
+              "damping": 0.85,
+              "avoidOverlap": 0.6
+            },
+            "minVelocity": 0.75
           },
           "interaction": {
             "hover": true,
             "navigationButtons": true,
-            "zoomView": true
-          },
-          "edges": {
-            "color": {
-              "color": "rgba(255, 255, 255, 0.18)",
-              "hover": "rgba(0, 255, 245, 0.8)",
-              "highlight": "rgba(0, 255, 245, 0.8)"
-            },
-            "width": 1.2,
-            "smooth": {
-              "type": "continuous"
-            }
+            "zoomView": true,
+            "dragNodes": true
           }
         }
         """

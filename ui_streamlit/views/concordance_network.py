@@ -186,14 +186,13 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
             cat_name,
             label=str(cat_name),
             color=color,
-            size=36,
-            font={'size': 36, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
+            size=45,
+            font={'size': 34, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category/Cluster: {cat_name}"
         )
 
     added_items = set()
-    edges_to_add = []
 
     for cat_name, items in data_by_category.items():
         for item in items:
@@ -203,23 +202,25 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
                 continue
 
             if item not in added_items:
-                node_size = 14 + (count * 5)
-                node_color = "#00FFF5" if count > 1 else "#a5b4fc"
+                is_shared = count > 1
+                node_size = 24 + (count * 6) if is_shared else 20
+                node_color = "#FFFF00" if is_shared else "#a5b4fc"
+                font_size = 30 if is_shared else 24
                 
                 G.add_node(
                     item,
                     label=str(item),
                     color=node_color,
                     size=node_size,
-                    font={'size': 30, 'color': '#ffffff', 'strokeWidth': 3, 'strokeColor': '#000000'},
+                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 4 if is_shared else 2, 'strokeColor': '#000000'},
                     shape="dot",
                     title=f"KWIC Finding: {item}\nShared by {count} categories"
                 )
                 added_items.add(item)
 
-            edges_to_add.append((cat_name, item))
-
-    G.add_edges_from(edges_to_add)
+            edge_width = 4 if count > 1 else 2
+            edge_color = "#FFFF00" if count > 1 else "rgba(165, 180, 252, 0.4)"
+            G.add_edge(cat_name, item, width=edge_width, color=edge_color)
 
     # Clean up isolated nodes
     isolated_nodes = [node for node in G.nodes() if G.degree(node) == 0]
@@ -228,12 +229,6 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
     if len(G.nodes) == 0:
         st.info("The network is empty. Try toggling off 'Show Only Shared KWIC' or reducing 'Minimum Shared Categories'.")
         return
-
-    # Layout calculation
-    pos = nx.spring_layout(G, k=1.4 / (len(G.nodes) ** 0.5) if len(G.nodes) > 0 else 0.25, iterations=50)
-    for node, coords in pos.items():
-        G.nodes[node]['x'] = float(coords[0] * 750)
-        G.nodes[node]['y'] = float(coords[1] * 750)
 
     # Render Pyvis
     with st.spinner("Generating Concordance Network..."):
@@ -249,20 +244,24 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
         
         physics_json = """
         {
-          "physics": { "enabled": false },
+          "nodes": { "borderWidth": 2 },
+          "edges": { "smooth": { "type": "dynamic" } },
+          "physics": {
+            "barnesHut": {
+              "gravitationalConstant": -12000,
+              "centralGravity": 0.3,
+              "springLength": 120,
+              "springConstant": 0.04,
+              "damping": 0.85,
+              "avoidOverlap": 0.6
+            },
+            "minVelocity": 0.75
+          },
           "interaction": {
             "hover": true,
             "navigationButtons": true,
-            "zoomView": true
-          },
-          "edges": {
-            "color": {
-              "color": "rgba(255, 255, 255, 0.2)",
-              "hover": "rgba(0, 255, 245, 0.8)",
-              "highlight": "rgba(0, 255, 245, 0.8)"
-            },
-            "width": 1.5,
-            "smooth": { "type": "continuous" }
+            "zoomView": true,
+            "dragNodes": true
           }
         }
         """
