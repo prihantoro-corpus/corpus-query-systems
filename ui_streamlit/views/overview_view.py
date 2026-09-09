@@ -1768,168 +1768,169 @@ def render_upload_ui():
                 else:
                     st.error("Please upload a pre-trained model file (.pkl) first.")
                 st.stop()
-            if is_db_upload:
-                with st.spinner("Loading Database..."):
-                    import uuid
-                    import tempfile
-                    import duckdb
-                    import json
-                    
-                    first_file = uploaded_files[0]
-                    unique_filename = f"corpus_{uuid.uuid4().hex}.duckdb"
-                    db_path = os.path.join(tempfile.gettempdir(), unique_filename)
-                    
+
+        if is_db_upload:
+            with st.spinner("Loading Database..."):
+                import uuid
+                import tempfile
+                import duckdb
+                import json
+                
+                first_file = uploaded_files[0]
+                unique_filename = f"corpus_{uuid.uuid4().hex}.duckdb"
+                db_path = os.path.join(tempfile.gettempdir(), unique_filename)
+                
+                try:
+                    # Write uploaded bytes to temp file
+                    first_file.seek(0)
+                    with open(db_path, 'wb') as f:
+                        f.write(first_file.read())
+                        
                     try:
-                        # Write uploaded bytes to temp file
-                        first_file.seek(0)
-                        with open(db_path, 'wb') as f:
-                            f.write(first_file.read())
-                            
-                        try:
-                            with duckdb.connect(db_path) as con:
-                                con.execute("ALTER TABLE corpus DROP COLUMN ent_type")
-                        except: pass
-                            
-                        # Query metadata
-                        with duckdb.connect(db_path, read_only=True) as con:
-                            tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+                        with duckdb.connect(db_path) as con:
+                            con.execute("ALTER TABLE corpus DROP COLUMN ent_type")
+                    except: pass
                         
-                            if 'corpus' not in tables:
-                                st.error("Uploaded database is not a valid Cortex database (missing 'corpus' table).")
-                                os.remove(db_path)
-                                return
-                                
-                            # Get language
-                            lang = "English"
-                            if 'corpus_metadata' in tables:
-                                res_lang = con.execute("SELECT value FROM corpus_metadata WHERE key='language'").fetchone()
-                                if res_lang:
-                                    lang = res_lang[0]
-                                    
-                            # Get XML structure
-                            structure = {}
-                            if 'corpus_metadata' in tables:
-                                res_struct = con.execute("SELECT value FROM corpus_metadata WHERE key='xml_structure'").fetchone()
-                                if res_struct:
-                                    try:
-                                        serializable_struct = json.loads(res_struct[0])
-                                        for tag in serializable_struct:
-                                            structure[tag] = {}
-                                            for attr in serializable_struct[tag]:
-                                                structure[tag][attr] = set(serializable_struct[tag][attr])
-                                    except:
-                                        pass
-                                        
-                            # Get Stats
-                            total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
-                            token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
-                            token_counts = {row[0]: row[1] for row in token_freqs}
-                            stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
-                        
-                        con.close()
-                        
-                    except Exception as e:
-                        st.error(f"Failed to read uploaded database: {e}")
-                        if os.path.exists(db_path):
-                            os.remove(db_path)
-                        return
+                    # Query metadata
+                    with duckdb.connect(db_path, read_only=True) as con:
+                        tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
                     
-                    # Save to state
-                    if not get_state('comparison_mode'):
+                        if 'corpus' not in tables:
+                            st.error("Uploaded database is not a valid Cortex database (missing 'corpus' table).")
+                            os.remove(db_path)
+                            return
+                            
+                        # Get language
+                        lang = "English"
+                        if 'corpus_metadata' in tables:
+                            res_lang = con.execute("SELECT value FROM corpus_metadata WHERE key='language'").fetchone()
+                            if res_lang:
+                                lang = res_lang[0]
+                                
+                        # Get XML structure
+                        structure = {}
+                        if 'corpus_metadata' in tables:
+                            res_struct = con.execute("SELECT value FROM corpus_metadata WHERE key='xml_structure'").fetchone()
+                            if res_struct:
+                                try:
+                                    serializable_struct = json.loads(res_struct[0])
+                                    for tag in serializable_struct:
+                                        structure[tag] = {}
+                                        for attr in serializable_struct[tag]:
+                                            structure[tag][attr] = set(serializable_struct[tag][attr])
+                                except:
+                                    pass
+                                    
+                        # Get Stats
+                        total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+                        token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
+                        token_counts = {row[0]: row[1] for row in token_freqs}
+                        stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
+                    
+                    con.close()
+                    
+                except Exception as e:
+                    st.error(f"Failed to read uploaded database: {e}")
+                    if os.path.exists(db_path):
+                        os.remove(db_path)
+                    return
+                
+                # Save to state
+                if not get_state('comparison_mode'):
+                    set_state('current_corpus_path', db_path)
+                    set_state('corpus_stats', stats)
+                    set_state('current_corpus_name', first_file.name)
+                    set_state('xml_structure_data', structure)
+                    set_state('target_lang', lang)
+                else:
+                    if not get_state('current_corpus_path'):
                         set_state('current_corpus_path', db_path)
                         set_state('corpus_stats', stats)
                         set_state('current_corpus_name', first_file.name)
                         set_state('xml_structure_data', structure)
-                        set_state('target_lang', lang)
+                    else:
+                        set_state('comp_corpus_path', db_path)
+                        set_state('comp_corpus_stats', stats)
+                        set_state('comp_corpus_name', first_file.name)
+                        set_state('comp_xml_structure_data', structure)
+                        
+                st.success("Database Loaded Successfully!")
+                st.rerun()
+        else:
+            # Force reload logic to pick up hotfixes
+            import sys
+            import importlib
+            try:
+                for mod in ['core.preprocessing.tagging', 'core.preprocessing.xml_parser', 'core.preprocessing.corpus_loader']:
+                    if mod in sys.modules:
+                        importlib.reload(sys.modules[mod])
+                st.toast("Processing modules updated! 🔄")
+            except Exception as e:
+                print(f"Reload Error: {e}")
+
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            def update_progress(val, text):
+                progress_bar.progress(val)
+                status_text.caption(text)
+
+            with st.spinner("Processing Corpus..."):
+                result = notify_timing("Corpus loaded")(corpus_loader.load_monolingual_corpus_files)(
+                    uploaded_files, 
+                    explicit_lang_code=lang_code,
+                    selected_format=fmt,
+                    progress_callback=update_progress,
+                    custom_tagger_config=custom_config
+                )
+                
+                if result.get('error'):
+                    st.error(result['error'])
+                else:
+                    if result.get('trained_tagger'):
+                        try:
+                            import pickle
+                            import json
+                            model_bytes = pickle.dumps(result['trained_tagger'])
+                            set_state('last_trained_tagger_bytes', model_bytes)
+                            
+                            # Also save as JSON for maximum portability
+                            model_json_str = json.dumps(result['trained_tagger'].to_json(), indent=2)
+                            set_state('last_trained_tagger_json', model_json_str.encode('utf-8'))
+                        except Exception as e:
+                            print(f"Error serializing model: {e}")
+                            
+                    # Extract and save annotated corpus text
+                    if result.get('annotated_corpus_text'):
+                        set_state('last_annotated_corpus_text', result['annotated_corpus_text'])
+                    
+                    if result.get('warning'):
+                        st.warning(result['warning'])
+                        
+                    if not get_state('comparison_mode'):
+                        set_state('current_corpus_path', result['db_path'])
+                        set_state('corpus_stats', result['stats'])
+                        set_state('current_corpus_name', "Uploaded Batch")
+                        set_state('xml_structure_data', result.get('structure'))
+                        set_state('target_lang', lang_code)
                     else:
                         if not get_state('current_corpus_path'):
-                            set_state('current_corpus_path', db_path)
-                            set_state('corpus_stats', stats)
-                            set_state('current_corpus_name', first_file.name)
-                            set_state('xml_structure_data', structure)
-                        else:
-                            set_state('comp_corpus_path', db_path)
-                            set_state('comp_corpus_stats', stats)
-                            set_state('comp_corpus_name', first_file.name)
-                            set_state('comp_xml_structure_data', structure)
-                            
-                    st.success("Database Loaded Successfully!")
-                    st.rerun()
-            else:
-                # Force reload logic to pick up hotfixes
-                import sys
-                import importlib
-                try:
-                    for mod in ['core.preprocessing.tagging', 'core.preprocessing.xml_parser', 'core.preprocessing.corpus_loader']:
-                        if mod in sys.modules:
-                            importlib.reload(sys.modules[mod])
-                    st.toast("Processing modules updated! 🔄")
-                except Exception as e:
-                    print(f"Reload Error: {e}")
-
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                def update_progress(val, text):
-                    progress_bar.progress(val)
-                    status_text.caption(text)
-
-                with st.spinner("Processing Corpus..."):
-                    result = notify_timing("Corpus loaded")(corpus_loader.load_monolingual_corpus_files)(
-                        uploaded_files, 
-                        explicit_lang_code=lang_code,
-                        selected_format=fmt,
-                        progress_callback=update_progress,
-                        custom_tagger_config=custom_config
-                    )
-                    
-                    if result.get('error'):
-                        st.error(result['error'])
-                    else:
-                        if result.get('trained_tagger'):
-                            try:
-                                import pickle
-                                import json
-                                model_bytes = pickle.dumps(result['trained_tagger'])
-                                set_state('last_trained_tagger_bytes', model_bytes)
-                                
-                                # Also save as JSON for maximum portability
-                                model_json_str = json.dumps(result['trained_tagger'].to_json(), indent=2)
-                                set_state('last_trained_tagger_json', model_json_str.encode('utf-8'))
-                            except Exception as e:
-                                print(f"Error serializing model: {e}")
-                                
-                        # Extract and save annotated corpus text
-                        if result.get('annotated_corpus_text'):
-                            set_state('last_annotated_corpus_text', result['annotated_corpus_text'])
-                        
-                        if result.get('warning'):
-                            st.warning(result['warning'])
-                            
-                        if not get_state('comparison_mode'):
                             set_state('current_corpus_path', result['db_path'])
                             set_state('corpus_stats', result['stats'])
-                            set_state('current_corpus_name', "Uploaded Batch")
+                            set_state('current_corpus_name', "Primary")
                             set_state('xml_structure_data', result.get('structure'))
-                            set_state('target_lang', lang_code)
                         else:
-                            if not get_state('current_corpus_path'):
-                                set_state('current_corpus_path', result['db_path'])
-                                set_state('corpus_stats', result['stats'])
-                                set_state('current_corpus_name', "Primary")
-                                set_state('xml_structure_data', result.get('structure'))
-                            else:
-                                set_state('comp_corpus_path', result['db_path'])
-                                set_state('comp_corpus_stats', result['stats'])
-                                set_state('comp_corpus_name', "Comparison")
-                                set_state('comp_xml_structure_data', result.get('structure'))
-                        
-                        try:
-                            st.cache_data.clear()
-                        except:
-                            pass
-                        st.success("Corpus Loaded Successfully!")
-                        st.rerun()
+                            set_state('comp_corpus_path', result['db_path'])
+                            set_state('comp_corpus_stats', result['stats'])
+                            set_state('comp_corpus_name', "Comparison")
+                            set_state('comp_xml_structure_data', result.get('structure'))
+                    
+                    try:
+                        st.cache_data.clear()
+                    except:
+                        pass
+                    st.success("Corpus Loaded Successfully!")
+                    st.rerun()
 
 def render_built_in_corpora_selection_ui():
     from core.config import get_available_corpora, BUILT_IN_CORPUS_DETAILS
