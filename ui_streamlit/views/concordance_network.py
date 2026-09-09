@@ -243,7 +243,7 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
     # Render Pyvis
     with st.spinner("Generating Concordance Network..."):
         net = Network(
-            height="850px", 
+            height="650px", 
             width="100%", 
             bgcolor="#0f172a", 
             font_color="#ffffff", 
@@ -275,16 +275,17 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
           "interaction": {{
             "hover": true,
             "navigationButtons": true,
-            "zoomView": true,
-            "dragNodes": true
+            "zoomView": false,
+            "dragNodes": true,
+            "dragView": true
           }}
         }}
         """
         net.set_options(physics_json)
 
         try:
-            html_content = prepare_standalone_pyvis_html(net, height_px=850, bg_color="#0f172a")
-            st.components.v1.html(html_content, height=870, scrolling=False)
+            html_content = prepare_standalone_pyvis_html(net, height_px=650, bg_color="#0f172a")
+            st.components.v1.html(html_content, height=670, scrolling=False)
             
         except Exception as e:
             st.error(f"Failed to render pyvis network: {e}")

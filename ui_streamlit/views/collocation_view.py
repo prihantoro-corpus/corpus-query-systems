@@ -1780,7 +1780,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
     # Render using Pyvis
     with st.spinner("Generating collocation network..."):
         net = Network(
-            height="1200px", 
+            height="650px", 
             width="100%", 
             bgcolor="#0f172a", 
             font_color="#ffffff", 
@@ -1812,16 +1812,17 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
           "interaction": {{
             "hover": true,
             "navigationButtons": true,
-            "zoomView": true,
-            "dragNodes": true
+            "zoomView": false,
+            "dragNodes": true,
+            "dragView": true
           }}
         }}
         """
         net.set_options(physics_json)
         
         try:
-            html_content = prepare_standalone_pyvis_html(net, height_px=1200, bg_color="#0f172a")
-            st.components.v1.html(html_content, height=1240, scrolling=False)
+            html_content = prepare_standalone_pyvis_html(net, height_px=650, bg_color="#0f172a")
+            st.components.v1.html(html_content, height=670, scrolling=False)
             
         except Exception as e:
             st.error(f"Failed to render pyvis network: {e}")
