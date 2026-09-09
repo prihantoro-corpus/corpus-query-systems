@@ -167,11 +167,12 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
                 tagged_data, err = stanza_processor(text, lang_code)
                 if not err and tagged_data:
                     for rec in tagged_data:
+                        s_id = rec.get('sent_id', sent_id)
                         row = {
                             'token': rec['token'],
                             'pos': rec['pos'],
                             'lemma': rec['lemma'],
-                            'sent_id': sent_id
+                            'sent_id': s_id
                         }
                         row.update(combined_attrs)
                         row.update(context)
@@ -258,6 +259,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
     df_data = []
     sent_map = {}
     detected_attrs = {} 
+    sequential_id_counter = 0
     
     excluded_attrs = ('n', 'num', 'lang') # Removed 'id' from exclusion, manually handled below
     base_root_attrs = {}
@@ -376,10 +378,14 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
                 stanza_processor,
                 final_lang
             )
-            # Build sentence text for sent_map
-            raw_sentence_text = "".join(sent_elem.itertext()).strip()
-            if raw_sentence_text:
-                sent_map[sent_id] = raw_sentence_text
+            # Build sentence text for sent_map across all sent_ids generated
+            temp_sent_parts = {}
+            for r in df_data:
+                sid = r.get('sent_id')
+                if sid not in sent_map:
+                    temp_sent_parts.setdefault(sid, []).append(r['token'])
+            for sid, parts in temp_sent_parts.items():
+                sent_map[sid] = " ".join(parts)
             continue  # Skip legacy processing
         
         # LEGACY: Original processing for <w> tags and vertical format
