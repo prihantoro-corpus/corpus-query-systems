@@ -80,7 +80,7 @@ def render_keyword_network(res, key_suffix=""):
                 "Node Font Size",
                 min_value=14,
                 max_value=80,
-                value=38,
+                value=26,
                 step=2,
                 key=f"kw_net_font_{key_suffix}"
             )
@@ -146,7 +146,7 @@ def render_keyword_network(res, key_suffix=""):
         )
 
 
-def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, show_shared_only, min_shared, base_font_size=38, key_suffix=""):
+def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, show_shared_only, min_shared, base_font_size=26, key_suffix=""):
     # Extract keywords per category
     keywords_by_category = {}
 

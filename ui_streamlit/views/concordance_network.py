@@ -76,7 +76,7 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
                 "Node Font Size",
                 min_value=14,
                 max_value=80,
-                value=38,
+                value=26,
                 step=2,
                 key=f"kwic_net_font_{key_suffix}"
             )

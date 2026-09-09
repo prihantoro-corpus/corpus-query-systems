@@ -849,7 +849,7 @@ def render_collocation_results_column(results, key_suffix=""):
                  plot_top_measure(df[df['Direction'].isin(['R', 'B'])], "Right-Dominant", "lightgreen")
              
          with tab_graph:
-             graph_font_size = st.slider("Node Font Size", min_value=14, max_value=80, value=38, step=2, key=f"coll_single_font_{key_suffix}")
+             graph_font_size = st.slider("Node Font Size", min_value=14, max_value=80, value=26, step=2, key=f"coll_single_font_{key_suffix}")
              subtab_all, subtab_left, subtab_right = st.tabs(["🌐 Overall Network", "⬅️ Left Network", "➡️ Right Network"])
              with subtab_all:
                  st.caption("Overall Collocation Network (Top 30)")
@@ -1677,7 +1677,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
             "Node Font Size",
             min_value=14,
             max_value=80,
-            value=38,
+            value=26,
             step=2,
             key=f"coll_multi_net_font_{key_suffix}"
         )
