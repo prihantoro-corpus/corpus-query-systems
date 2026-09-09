@@ -186,8 +186,8 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
             cat_name,
             label=str(cat_name),
             color=color,
-            size=45,
-            font={'size': 34, 'color': '#ffffff', 'strokeWidth': 5, 'strokeColor': '#000000'},
+            size=65,
+            font={'size': 102, 'color': '#ffffff', 'strokeWidth': 6, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category/Cluster: {cat_name}"
         )
@@ -203,22 +203,22 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
 
             if item not in added_items:
                 is_shared = count > 1
-                node_size = 24 + (count * 6) if is_shared else 20
+                node_size = 40 + (count * 8) if is_shared else 30
                 node_color = "#FFFF00" if is_shared else "#a5b4fc"
-                font_size = 30 if is_shared else 24
+                font_size = 90 if is_shared else 72
                 
                 G.add_node(
                     item,
                     label=str(item),
                     color=node_color,
                     size=node_size,
-                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 4 if is_shared else 2, 'strokeColor': '#000000'},
+                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 5 if is_shared else 3, 'strokeColor': '#000000'},
                     shape="dot",
                     title=f"KWIC Finding: {item}\nShared by {count} categories"
                 )
                 added_items.add(item)
 
-            edge_width = 4 if count > 1 else 2
+            edge_width = 5 if count > 1 else 3
             edge_color = "#FFFF00" if count > 1 else "rgba(165, 180, 252, 0.4)"
             G.add_edge(cat_name, item, width=edge_width, color=edge_color)
 
@@ -244,16 +244,16 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
         
         physics_json = """
         {
-          "nodes": { "borderWidth": 2 },
+          "nodes": { "borderWidth": 3, "font": { "size": 85 } },
           "edges": { "smooth": { "type": "dynamic" } },
           "physics": {
             "barnesHut": {
-              "gravitationalConstant": -12000,
+              "gravitationalConstant": -18000,
               "centralGravity": 0.3,
-              "springLength": 120,
+              "springLength": 250,
               "springConstant": 0.04,
               "damping": 0.85,
-              "avoidOverlap": 0.6
+              "avoidOverlap": 0.7
             },
             "minVelocity": 0.75
           },
