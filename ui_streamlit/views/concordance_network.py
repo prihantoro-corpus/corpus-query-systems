@@ -39,7 +39,7 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
     # Global Controls Container
     with st.container(border=True):
         st.markdown("##### ⚙️ Network Configuration")
-        c1, c2, c3 = st.columns([2, 1, 1])
+        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         
         with c1:
             if has_coll_filter:
@@ -69,6 +69,16 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
                 value=False,
                 help="Hides words that appear in only a single category to focus on shared pattern relationships.",
                 key=f"kwic_net_shared_only_{key_suffix}"
+            )
+
+        with c4:
+            base_font_size = st.slider(
+                "Node Font Size",
+                min_value=14,
+                max_value=80,
+                value=38,
+                step=2,
+                key=f"kwic_net_font_{key_suffix}"
             )
 
         max_cats = len(cluster_names)
@@ -187,7 +197,7 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
             label=str(cat_name),
             color=color,
             size=45,
-            font={'size': 48, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
+            font={'size': base_font_size + 10, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category/Cluster: {cat_name}"
         )
@@ -205,14 +215,14 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
                 is_shared = count > 1
                 node_size = 28 + (count * 4) if is_shared else 20
                 node_color = "#FFFF00" if is_shared else "#a5b4fc"
-                font_size = 40 if is_shared else 28
+                font_sz = base_font_size + 2 if is_shared else max(12, base_font_size - 10)
                 
                 G.add_node(
                     item,
                     label=str(item),
                     color=node_color,
                     size=node_size,
-                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 3 if is_shared else 2, 'strokeColor': '#000000'},
+                    font={'size': font_sz, 'color': '#ffffff', 'strokeWidth': 3 if is_shared else 2, 'strokeColor': '#000000'},
                     shape="dot",
                     title=f"KWIC Finding: {item}\nShared by {count} categories"
                 )
@@ -242,33 +252,33 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
         )
         net.from_nx(G)
         
-        physics_json = """
-        {
-          "nodes": { "borderWidth": 2, "font": { "size": 38 } },
-          "edges": { "smooth": { "type": "dynamic" } },
-          "physics": {
+        physics_json = f"""
+        {{
+          "nodes": {{ "borderWidth": 2, "font": {{ "size": {base_font_size} }} }},
+          "edges": {{ "smooth": {{ "type": "dynamic" }} }},
+          "physics": {{
             "solver": "barnesHut",
-            "barnesHut": {
+            "barnesHut": {{
               "gravitationalConstant": -3500,
               "centralGravity": 0.3,
               "springLength": 130,
               "springConstant": 0.04,
               "damping": 0.9,
               "avoidOverlap": 0.3
-            },
-            "stabilization": {
+            }},
+            "stabilization": {{
               "enabled": true,
               "iterations": 100,
               "updateInterval": 25
-            }
-          },
-          "interaction": {
+            }}
+          }},
+          "interaction": {{
             "hover": true,
             "navigationButtons": true,
             "zoomView": true,
             "dragNodes": true
-          }
-        }
+          }}
+        }}
         """
         net.set_options(physics_json)
 

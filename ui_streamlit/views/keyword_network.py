@@ -52,7 +52,7 @@ def render_keyword_network(res, key_suffix=""):
     # Global Controls for Network
     with st.container(border=True):
         st.markdown("##### ⚙️ Network Configuration")
-        c1, c2, c3 = st.columns([2, 1, 1])
+        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         with c1:
             selected_group = st.selectbox(
                 "Group Network By",
@@ -75,6 +75,15 @@ def render_keyword_network(res, key_suffix=""):
                 key=f"kw_net_hide_overall_{key_suffix}"
             )
             include_overall = not hide_overall
+        with c4:
+            base_font_size = st.slider(
+                "Node Font Size",
+                min_value=14,
+                max_value=80,
+                value=38,
+                step=2,
+                key=f"kw_net_font_{key_suffix}"
+            )
 
         f1, f2 = st.columns(2)
         with f1:
@@ -119,25 +128,25 @@ def render_keyword_network(res, key_suffix=""):
         st.caption("ℹ️ Positive keywords are words used significantly **more** in the target than in the reference.")
         _build_and_render_network(
             res, data_dict, "Positive", top_n, include_overall, 
-            show_shared_only, min_shared, key_suffix=f"pos_{key_suffix}"
+            show_shared_only, min_shared, base_font_size, key_suffix=f"pos_{key_suffix}"
         )
 
     with net_tab_neg:
         st.caption("ℹ️ Negative keywords are words used significantly **less** (or missing) in the target compared to the reference.")
         _build_and_render_network(
             res, data_dict, "Negative", top_n, include_overall, 
-            show_shared_only, min_shared, key_suffix=f"neg_{key_suffix}"
+            show_shared_only, min_shared, base_font_size, key_suffix=f"neg_{key_suffix}"
         )
 
     with net_tab_comp:
         st.caption("ℹ️ Comparative/Stable words are those that occur with comparable frequencies in both corpora.")
         _build_and_render_network(
             res, data_dict, "Stable", top_n, include_overall, 
-            show_shared_only, min_shared, key_suffix=f"comp_{key_suffix}"
+            show_shared_only, min_shared, base_font_size, key_suffix=f"comp_{key_suffix}"
         )
 
 
-def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, show_shared_only, min_shared, key_suffix):
+def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, show_shared_only, min_shared, base_font_size=38, key_suffix=""):
     # Extract keywords per category
     keywords_by_category = {}
 
@@ -201,12 +210,13 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
             color = CATEGORY_COLORS[i % len(CATEGORY_COLORS)]
             size = 45
             
+        cat_font_sz = base_font_size + 14 if cat_name == "Overall" else base_font_size + 10
         G.add_node(
             cat_name,
             label=str(cat_name),
             color=color,
             size=size,
-            font={'size': 52 if cat_name == "Overall" else 48, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
+            font={'size': cat_font_sz, 'color': '#ffffff', 'strokeWidth': 4, 'strokeColor': '#000000'},
             shape="dot",
             title=f"Category: {cat_name}"
         )
@@ -224,14 +234,14 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
                 is_shared = count > 1
                 node_size = 28 + (count * 4) if is_shared else 20
                 node_color = "#FFFF00" if is_shared else "#a5b4fc"
-                font_size = 40 if is_shared else 28
+                word_font_sz = base_font_size + 2 if is_shared else max(12, base_font_size - 10)
                 
                 G.add_node(
                     word,
                     label=str(word),
                     color=node_color,
                     size=node_size,
-                    font={'size': font_size, 'color': '#ffffff', 'strokeWidth': 3 if is_shared else 2, 'strokeColor': '#000000'},
+                    font={'size': word_font_sz, 'color': '#ffffff', 'strokeWidth': 3 if is_shared else 2, 'strokeColor': '#000000'},
                     shape="dot",
                     title=f"Keyword: {word}\nShared by {count} categories"
                 )
@@ -261,33 +271,33 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
         )
         net.from_nx(G)
         
-        physics_json = """
-        {
-          "nodes": { "borderWidth": 2, "font": { "size": 38 } },
-          "edges": { "smooth": { "type": "dynamic" } },
-          "physics": {
+        physics_json = f"""
+        {{
+          "nodes": {{ "borderWidth": 2, "font": {{ "size": {base_font_size} }} }},
+          "edges": {{ "smooth": {{ "type": "dynamic" }} }},
+          "physics": {{
             "solver": "barnesHut",
-            "barnesHut": {
+            "barnesHut": {{
               "gravitationalConstant": -3500,
               "centralGravity": 0.3,
               "springLength": 130,
               "springConstant": 0.04,
               "damping": 0.9,
               "avoidOverlap": 0.3
-            },
-            "stabilization": {
+            }},
+            "stabilization": {{
               "enabled": true,
               "iterations": 100,
               "updateInterval": 25
-            }
-          },
-          "interaction": {
+            }}
+          }},
+          "interaction": {{
             "hover": true,
             "navigationButtons": true,
             "zoomView": true,
             "dragNodes": true
-          }
-        }
+          }}
+        }}
         """
         net.set_options(physics_json)
 
