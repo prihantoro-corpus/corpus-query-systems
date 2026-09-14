@@ -327,7 +327,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
 
         collocation_query = f"""
         SELECT 
-            c2.token as w, 
+            c2._token_low as w, 
             c2.pos as p, 
             lower(c2.lemma) as l, 
             CASE WHEN c2.id < m.id THEN 'L' ELSE 'R' END as direction,

@@ -72,11 +72,11 @@ elif 'kwic_query' in st.query_params:
     st.query_params.clear()
     st.rerun()
 
-# CSS Styling for Premium Dark Blue Theme
+# CSS Styling for Premium Dark Blue Theme (Matching Online Configuration)
 PRIMARY_COLOR = "#00ADB5"
-BACKGROUND_COLOR = "#0f172a"
-SECONDARY_BACKGROUND = "#1e293b"
-TEXT_COLOR = "#f8fafc"
+BACKGROUND_COLOR = "#0b132b"
+SECONDARY_BACKGROUND = "#1c2541"
+TEXT_COLOR = "#FFFFFF"
 
 st.markdown(f"""
 <style>
@@ -91,7 +91,7 @@ st.markdown(f"""
         color: {TEXT_COLOR} !important;
     }}
     
-    /* Top Header Bar - Force Dark */
+    /* Top Header Bar */
     header[data-testid="stHeader"], [data-testid="stHeader"] {{
         background-color: {BACKGROUND_COLOR} !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -103,168 +103,82 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
     }}
     
-    /* Force ALL Labels and text to be White/High Contrast */
-    label, 
-    label p, 
-    [data-testid="stWidgetLabel"] p,
-    .stMarkdown p,
-    .stText p,
-    span.st-emotion-cache-ycmcfb {{
-        color: #FFFFFF !important;
-        font-weight: 600 !important;
-    }}
-    
-    /* Specific Sidebar Widget Labels - Cyan */
-    [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p,
+    /* Sidebar Headers - Cyan Accent */
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 {{
         color: #00FFF5 !important;
     }}
     
-    /* Inputs, Selectboxes & Number Inputs - Force DEEP Dark Background */
+    /* Base Inputs & Selectboxes */
     div[data-baseweb="input"], 
     div[data-baseweb="select"] > div,
-    div[data-baseweb="base-input"],
-    .stTextInput input,
-    .stNumberInput input,
-    .stTextArea textarea {{
-        background-color: #1e293b !important; /* Secondary background to stand out slightly from main BG */
+    div[data-baseweb="base-input"] {{
+        background-color: #1c2541 !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        color: #FFFFFF !important;
         border-radius: 8px !important;
     }}
     
-    /* Ensure text inside ALL inputs is white */
-    input, textarea, [data-testid="stSelectedValue"], .stTextInput input, .stNumberInput input {{
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }}
-    
-    /* Dropdown Menus (st.selectbox & st.multiselect option popups) */
-    [data-testid="stSelectboxVirtualDropdown"],
-    [data-testid="stSelectboxVirtualDropdown"] ul,
-    [data-testid="stSelectboxVirtualDropdown"] div,
-    [data-testid="stSelectboxVirtualDropdown"] span,
-    [data-testid="stSelectboxVirtualDropdown"] li,
-    li[role="option"] {{
-        background-color: #1e293b !important;
-        color: #FFFFFF !important;
-        border-color: rgba(255, 255, 255, 0.2) !important;
-    }}
-    [data-testid="stSelectboxVirtualDropdown"] li:hover,
-    [data-testid="stSelectboxVirtualDropdown"] li:hover span,
-    [data-testid="stSelectboxVirtualDropdown"] li:hover div,
-    li[role="option"]:hover,
-    li[role="option"]:hover span,
-    li[role="option"]:hover div {{
-        background-color: {PRIMARY_COLOR} !important;
-        color: #FFFFFF !important;
-    }}
-    
-    /* Multiselect Styling */
+    /* Multiselect Tags */
     .stMultiSelect [data-baseweb="tag"] {{
         background-color: {PRIMARY_COLOR} !important;
         color: #FFFFFF !important;
     }}
-    .stMultiSelect [data-baseweb="tag"] span {{
+    
+    /* Buttons & Popovers - Streamlit Dark Theme Clean Override */
+    .stButton>button,
+    [data-testid="stPopover"]>button {{
+        background-color: #00ADB5 !important;
         color: #FFFFFF !important;
-    }}
-    .stMultiSelect div[data-baseweb="select"] {{
-        background-color: #1e293b !important;
-    }}
-    .stMultiSelect input {{
-        color: #FFFFFF !important;
-    }}
-
-    /* Icons and Indicators */
-    div[data-baseweb="select"] svg, 
-    .st-emotion-cache-1v04fbb,
-    [data-testid="stMetricValue"] {{
-        fill: #00FFF5 !important;
-        color: #00FFF5 !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
     }}
     
-    /* File Uploader */
-    [data-testid="stFileUploaderDropzone"] {{
-        background-color: rgba(255, 255, 255, 0.05) !important;
+    .stButton>button:hover,
+    [data-testid="stPopover"]>button:hover {{
+        background-color: #008c93 !important;
         color: #FFFFFF !important;
-        border: 1px dashed rgba(0, 255, 245, 0.4) !important;
-    }}
-    [data-testid="stFileUploaderDropzone"] p, 
-    [data-testid="stFileUploaderDropzone"] span {{
-        color: #FFFFFF !important;
-    }}
-
-    /* Premium Buttons */
-    .stButton>button {{
-        color: #FFFFFF !important;
-        background: linear-gradient(135deg, {PRIMARY_COLOR} 0%, #00767C 100%) !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
-        border-radius: 10px !important;
-        padding: 0.6rem 1.2rem !important;
-        transition: all 0.2s ease-in-out !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
-        text-transform: uppercase !important;
-        font-weight: 700 !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-    }}
-    .stButton>button:hover {{
-        transform: scale(1.02) !important;
-        box-shadow: 0 6px 20px rgba(0, 173, 181, 0.6) !important;
-        background: linear-gradient(135deg, #00FFF5 0%, {PRIMARY_COLOR} 100%) !important;
         border-color: #00FFF5 !important;
     }}
     
-    /* Expander Styling - Make it obvious its dark */
+    /* File Uploader Container & Dropzone */
+    [data-testid="stFileUploaderDropzone"] {{
+        background-color: rgba(255, 255, 255, 0.03) !important;
+        border: 1px dashed rgba(0, 255, 245, 0.4) !important;
+        border-radius: 10px !important;
+    }}
+
+    [data-testid="stFileUploaderDropzone"] button {{
+        background-color: #00ADB5 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+    }}
+
+    [data-testid="stFileUploaderDropzone"] button:hover {{
+        background-color: #008c93 !important;
+        color: #FFFFFF !important;
+    }}
+    
+    /* Expander Styling */
     .stExpander {{
-        background-color: rgba(0, 0, 0, 0.2) !important;
+        background-color: rgba(28, 37, 65, 0.4) !important;
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 12px !important;
+        border-radius: 10px !important;
         margin-bottom: 1rem !important;
     }}
     .stExpander summary {{
         color: #00FFF5 !important;
-        font-weight: 700 !important;
-        background-color: rgba(255, 255, 255, 0.03) !important;
-    }}
-    .stExpander summary:hover {{
-        color: #FFFFFF !important;
-        background-color: rgba(255, 255, 255, 0.08) !important;
+        font-weight: 600 !important;
     }}
     
-    /* Table Styling - High Contrast */
-    table, .stDataFrame {{
-        color: #FFFFFF !important;
-    }}
-    table th, table td, 
-    [data-testid="stTable"] th,
-    [data-testid="stTable"] td {{
-        color: #FFFFFF !important;
-        background-color: rgba(255, 255, 255, 0.03) !important;
-        border-color: rgba(255, 255, 255, 0.1) !important;
-    }}
+    /* Table Headers */
     table thead th {{
         background-color: rgba(0, 173, 181, 0.2) !important;
         color: #00FFF5 !important;
         font-weight: 700 !important;
-    }}
-    
-    /* Download Button - Always Dark Background */
-    .stDownloadButton>button {{
-        color: #FFFFFF !important;
-        background-color: #1e293b !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
-        border-radius: 8px !important;
-        padding: 0.5rem 1rem !important;
-        transition: all 0.2s ease-in-out !important;
-    }}
-    .stDownloadButton>button:hover {{
-        background-color: rgba(0, 173, 181, 0.3) !important;
-        border-color: #00FFF5 !important;
-        color: #FFFFFF !important;
-        transform: scale(1.02) !important;
     }}
 """, unsafe_allow_html=True)
 

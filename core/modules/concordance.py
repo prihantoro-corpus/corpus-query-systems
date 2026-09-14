@@ -182,25 +182,26 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     query_where.append(f"{alias}.{tag_start_col} = TRUE")
                     for attr_key, attr_val in attrs.items():
                         attr_col = f"{tag_name}_{attr_key}"
-                        if '*' in attr_val:
-                            regex_pat = '^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
+                        if attr_col in cols:
+                            if '*' in attr_val:
+                                regex_pat = '(?i)^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
+                            else:
+                                regex_pat = '(?i)' + re.escape(attr_val)
                             query_where.append(f"regexp_matches({alias}.{attr_col}, ?)")
                             query_params.append(regex_pat)
                         else:
-                            query_where.append(f"{alias}.{attr_col} = ?")
-                            query_params.append(attr_val)
+                            query_where.append("1=0")
                 elif tag_name in cols:
                     # Token-level metadata property (e.g. <dep_rel="nsubj">)
                     # Use 'value' attribute or first attribute as the target for the column
                     target_val = attrs.get('value') or (list(attrs.values())[0] if attrs else None)
                     if target_val:
                         if '*' in target_val:
-                            regex_pat = '^' + re.escape(target_val).replace(r'\*', '.*') + '$'
-                            query_where.append(f"regexp_matches({alias}.{tag_name}, ?)")
-                            query_params.append(regex_pat)
+                            regex_pat = '(?i)^' + re.escape(target_val).replace(r'\*', '.*') + '$'
                         else:
-                            query_where.append(f"{alias}.{tag_name} = ?")
-                            query_params.append(target_val)
+                            regex_pat = '(?i)' + re.escape(target_val)
+                        query_where.append(f"regexp_matches({alias}.{tag_name}, ?)")
+                        query_params.append(regex_pat)
                     else:
                         # Just <TAG> (ensure it's not null)
                         query_where.append(f"{alias}.{tag_name} IS NOT NULL")

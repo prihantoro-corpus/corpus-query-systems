@@ -79,7 +79,7 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
     tag_name = element.tag.lower()
     
     # Skip structural tags that shouldn't be tracked as inline context
-    structural_tags = {'corpus', 'text', 's', 'sent', 'u', 'utterance', 'p', 'para', 'ab', 'div', 'w'}
+    structural_tags = {'corpus', 'text', 's', 'sent', 'u', 'utterance', 'p', 'para', 'ab', 'div', 'w', 'document', 'body', 'header', 'article', 'essay'}
     
     if tag_name not in structural_tags:
         # Add boolean flag for tag presence (normalize tag name)
@@ -275,7 +275,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
     elements_to_process = []
     pass1_tags = {'sent', 's', 'u', 'utterance', 'turn'}
     pass2_tags = {'p', 'para', 'ab', 'div', 'dialogue'} 
-    pass3_tags = {'text'}
+    pass3_tags = {'text', 'body', 'document', 'article', 'essay', 'entry'}
 
     def traverse_and_collect(element, current_attrs, target_tags):
         new_attrs = current_attrs.copy()
