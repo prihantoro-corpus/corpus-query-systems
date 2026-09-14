@@ -519,12 +519,12 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         all_cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
         all_cols = [c[1] for c in all_cols_info]
         meta_cols = [c for c in all_cols if c not in standard_cols]
-        # Exclude internal _len and _start columns from metadata display
-        meta_cols = [c for c in meta_cols if not (c.endswith('_len') or c.endswith('_start') or c.endswith('_id'))]
+        # Exclude internal _len and _start columns and namespace attribute names containing braces
+        meta_cols = [c for c in meta_cols if not (c.endswith('_len') or c.endswith('_start') or c.endswith('_id') or '{' in c or '}' in c)]
         
         meta_select_part = ""
         if meta_cols:
-            meta_select_part = ", " + ", ".join([f"c.{c}" for c in meta_cols])
+            meta_select_part = ", " + ", ".join([f'c."{c}"' for c in meta_cols])
 
         # Context query using the specific span length for each match
         context_query = f"""
@@ -711,13 +711,36 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                 else:
                     right_part.append(final_html) 
             
+            # Build full sentence token sequence for sentence display & interlinear glossing
+            sentence_token_records = []
+            for k, token in enumerate(tokens):
+                if node_sent_id is not None and chunk_sent_ids[k] != node_sent_id:
+                    continue
+                
+                is_node = (node_start_idx <= k < node_start_idx + current_match_span_len)
+                row_idx = k
+                
+                rec = {
+                    'token': token,
+                    'pos': poss[k],
+                    'lemma': lemmas[k],
+                    'is_node': is_node,
+                    'ort_d': group.iloc[row_idx]['ort_d'] if 'ort_d' in group.columns and pd.notna(group.iloc[row_idx]['ort_d']) else token,
+                    'phn_f': group.iloc[row_idx]['phn_f'] if 'phn_f' in group.columns and pd.notna(group.iloc[row_idx]['phn_f']) else '',
+                    'phn_d': group.iloc[row_idx]['phn_d'] if 'phn_d' in group.columns and pd.notna(group.iloc[row_idx]['phn_d']) else '',
+                    'gloss': group.iloc[row_idx]['gloss'] if 'gloss' in group.columns and pd.notna(group.iloc[row_idx]['gloss']) else '',
+                    'trans': group.iloc[row_idx]['trans'] if 'trans' in group.columns and pd.notna(group.iloc[row_idx]['trans']) else metadata.get('trans', '')
+                }
+                sentence_token_records.append(rec)
+
             kwic_rows.append({
                 "match_id": int(match_id),
                 "Left": " ".join(left_part),
                 "Node": " ".join(node_orig_tokens),
                 "Right": " ".join(right_part),
                 "Collocate": collocate_to_display,
-                "Metadata": metadata  # Add Metadata
+                "Metadata": metadata,
+                "SentenceTokens": sentence_token_records
             })
 
         # Apply Duplicate Filtering if requested

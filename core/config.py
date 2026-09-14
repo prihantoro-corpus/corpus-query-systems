@@ -18,6 +18,7 @@ KNOWN_CORPORA_MAP = {
     "ICNALE Spoken Monologue": "english/sm_icnale.db",
     "BNC Spoken": "english/BNC Spoken.duckdb",
     "BNC": "english/BNC.duckdb",
+    "sample of ELAN file": "indonesian/tag_sample_elan_30_sentences.db",
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
@@ -138,6 +139,12 @@ BUILT_IN_CORPUS_DETAILS = {
         The **International Corpus Network of Asian Learners of English (ICNALE)** Written English corpus.
         <br><br>
         **Source/Citation:** Ishikawa, S. (2023). **The ICNALE Guide: An Introduction to a Learner Corpus Study on Asian Learners' L2 English.** Routledge. [Link](https://www.taylorfrancis.com/books/mono/10.4324/9781003252528/icnale-guide-shin-ichiro-ishikawa)
+        """,
+    "sample of ELAN file":
+        """
+        A **sample ELAN language documentation corpus** containing 30 annotated sentences in Indonesian.
+        <br><br>
+        **Includes 7 parallel annotation layers**: Orthography (`ORT-F`), Delineated Orthography (`ORT-D`), Phonetic (`PHN-F`), Delineated Phonetic (`PHN-D`), Morphemic Gloss (`GLOSS`), POS, and Lemma.
         """,
 }
 

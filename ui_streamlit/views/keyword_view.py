@@ -308,7 +308,7 @@ def render_keyword_view():
                         st.info("No pre-built wordlist directories found.")
 
                 with tabs[2]:
-                    uploaded_ref = st.file_uploader("Upload XML or Frequency List", type=['xml', 'txt', 'csv', 'tsv'], key="upload_ref_kw")
+                    uploaded_ref = st.file_uploader("Upload XML or Frequency List", type=['xml', 'eaf', 'txt', 'csv', 'tsv'], key="upload_ref_kw")
                     if uploaded_ref:
                         if st.button("Process Reference", key="btn_process_ref"):
                             with st.spinner("Processing reference..."):

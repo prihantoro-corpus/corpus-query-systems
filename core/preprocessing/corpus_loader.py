@@ -145,7 +145,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         file_source.seek(0)
         sample_str = sample_bytes.decode('utf-8', errors='ignore').strip()
         
-        is_xml_ext = filename.lower().endswith('.xml')
+        is_xml_ext = filename.lower().endswith('.xml') or filename.lower().endswith('.eaf')
+        is_eaf_ext = filename.lower().endswith('.eaf')
         is_conllu_ext = filename.lower().endswith('.conllu')
         is_docx_ext = filename.lower().endswith('.docx')
         is_pdf_ext = filename.lower().endswith('.pdf')
@@ -156,49 +157,61 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
             elif any(tag in sample_str.lower() for tag in ['<text', '<corpus', '<p>', '<p ']):
                 is_pseudo_xml = True
 
-        # --- XML PROCESSING ---
+        # --- XML / EAF PROCESSING ---
         if is_xml_ext or is_pseudo_xml:
             try:
                 xml_content = file_source.read().decode('utf-8', errors='ignore')
                 cleaned_xml = sanitize_xml_content(xml_content)
                 
-                # 1. Structure Extraction
-                file_structure, str_err = extract_xml_structure(cleaned_xml)
-                if file_structure:
-                    for tag, attributes in file_structure.items():
-                        if tag not in combined_structure:
-                            combined_structure[tag] = attributes
-                        else:
-                            for attr, vals in attributes.items():
-                                if attr not in combined_structure[tag]:
-                                    combined_structure[tag][attr] = vals
-                                else:
-                                    if len(combined_structure[tag][attr]) < 20:
-                                        combined_structure[tag][attr].update(vals)
-                
-                # 2. Content Parsing
-                stanza_proc = None
-                if custom_tagger:
-                    stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
-                elif stanza_lang_code and stanza_lang_code != "OTHER":
-                    stanza_proc = tagging.tag_text_with_stanza
-                
-                result = parse_xml_content_to_df(
-                    cleaned_xml, 
-                    stanza_processor=stanza_proc, 
-                    lang_code=stanza_lang_code,
-                    preserve_inline_tags=True
-                )
-                if 'df_data' in result:
-                    if explicit_lang_code == 'OTHER' and result.get('lang_code') not in ('XML', 'OTHER'):
-                        xml_detected_lang_code = result['lang_code'] 
+                # Check if file is ELAN (.eaf or <ANNOTATION_DOCUMENT>)
+                if is_eaf_ext or '<annotation_document' in cleaned_xml.lower():
+                    from .xml_parser import parse_eaf_content_to_df_records
+                    stanza_proc = None
+                    if custom_tagger:
+                        stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
+                    elif stanza_lang_code and stanza_lang_code != "OTHER":
+                        stanza_proc = tagging.tag_text_with_stanza
+
+                    eaf_records = parse_eaf_content_to_df_records(cleaned_xml, stanza_processor=stanza_proc, lang_code=stanza_lang_code, filename=filename)
+                    all_df_data.extend(eaf_records)
+                else:
+                    # 1. Structure Extraction
+                    file_structure, str_err = extract_xml_structure(cleaned_xml)
+                    if file_structure:
+                        for tag, attributes in file_structure.items():
+                            if tag not in combined_structure:
+                                combined_structure[tag] = attributes
+                            else:
+                                for attr, vals in attributes.items():
+                                    if attr not in combined_structure[tag]:
+                                        combined_structure[tag][attr] = vals
+                                    else:
+                                        if len(combined_structure[tag][attr]) < 20:
+                                            combined_structure[tag][attr].update(vals)
                     
-                    for record in result['df_data']:
-                        record['filename'] = filename
+                    # 2. Content Parsing
+                    stanza_proc = None
+                    if custom_tagger:
+                        stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
+                    elif stanza_lang_code and stanza_lang_code != "OTHER":
+                        stanza_proc = tagging.tag_text_with_stanza
                     
-                    all_df_data.extend(result['df_data'])
-                elif 'error' in result:
-                    return {'error': f"XML Error ({filename}): {result['error']}"}
+                    result = parse_xml_content_to_df(
+                        cleaned_xml, 
+                        stanza_processor=stanza_proc, 
+                        lang_code=stanza_lang_code,
+                        preserve_inline_tags=True
+                    )
+                    if 'df_data' in result:
+                        if explicit_lang_code == 'OTHER' and result.get('lang_code') not in ('XML', 'OTHER'):
+                            xml_detected_lang_code = result['lang_code'] 
+                        
+                        for record in result['df_data']:
+                            record['filename'] = filename
+                        
+                        all_df_data.extend(result['df_data'])
+                    elif 'error' in result:
+                        return {'error': f"XML Error ({filename}): {result['error']}"}
 
             except Exception as e:
                 return {'error': f"Processing Error ({filename}): {str(e)}"}
