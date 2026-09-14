@@ -109,6 +109,28 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     
     print(f"DEBUG: load_monolingual_corpus_files called. Lang: {explicit_lang_code} (Stanza: {stanza_lang_code}), Format: {selected_format}")
 
+    # Unpack ZIP files if present
+    expanded_file_sources = []
+    import zipfile
+    for fs in file_sources:
+        if fs.name.lower().endswith('.zip'):
+            try:
+                fs.seek(0)
+                zip_bytes = fs.read()
+                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                    for member in zf.infolist():
+                        if not member.is_dir() and not member.filename.startswith('__MACOSX') and not os.path.basename(member.filename).startswith('.'):
+                            m_bytes = zf.read(member.filename)
+                            m_fs = io.BytesIO(m_bytes)
+                            m_fs.name = os.path.basename(member.filename)
+                            expanded_file_sources.append(m_fs)
+            except Exception as e:
+                print(f"Warning: Failed to unpack ZIP file {fs.name}: {e}")
+        else:
+            expanded_file_sources.append(fs)
+            
+    file_sources = expanded_file_sources
+
     num_files = len(file_sources)
 
     for idx, file_source in enumerate(file_sources):

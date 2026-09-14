@@ -237,7 +237,10 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     if path and os.path.exists(path):
         st.write("") # spacing
         
-        col_db, col_txt = st.columns(2)
+        col_db, col_txt, col_zip = st.columns(3)
+        xml_cache_key = f"xml_export_{key_suffix}"
+        cached_xml = get_state(xml_cache_key)
+
         with col_db:
             with open(path, "rb") as db_file:
                 st.download_button(
@@ -250,17 +253,15 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
                     key=f"dl_btn_{key_suffix}"
                 )
         with col_txt:
-            xml_cache_key = f"xml_export_{key_suffix}"
-            cached_xml = get_state(xml_cache_key)
             if cached_xml:
                 dl_c1, dl_c2 = st.columns([4, 1])
                 with dl_c1:
                     st.download_button(
-                        label="📥 Download Annotated Corpus (.txt)",
+                        label="📥 Download Annotated (.txt)",
                         data=cached_xml,
                         file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
                         mime="text/plain",
-                        help="Download the raw tagged corpus text including all annotations (POS, Lemma, Sentiment, Topic, NER, Dependencies, etc.).",
+                        help="Download the raw tagged corpus text including all annotations (POS, Lemma, etc.).",
                         use_container_width=True,
                         key=f"dl_txt_btn_{key_suffix}"
                     )
@@ -269,14 +270,36 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
                         set_state(xml_cache_key, None)
                         st.rerun()
             else:
-                if st.button("⚙️ Generate Annotated Corpus (.txt)", key=f"gen_xml_btn_{key_suffix}", use_container_width=True, help="Compiles the current database (with all annotations: Lemma, POS, NER, Sentiment, Topic, Dependencies, etc.) into a downloadable vertical XML text file."):
-                    with st.spinner("Compiling database into vertical XML format..."):
+                if st.button("⚙️ Generate Annotated (.txt)", key=f"gen_xml_btn_{key_suffix}", use_container_width=True, help="Compiles the current database into a downloadable vertical XML text file."):
+                    with st.spinner("Compiling database into vertical text format..."):
                         import sys
                         sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
                         from core.preprocessing.export_service import export_db_to_vertical_xml
                         xml_data = export_db_to_vertical_xml(path)
                         set_state(xml_cache_key, xml_data)
                         st.rerun()
+
+        with col_zip:
+            import zipfile
+            import io
+            clean_name = name.replace(' ', '_').replace('.', '_')
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                if os.path.exists(path):
+                    with open(path, 'rb') as f:
+                        zf.writestr(f"{clean_name}.db", f.read())
+                if cached_xml:
+                    zf.writestr(f"{clean_name}_annotated.txt", cached_xml.encode('utf-8'))
+            
+            st.download_button(
+                label="📦 Download Package (.zip)",
+                data=zip_buf.getvalue(),
+                file_name=f"{clean_name}_corpus_package.zip",
+                mime="application/zip",
+                help="Download a ZIP file containing the database (.db) and annotated text file (.txt).",
+                use_container_width=True,
+                key=f"dl_zip_btn_{key_suffix}"
+            )
             
     # --- Corpus Narration ---
     _render_corpus_narration(name, path, display_stats, structure, condensed=True)
@@ -1256,7 +1279,7 @@ def render_upload_ui():
     uploaded_files = st.file_uploader(
         "Choose files", 
         accept_multiple_files=True,
-        type=['xml', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf'],
+        type=['xml', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf', 'zip'],
         key="main_corpus_file_uploader"
     )
     
