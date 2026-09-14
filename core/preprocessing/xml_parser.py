@@ -264,8 +264,9 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
     excluded_attrs = ('n', 'num', 'lang') # Removed 'id' from exclusion, manually handled below
     base_root_attrs = {}
     for k, v in root.attrib.items():
-        if k.lower() in excluded_attrs: continue
-        key_name = 'doc_id' if k.lower() == 'id' else k
+        clean_k = re.sub(r'\{.*?\}', '', k)
+        if clean_k.lower() in excluded_attrs: continue
+        key_name = 'doc_id' if clean_k.lower() == 'id' else clean_k
         base_root_attrs[key_name] = v
     
     for k, v in base_root_attrs.items():
@@ -283,8 +284,9 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
         # Prepare attributes for this element, checking exclusions and renaming id
         elem_attrs = {}
         for k, v in element.attrib.items():
-            if k.lower() in excluded_attrs: continue
-            key_name = 'doc_id' if k.lower() == 'id' else k
+            clean_k = re.sub(r'\{.*?\}', '', k)
+            if clean_k.lower() in excluded_attrs: continue
+            key_name = 'doc_id' if clean_k.lower() == 'id' else clean_k
             elem_attrs[key_name] = v
             
         new_attrs.update(elem_attrs)
@@ -558,4 +560,125 @@ def apply_xml_restrictions(filters):
             params.extend([min_v, max_v])
             
     return " AND " + " AND ".join(clauses), params
+
+
+def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_code='en', filename='file.eaf'):
+    """
+    Parses ELAN .eaf XML into aligned 7-layer token records for CORTEX.
+    """
+    if isinstance(xml_content, str):
+        root = ET.fromstring(xml_content.encode('utf-8'))
+    else:
+        root = ET.fromstring(xml_content)
+    
+    tier_map = {}
+    for tier in root.findall('TIER'):
+        tier_id = tier.attrib.get('TIER_ID', '')
+        tier_map[tier_id] = tier
+        
+    def get_ref_map(tier_name):
+        res = {}
+        if tier_name in tier_map:
+            for ann in tier_map[tier_name].findall('ANNOTATION/REF_ANNOTATION'):
+                ref = ann.attrib.get('ANNOTATION_REF', '')
+                val = ann.find('ANNOTATION_VALUE').text or ''
+                res[ref] = val
+        return res
+
+    # 1. Identify Root Orthographic Tier
+    root_tier_id = None
+    for t_id, tier in tier_map.items():
+        if 'PARENT_REF' not in tier.attrib and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['orthography', 'orthographic', 'transcription', 'ORT-F']:
+            root_tier_id = t_id
+            break
+    if not root_tier_id:
+        for t_id, tier in tier_map.items():
+            if 'PARENT_REF' not in tier.attrib:
+                root_tier_id = t_id
+                break
+
+    if not root_tier_id:
+        return []
+
+    # Root annotations
+    root_annos = {}
+    for ann in tier_map[root_tier_id].findall('ANNOTATION/ALIGNABLE_ANNOTATION'):
+        aid = ann.attrib.get('ANNOTATION_ID', '')
+        val = ann.find('ANNOTATION_VALUE').text or ''
+        root_annos[aid] = val
+
+    # Dependent tier maps
+    ort_d_map = get_ref_map('ORT-D') or get_ref_map('Orthographic_Delineated')
+    phn_f_map = get_ref_map('PHN-F') or get_ref_map('Phonetic')
+    phn_d_map = get_ref_map('PHN-D') or get_ref_map('Phonetic_Delineated')
+    trans_map = get_ref_map('TRANS') or get_ref_map('Free_Translation') or get_ref_map('Translation')
+    gloss_map = get_ref_map('GLOSS') or get_ref_map('Morphemic_Gloss') or get_ref_map('Gloss')
+
+    # Subdivided Word Tokens tier
+    word_tokens = []
+    word_tier_id = None
+    for t_id in ['Word_Tokens', 'Words', 'Morphemes', 'Tokens', 'ORT-D']:
+        if t_id in tier_map:
+            word_tier_id = t_id
+            break
+    if not word_tier_id:
+        for t_id, tier in tier_map.items():
+            if tier.attrib.get('PARENT_REF') == root_tier_id and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['word_subdivision', 'morpheme', 'word']:
+                word_tier_id = t_id
+                break
+
+    if word_tier_id:
+        for ann in tier_map[word_tier_id].findall('ANNOTATION/REF_ANNOTATION'):
+            wid = ann.attrib.get('ANNOTATION_ID', '')
+            parent_id = ann.attrib.get('ANNOTATION_REF', '')
+            val = ann.find('ANNOTATION_VALUE').text or ''
+            word_tokens.append({'wid': wid, 'parent_id': parent_id, 'word': val})
+    else:
+        w_counter = 1
+        for parent_id, text in root_annos.items():
+            words = text.split()
+            for w in words:
+                word_tokens.append({'wid': f'w{w_counter}', 'parent_id': parent_id, 'word': w})
+                w_counter += 1
+
+    records = []
+    sent_id_map = {parent_id: idx+1 for idx, parent_id in enumerate(root_annos.keys())}
+    
+    for wt in word_tokens:
+        wid = wt['wid']
+        parent_id = wt['parent_id']
+        w_ort_f = wt['word']
+        sent_id = sent_id_map.get(parent_id, 1)
+        
+        s_ort_d = ort_d_map.get(parent_id, '')
+        s_phn_f = phn_f_map.get(parent_id, '')
+        s_phn_d = phn_d_map.get(parent_id, '')
+        s_trans = trans_map.get(parent_id, '')
+        
+        w_ort_d = w_ort_f
+        if s_ort_d:
+            for chunk in s_ort_d.split():
+                if chunk.replace('-', '').lower() == w_ort_f.lower():
+                    w_ort_d = chunk
+                    break
+        
+        w_phn_f = s_phn_f if s_phn_f else ''
+        w_phn_d = s_phn_d if s_phn_d else ''
+        w_gloss = gloss_map.get(wid, '')
+        
+        records.append({
+            'token': w_ort_f,
+            'pos': 'TAG',
+            'lemma': w_ort_f.lower(),
+            'ort_d': w_ort_d,
+            'phn_f': w_phn_f,
+            'phn_d': w_phn_d,
+            'gloss': w_gloss,
+            'trans': s_trans,
+            'sent_id': sent_id,
+            'filename': filename
+        })
+        
+    return records
+
 

@@ -1279,7 +1279,7 @@ def render_upload_ui():
     uploaded_files = st.file_uploader(
         "Choose files", 
         accept_multiple_files=True,
-        type=['xml', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf', 'zip'],
+        type=['xml', 'eaf', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf', 'zip'],
         key="main_corpus_file_uploader"
     )
     
@@ -1315,7 +1315,7 @@ def render_upload_ui():
             st.markdown("**Format**")
             fmt = st.radio(
                 "Format Select", 
-                ["Raw (Natural text)", "Tagged (Vertical)"], 
+                ["Raw (Natural text)", "Tagged (Vertical)", ".eaf (ELAN Annotation)"], 
                 index=0,
                 horizontal=True,
                 key="upload_format_select",

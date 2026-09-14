@@ -1,0 +1,2300 @@
+<?xml version="1.0" ?>
+<ANNOTATION_DOCUMENT xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" AUTHOR="CORTEX Indonesian Language Documentation Project" DATE="2026-09-15T06:11:00+07:00" FORMAT="3.0" VERSION="3.0" xsi:noNamespaceSchemaLocation="http://www.mpi.nl/tools/elan/EAFv3.0.xsd">
+    <HEADER MEDIA_FILE="" TIME_UNITS="milliseconds">
+        <MEDIA_DESCRIPTOR MEDIA_URL="file:///corpora/sample_narration.wav" MIME_TYPE="audio/x-wav" RELATIVE_MEDIA_URL="./sample_narration.wav"/>
+    </HEADER>
+    <TIME_ORDER>
+        <TIME_SLOT TIME_SLOT_ID="ts1" TIME_VALUE="500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts2" TIME_VALUE="3500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts3" TIME_VALUE="4500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts4" TIME_VALUE="7500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts5" TIME_VALUE="8500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts6" TIME_VALUE="11500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts7" TIME_VALUE="12500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts8" TIME_VALUE="15500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts9" TIME_VALUE="16500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts10" TIME_VALUE="19500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts11" TIME_VALUE="20500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts12" TIME_VALUE="23500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts13" TIME_VALUE="24500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts14" TIME_VALUE="27500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts15" TIME_VALUE="28500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts16" TIME_VALUE="31500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts17" TIME_VALUE="32500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts18" TIME_VALUE="35500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts19" TIME_VALUE="36500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts20" TIME_VALUE="39500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts21" TIME_VALUE="40500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts22" TIME_VALUE="43500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts23" TIME_VALUE="44500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts24" TIME_VALUE="47500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts25" TIME_VALUE="48500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts26" TIME_VALUE="51500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts27" TIME_VALUE="52500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts28" TIME_VALUE="55500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts29" TIME_VALUE="56500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts30" TIME_VALUE="59500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts31" TIME_VALUE="60500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts32" TIME_VALUE="63500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts33" TIME_VALUE="64500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts34" TIME_VALUE="67500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts35" TIME_VALUE="68500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts36" TIME_VALUE="71500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts37" TIME_VALUE="72500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts38" TIME_VALUE="75500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts39" TIME_VALUE="76500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts40" TIME_VALUE="79500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts41" TIME_VALUE="80500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts42" TIME_VALUE="83500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts43" TIME_VALUE="84500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts44" TIME_VALUE="87500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts45" TIME_VALUE="88500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts46" TIME_VALUE="91500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts47" TIME_VALUE="92500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts48" TIME_VALUE="95500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts49" TIME_VALUE="96500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts50" TIME_VALUE="99500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts51" TIME_VALUE="100500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts52" TIME_VALUE="103500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts53" TIME_VALUE="104500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts54" TIME_VALUE="107500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts55" TIME_VALUE="108500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts56" TIME_VALUE="111500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts57" TIME_VALUE="112500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts58" TIME_VALUE="115500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts59" TIME_VALUE="116500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts60" TIME_VALUE="119500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts61" TIME_VALUE="120500"/>
+        <TIME_SLOT TIME_SLOT_ID="ts62" TIME_VALUE="123500"/>
+    </TIME_ORDER>
+    <TIER LINGUISTIC_TYPE_REF="orthography" TIER_ID="ORT-F">
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a1" TIME_SLOT_REF1="ts1" TIME_SLOT_REF2="ts2">
+                <ANNOTATION_VALUE>disayang dia</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a2" TIME_SLOT_REF1="ts3" TIME_SLOT_REF2="ts4">
+                <ANNOTATION_VALUE>Saya pergi ke pasar kemarin.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a3" TIME_SLOT_REF1="ts5" TIME_SLOT_REF2="ts6">
+                <ANNOTATION_VALUE>Dia membeli ikan segar.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a4" TIME_SLOT_REF1="ts7" TIME_SLOT_REF2="ts8">
+                <ANNOTATION_VALUE>Mereka tinggal di desa kecil.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a5" TIME_SLOT_REF1="ts9" TIME_SLOT_REF2="ts10">
+                <ANNOTATION_VALUE>Anak-anak sedang bermain bola.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a6" TIME_SLOT_REF1="ts11" TIME_SLOT_REF2="ts12">
+                <ANNOTATION_VALUE>Ibu memasak nasi goreng.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a7" TIME_SLOT_REF1="ts13" TIME_SLOT_REF2="ts14">
+                <ANNOTATION_VALUE>Bapak membaca koran pagi.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a8" TIME_SLOT_REF1="ts15" TIME_SLOT_REF2="ts16">
+                <ANNOTATION_VALUE>Pohon besar itu roboh.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a9" TIME_SLOT_REF1="ts17" TIME_SLOT_REF2="ts18">
+                <ANNOTATION_VALUE>Burung berkicau di atas dahan.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a10" TIME_SLOT_REF1="ts19" TIME_SLOT_REF2="ts20">
+                <ANNOTATION_VALUE>Kami minum teh panas.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a11" TIME_SLOT_REF1="ts21" TIME_SLOT_REF2="ts22">
+                <ANNOTATION_VALUE>Hujan deras turun tadi malam.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a12" TIME_SLOT_REF1="ts23" TIME_SLOT_REF2="ts24">
+                <ANNOTATION_VALUE>Kakak belajar bahasa asing.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a13" TIME_SLOT_REF1="ts25" TIME_SLOT_REF2="ts26">
+                <ANNOTATION_VALUE>Kucing itu tidur di kursi.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a14" TIME_SLOT_REF1="ts27" TIME_SLOT_REF2="ts28">
+                <ANNOTATION_VALUE>Anjing menggonggong pada orang asing.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a15" TIME_SLOT_REF1="ts29" TIME_SLOT_REF2="ts30">
+                <ANNOTATION_VALUE>Matahari terbit di sebelah timur.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a16" TIME_SLOT_REF1="ts31" TIME_SLOT_REF2="ts32">
+                <ANNOTATION_VALUE>Angin bertiup sangat kencang.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a17" TIME_SLOT_REF1="ts33" TIME_SLOT_REF2="ts34">
+                <ANNOTATION_VALUE>Nelayan melaut pada malam hari.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a18" TIME_SLOT_REF1="ts35" TIME_SLOT_REF2="ts36">
+                <ANNOTATION_VALUE>Petani menanam padi di sawah.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a19" TIME_SLOT_REF1="ts37" TIME_SLOT_REF2="ts38">
+                <ANNOTATION_VALUE>Gadis itu menyanyi lagu merdu.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a20" TIME_SLOT_REF1="ts39" TIME_SLOT_REF2="ts40">
+                <ANNOTATION_VALUE>Pemuda itu mengendarai sepeda motor.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a21" TIME_SLOT_REF1="ts41" TIME_SLOT_REF2="ts42">
+                <ANNOTATION_VALUE>Sungai ini airnya sangat jernih.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a22" TIME_SLOT_REF1="ts43" TIME_SLOT_REF2="ts44">
+                <ANNOTATION_VALUE>Gunung tinggi itu diselimuti awan.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a23" TIME_SLOT_REF1="ts45" TIME_SLOT_REF2="ts46">
+                <ANNOTATION_VALUE>Mereka bermusyawarah di balai desa.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a24" TIME_SLOT_REF1="ts47" TIME_SLOT_REF2="ts48">
+                <ANNOTATION_VALUE>Adik tertawa senang melihat kartun.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a25" TIME_SLOT_REF1="ts49" TIME_SLOT_REF2="ts50">
+                <ANNOTATION_VALUE>Kakek menceritakan kisah lama.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a26" TIME_SLOT_REF1="ts51" TIME_SLOT_REF2="ts52">
+                <ANNOTATION_VALUE>Nenek merajut kain wol.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a27" TIME_SLOT_REF1="ts53" TIME_SLOT_REF2="ts54">
+                <ANNOTATION_VALUE>Siswa-siswi menyanyikan lagu nasional.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a28" TIME_SLOT_REF1="ts55" TIME_SLOT_REF2="ts56">
+                <ANNOTATION_VALUE>Polisi mengatur lalu lintas di persimpangan.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a29" TIME_SLOT_REF1="ts57" TIME_SLOT_REF2="ts58">
+                <ANNOTATION_VALUE>Dokter memeriksa pasien di rumah sakit.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a30" TIME_SLOT_REF1="ts59" TIME_SLOT_REF2="ts60">
+                <ANNOTATION_VALUE>Pasar tradisional buka sejak subuh.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <ALIGNABLE_ANNOTATION ANNOTATION_ID="a31" TIME_SLOT_REF1="ts61" TIME_SLOT_REF2="ts62">
+                <ANNOTATION_VALUE>Kita harus menjaga kelestarian alam.</ANNOTATION_VALUE>
+            </ALIGNABLE_ANNOTATION>
+        </ANNOTATION>
+    </TIER>
+    <TIER LINGUISTIC_TYPE_REF="orthography_delineated" PARENT_REF="ORT-F" TIER_ID="ORT-D">
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_1" ANNOTATION_REF="a1">
+                <ANNOTATION_VALUE>di-sayang dia</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_2" ANNOTATION_REF="a2">
+                <ANNOTATION_VALUE>Saya pergi ke pasar kemarin</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_3" ANNOTATION_REF="a3">
+                <ANNOTATION_VALUE>Dia mem-beli ikan segar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_4" ANNOTATION_REF="a4">
+                <ANNOTATION_VALUE>Mereka tinggal di desa kecil</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_5" ANNOTATION_REF="a5">
+                <ANNOTATION_VALUE>Anak-anak sedang ber-main bola</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_6" ANNOTATION_REF="a6">
+                <ANNOTATION_VALUE>Ibu mem-masak nasi goreng</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_7" ANNOTATION_REF="a7">
+                <ANNOTATION_VALUE>Bapak mem-baca koran pagi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_8" ANNOTATION_REF="a8">
+                <ANNOTATION_VALUE>Pohon besar itu roboh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_9" ANNOTATION_REF="a9">
+                <ANNOTATION_VALUE>Burung ber-kicau di atas dahan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_10" ANNOTATION_REF="a10">
+                <ANNOTATION_VALUE>Kami minum teh panas</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_11" ANNOTATION_REF="a11">
+                <ANNOTATION_VALUE>Hujan deras turun tadi malam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_12" ANNOTATION_REF="a12">
+                <ANNOTATION_VALUE>Kakak ber-ajar bahasa asing</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_13" ANNOTATION_REF="a13">
+                <ANNOTATION_VALUE>Kucing itu tidur di kursi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_14" ANNOTATION_REF="a14">
+                <ANNOTATION_VALUE>Anjing meng-gonggong pada orang asing</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_15" ANNOTATION_REF="a15">
+                <ANNOTATION_VALUE>Matahari ter-bit di sebelah timur</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_16" ANNOTATION_REF="a16">
+                <ANNOTATION_VALUE>Angin ber-tiup sangat kencang</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_17" ANNOTATION_REF="a17">
+                <ANNOTATION_VALUE>Nelayan me-laut pada malam hari</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_18" ANNOTATION_REF="a18">
+                <ANNOTATION_VALUE>Petani men-tanam padi di sawah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_19" ANNOTATION_REF="a19">
+                <ANNOTATION_VALUE>Gadis itu meny-nyanyi lagu merdu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_20" ANNOTATION_REF="a20">
+                <ANNOTATION_VALUE>Pemuda itu meng-kendara-i sepeda motor</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_21" ANNOTATION_REF="a21">
+                <ANNOTATION_VALUE>Sungai ini air=nya sangat jernih</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_22" ANNOTATION_REF="a22">
+                <ANNOTATION_VALUE>Gunung tinggi itu di-selimut-i awan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_23" ANNOTATION_REF="a23">
+                <ANNOTATION_VALUE>Mereka ber-musyawarah di balai desa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_24" ANNOTATION_REF="a24">
+                <ANNOTATION_VALUE>Adik ter-tawa senang men-lihat kartun</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_25" ANNOTATION_REF="a25">
+                <ANNOTATION_VALUE>Kakek men-cerita-kan kisah lama</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_26" ANNOTATION_REF="a26">
+                <ANNOTATION_VALUE>Nenek me-rajut kain wol</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_27" ANNOTATION_REF="a27">
+                <ANNOTATION_VALUE>Siswa-siswi meny-nyanyi-kan lagu nasional</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_28" ANNOTATION_REF="a28">
+                <ANNOTATION_VALUE>Polisi meng-atur lalu lintas di per-simpang-an</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_29" ANNOTATION_REF="a29">
+                <ANNOTATION_VALUE>Dokter mem-periksa pasien di rumah sakit</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_30" ANNOTATION_REF="a30">
+                <ANNOTATION_VALUE>Pasar tradisional buka sejak subuh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_ortd_31" ANNOTATION_REF="a31">
+                <ANNOTATION_VALUE>Kita harus men-jaga ke-lestari-an alam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+    </TIER>
+    <TIER LINGUISTIC_TYPE_REF="phonetic_full" PARENT_REF="ORT-F" TIER_ID="PHN-F">
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_1" ANNOTATION_REF="a1">
+                <ANNOTATION_VALUE>di.sa.jaŋ di.a</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_2" ANNOTATION_REF="a2">
+                <ANNOTATION_VALUE>sa.ja pər.gi kə pa.sar kə.ma.rin</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_3" ANNOTATION_REF="a3">
+                <ANNOTATION_VALUE>di.a məm.bə.li i.kan sə.gar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_4" ANNOTATION_REF="a4">
+                <ANNOTATION_VALUE>mə.re.ka tiŋ.gal di de.sa kə.tʃil</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_5" ANNOTATION_REF="a5">
+                <ANNOTATION_VALUE>a.nak.a.nak sə.daŋ bər.ma.in bo.la</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_6" ANNOTATION_REF="a6">
+                <ANNOTATION_VALUE>i.bu mə.ma.sak na.si go.reŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_7" ANNOTATION_REF="a7">
+                <ANNOTATION_VALUE>ba.pak məm.ba.tʃa ko.ran pa.gi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_8" ANNOTATION_REF="a8">
+                <ANNOTATION_VALUE>po.hon bə.sar i.tu ro.boh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_9" ANNOTATION_REF="a9">
+                <ANNOTATION_VALUE>bu.ruŋ bər.ki.tʃa.u di a.tas da.han</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_10" ANNOTATION_REF="a10">
+                <ANNOTATION_VALUE>ka.mi mi.num teh pa.nas</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_11" ANNOTATION_REF="a11">
+                <ANNOTATION_VALUE>hu.dʒan də.ras tu.run ta.di ma.lam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_12" ANNOTATION_REF="a12">
+                <ANNOTATION_VALUE>ka.kak bə.la.dʒar ba.ha.sa a.siŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_13" ANNOTATION_REF="a13">
+                <ANNOTATION_VALUE>ku.tʃiŋ i.tu ti.dur di kur.si</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_14" ANNOTATION_REF="a14">
+                <ANNOTATION_VALUE>an.dʒiŋ məŋ.goŋ.goŋ pa.da o.raŋ a.siŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_15" ANNOTATION_REF="a15">
+                <ANNOTATION_VALUE>ma.ta.ha.ri tər.bit di sə.bə.lah ti.mur</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_16" ANNOTATION_REF="a16">
+                <ANNOTATION_VALUE>a.ŋin bər.ti.up sa.ŋat kən.tʃaŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_17" ANNOTATION_REF="a17">
+                <ANNOTATION_VALUE>nə.la.jan mə.la.ut pa.da ma.lam ha.ri</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_18" ANNOTATION_REF="a18">
+                <ANNOTATION_VALUE>pə.ta.ni mə.na.nam pa.di di sa.wah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_19" ANNOTATION_REF="a19">
+                <ANNOTATION_VALUE>ga.dis i.tu mə.ɲa.ɲi la.gu mər.du</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_20" ANNOTATION_REF="a20">
+                <ANNOTATION_VALUE>pə.mu.da i.tu məŋ.ən.da.ra.i sə.pe.da mo.tor</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_21" ANNOTATION_REF="a21">
+                <ANNOTATION_VALUE>su.ŋa.i i.ni a.ir.ɲa sa.ŋat dʒər.nih</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_22" ANNOTATION_REF="a22">
+                <ANNOTATION_VALUE>gu.nuŋ tiŋ.gi i.tu di.sə.li.mu.ti a.wan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_23" ANNOTATION_REF="a23">
+                <ANNOTATION_VALUE>mə.re.ka bər.mu.ʃa.wa.rah di ba.la.i de.sa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_24" ANNOTATION_REF="a24">
+                <ANNOTATION_VALUE>a.dik tər.ta.wa sə.naŋ mə.li.hat kar.tun</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_25" ANNOTATION_REF="a25">
+                <ANNOTATION_VALUE>ka.kek mən.tʃə.ri.ta.kan ki.sah la.ma</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_26" ANNOTATION_REF="a26">
+                <ANNOTATION_VALUE>ne.nek mə.ra.dʒut ka.in wol</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_27" ANNOTATION_REF="a27">
+                <ANNOTATION_VALUE>sis.wa.sis.wi mə.ɲa.ɲi.kan la.gu na.si.o.nal</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_28" ANNOTATION_REF="a28">
+                <ANNOTATION_VALUE>po.li.si mə.ŋa.tur la.lu lin.tas di pər.sim.pa.ŋan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_29" ANNOTATION_REF="a29">
+                <ANNOTATION_VALUE>dok.tər mə.mə.rik.sa pa.si.en di ru.mah sa.kit</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_30" ANNOTATION_REF="a30">
+                <ANNOTATION_VALUE>pa.sar tra.di.si.o.nal bu.ka sə.dʒak su.buh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnf_31" ANNOTATION_REF="a31">
+                <ANNOTATION_VALUE>ki.ta ha.rus mən.dʒa.ga kə.ləs.ta.ri.an a.lam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+    </TIER>
+    <TIER LINGUISTIC_TYPE_REF="phonetic_delineated" PARENT_REF="ORT-F" TIER_ID="PHN-D">
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_1" ANNOTATION_REF="a1">
+                <ANNOTATION_VALUE>di-sa.jaŋ di.a</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_2" ANNOTATION_REF="a2">
+                <ANNOTATION_VALUE>sa.ja pər.gi kə pa.sar kə.ma.rin</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_3" ANNOTATION_REF="a3">
+                <ANNOTATION_VALUE>di.a məm-bə.li i.kan sə.gar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_4" ANNOTATION_REF="a4">
+                <ANNOTATION_VALUE>mə.re.ka tiŋ.gal di de.sa kə.tʃil</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_5" ANNOTATION_REF="a5">
+                <ANNOTATION_VALUE>a.nak.a.nak sə.daŋ bər-ma.in bo.la</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_6" ANNOTATION_REF="a6">
+                <ANNOTATION_VALUE>i.bu məm-ma.sak na.si go.reŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_7" ANNOTATION_REF="a7">
+                <ANNOTATION_VALUE>ba.pak məm-ba.tʃa ko.ran pa.gi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_8" ANNOTATION_REF="a8">
+                <ANNOTATION_VALUE>po.hon bə.sar i.tu ro.boh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_9" ANNOTATION_REF="a9">
+                <ANNOTATION_VALUE>bu.ruŋ bər-ki.tʃa.u di a.tas da.han</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_10" ANNOTATION_REF="a10">
+                <ANNOTATION_VALUE>ka.mi mi.num teh pa.nas</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_11" ANNOTATION_REF="a11">
+                <ANNOTATION_VALUE>hu.dʒan də.ras tu.run ta.di ma.lam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_12" ANNOTATION_REF="a12">
+                <ANNOTATION_VALUE>ka.kak bər-a.dʒar ba.ha.sa a.siŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_13" ANNOTATION_REF="a13">
+                <ANNOTATION_VALUE>ku.tʃiŋ i.tu ti.dur di kur.si</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_14" ANNOTATION_REF="a14">
+                <ANNOTATION_VALUE>an.dʒiŋ məŋ-goŋ.goŋ pa.da o.raŋ a.siŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_15" ANNOTATION_REF="a15">
+                <ANNOTATION_VALUE>ma.ta.ha.ri tər-bit di sə.bə.lah ti.mur</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_16" ANNOTATION_REF="a16">
+                <ANNOTATION_VALUE>a.ŋin bər-ti.up sa.ŋat kən.tʃaŋ</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_17" ANNOTATION_REF="a17">
+                <ANNOTATION_VALUE>nə.la.jan mə-la.ut pa.da ma.lam ha.ri</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_18" ANNOTATION_REF="a18">
+                <ANNOTATION_VALUE>pə.ta.ni mən-ta.nam pa.di di sa.wah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_19" ANNOTATION_REF="a19">
+                <ANNOTATION_VALUE>ga.dis i.tu məɲ-ɲa.ɲi la.gu mər.du</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_20" ANNOTATION_REF="a20">
+                <ANNOTATION_VALUE>pə.mu.da i.tu məŋ-kən.da.ra-i sə.pe.da mo.tor</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_21" ANNOTATION_REF="a21">
+                <ANNOTATION_VALUE>su.ŋa.i i.ni a.ir=ɲa sa.ŋat dʒər.nih</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_22" ANNOTATION_REF="a22">
+                <ANNOTATION_VALUE>gu.nuŋ tiŋ.gi i.tu di-sə.li.mut-i a.wan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_23" ANNOTATION_REF="a23">
+                <ANNOTATION_VALUE>mə.re.ka bər-mu.ʃa.wa.rah di ba.la.i de.sa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_24" ANNOTATION_REF="a24">
+                <ANNOTATION_VALUE>a.dik tər-ta.wa sə.naŋ mən-li.hat kar.tun</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_25" ANNOTATION_REF="a25">
+                <ANNOTATION_VALUE>ka.kek mən-tʃə.ri.ta-kan ki.sah la.ma</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_26" ANNOTATION_REF="a26">
+                <ANNOTATION_VALUE>ne.nek mə-ra.dʒut ka.in wol</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_27" ANNOTATION_REF="a27">
+                <ANNOTATION_VALUE>sis.wa.sis.wi məɲ-ɲa.ɲi-kan la.gu na.si.o.nal</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_28" ANNOTATION_REF="a28">
+                <ANNOTATION_VALUE>po.li.si məŋ-a.tur la.lu lin.tas di pər-sim.paŋ-an</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_29" ANNOTATION_REF="a29">
+                <ANNOTATION_VALUE>dok.tər məm-pə.rik.sa pa.si.en di ru.mah sa.kit</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_30" ANNOTATION_REF="a30">
+                <ANNOTATION_VALUE>pa.sar tra.di.si.o.nal bu.ka sə.dʒak su.buh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_phnd_31" ANNOTATION_REF="a31">
+                <ANNOTATION_VALUE>ki.ta ha.rus mən-dʒa.ga kə-ləs.ta.ri-an a.lam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+    </TIER>
+    <TIER LINGUISTIC_TYPE_REF="word_subdivision" PARENT_REF="ORT-F" TIER_ID="Word_Tokens">
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w1" ANNOTATION_REF="a1">
+                <ANNOTATION_VALUE>disayang</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w2" ANNOTATION_REF="a1" PREVIOUS_ANNOTATION="w1">
+                <ANNOTATION_VALUE>dia</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w3" ANNOTATION_REF="a2">
+                <ANNOTATION_VALUE>Saya</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w4" ANNOTATION_REF="a2" PREVIOUS_ANNOTATION="w3">
+                <ANNOTATION_VALUE>pergi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w5" ANNOTATION_REF="a2" PREVIOUS_ANNOTATION="w4">
+                <ANNOTATION_VALUE>ke</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w6" ANNOTATION_REF="a2" PREVIOUS_ANNOTATION="w5">
+                <ANNOTATION_VALUE>pasar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w7" ANNOTATION_REF="a2" PREVIOUS_ANNOTATION="w6">
+                <ANNOTATION_VALUE>kemarin</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w8" ANNOTATION_REF="a3">
+                <ANNOTATION_VALUE>Dia</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w9" ANNOTATION_REF="a3" PREVIOUS_ANNOTATION="w8">
+                <ANNOTATION_VALUE>membeli</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w10" ANNOTATION_REF="a3" PREVIOUS_ANNOTATION="w9">
+                <ANNOTATION_VALUE>ikan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w11" ANNOTATION_REF="a3" PREVIOUS_ANNOTATION="w10">
+                <ANNOTATION_VALUE>segar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w12" ANNOTATION_REF="a4">
+                <ANNOTATION_VALUE>Mereka</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w13" ANNOTATION_REF="a4" PREVIOUS_ANNOTATION="w12">
+                <ANNOTATION_VALUE>tinggal</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w14" ANNOTATION_REF="a4" PREVIOUS_ANNOTATION="w13">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w15" ANNOTATION_REF="a4" PREVIOUS_ANNOTATION="w14">
+                <ANNOTATION_VALUE>desa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w16" ANNOTATION_REF="a4" PREVIOUS_ANNOTATION="w15">
+                <ANNOTATION_VALUE>kecil</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w17" ANNOTATION_REF="a5">
+                <ANNOTATION_VALUE>Anak-anak</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w18" ANNOTATION_REF="a5" PREVIOUS_ANNOTATION="w17">
+                <ANNOTATION_VALUE>sedang</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w19" ANNOTATION_REF="a5" PREVIOUS_ANNOTATION="w18">
+                <ANNOTATION_VALUE>bermain</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w20" ANNOTATION_REF="a5" PREVIOUS_ANNOTATION="w19">
+                <ANNOTATION_VALUE>bola</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w21" ANNOTATION_REF="a6">
+                <ANNOTATION_VALUE>Ibu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w22" ANNOTATION_REF="a6" PREVIOUS_ANNOTATION="w21">
+                <ANNOTATION_VALUE>memasak</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w23" ANNOTATION_REF="a6" PREVIOUS_ANNOTATION="w22">
+                <ANNOTATION_VALUE>nasi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w24" ANNOTATION_REF="a6" PREVIOUS_ANNOTATION="w23">
+                <ANNOTATION_VALUE>goreng</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w25" ANNOTATION_REF="a7">
+                <ANNOTATION_VALUE>Bapak</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w26" ANNOTATION_REF="a7" PREVIOUS_ANNOTATION="w25">
+                <ANNOTATION_VALUE>membaca</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w27" ANNOTATION_REF="a7" PREVIOUS_ANNOTATION="w26">
+                <ANNOTATION_VALUE>koran</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w28" ANNOTATION_REF="a7" PREVIOUS_ANNOTATION="w27">
+                <ANNOTATION_VALUE>pagi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w29" ANNOTATION_REF="a8">
+                <ANNOTATION_VALUE>Pohon</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w30" ANNOTATION_REF="a8" PREVIOUS_ANNOTATION="w29">
+                <ANNOTATION_VALUE>besar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w31" ANNOTATION_REF="a8" PREVIOUS_ANNOTATION="w30">
+                <ANNOTATION_VALUE>itu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w32" ANNOTATION_REF="a8" PREVIOUS_ANNOTATION="w31">
+                <ANNOTATION_VALUE>roboh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w33" ANNOTATION_REF="a9">
+                <ANNOTATION_VALUE>Burung</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w34" ANNOTATION_REF="a9" PREVIOUS_ANNOTATION="w33">
+                <ANNOTATION_VALUE>berkicau</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w35" ANNOTATION_REF="a9" PREVIOUS_ANNOTATION="w34">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w36" ANNOTATION_REF="a9" PREVIOUS_ANNOTATION="w35">
+                <ANNOTATION_VALUE>atas</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w37" ANNOTATION_REF="a9" PREVIOUS_ANNOTATION="w36">
+                <ANNOTATION_VALUE>dahan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w38" ANNOTATION_REF="a10">
+                <ANNOTATION_VALUE>Kami</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w39" ANNOTATION_REF="a10" PREVIOUS_ANNOTATION="w38">
+                <ANNOTATION_VALUE>minum</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w40" ANNOTATION_REF="a10" PREVIOUS_ANNOTATION="w39">
+                <ANNOTATION_VALUE>teh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w41" ANNOTATION_REF="a10" PREVIOUS_ANNOTATION="w40">
+                <ANNOTATION_VALUE>panas</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w42" ANNOTATION_REF="a11">
+                <ANNOTATION_VALUE>Hujan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w43" ANNOTATION_REF="a11" PREVIOUS_ANNOTATION="w42">
+                <ANNOTATION_VALUE>deras</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w44" ANNOTATION_REF="a11" PREVIOUS_ANNOTATION="w43">
+                <ANNOTATION_VALUE>turun</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w45" ANNOTATION_REF="a11" PREVIOUS_ANNOTATION="w44">
+                <ANNOTATION_VALUE>tadi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w46" ANNOTATION_REF="a11" PREVIOUS_ANNOTATION="w45">
+                <ANNOTATION_VALUE>malam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w47" ANNOTATION_REF="a12">
+                <ANNOTATION_VALUE>Kakak</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w48" ANNOTATION_REF="a12" PREVIOUS_ANNOTATION="w47">
+                <ANNOTATION_VALUE>belajar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w49" ANNOTATION_REF="a12" PREVIOUS_ANNOTATION="w48">
+                <ANNOTATION_VALUE>bahasa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w50" ANNOTATION_REF="a12" PREVIOUS_ANNOTATION="w49">
+                <ANNOTATION_VALUE>asing</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w51" ANNOTATION_REF="a13">
+                <ANNOTATION_VALUE>Kucing</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w52" ANNOTATION_REF="a13" PREVIOUS_ANNOTATION="w51">
+                <ANNOTATION_VALUE>itu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w53" ANNOTATION_REF="a13" PREVIOUS_ANNOTATION="w52">
+                <ANNOTATION_VALUE>tidur</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w54" ANNOTATION_REF="a13" PREVIOUS_ANNOTATION="w53">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w55" ANNOTATION_REF="a13" PREVIOUS_ANNOTATION="w54">
+                <ANNOTATION_VALUE>kursi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w56" ANNOTATION_REF="a14">
+                <ANNOTATION_VALUE>Anjing</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w57" ANNOTATION_REF="a14" PREVIOUS_ANNOTATION="w56">
+                <ANNOTATION_VALUE>menggonggong</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w58" ANNOTATION_REF="a14" PREVIOUS_ANNOTATION="w57">
+                <ANNOTATION_VALUE>pada</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w59" ANNOTATION_REF="a14" PREVIOUS_ANNOTATION="w58">
+                <ANNOTATION_VALUE>orang</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w60" ANNOTATION_REF="a14" PREVIOUS_ANNOTATION="w59">
+                <ANNOTATION_VALUE>asing</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w61" ANNOTATION_REF="a15">
+                <ANNOTATION_VALUE>Matahari</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w62" ANNOTATION_REF="a15" PREVIOUS_ANNOTATION="w61">
+                <ANNOTATION_VALUE>terbit</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w63" ANNOTATION_REF="a15" PREVIOUS_ANNOTATION="w62">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w64" ANNOTATION_REF="a15" PREVIOUS_ANNOTATION="w63">
+                <ANNOTATION_VALUE>sebelah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w65" ANNOTATION_REF="a15" PREVIOUS_ANNOTATION="w64">
+                <ANNOTATION_VALUE>timur</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w66" ANNOTATION_REF="a16">
+                <ANNOTATION_VALUE>Angin</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w67" ANNOTATION_REF="a16" PREVIOUS_ANNOTATION="w66">
+                <ANNOTATION_VALUE>bertiup</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w68" ANNOTATION_REF="a16" PREVIOUS_ANNOTATION="w67">
+                <ANNOTATION_VALUE>sangat</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w69" ANNOTATION_REF="a16" PREVIOUS_ANNOTATION="w68">
+                <ANNOTATION_VALUE>kencang</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w70" ANNOTATION_REF="a17">
+                <ANNOTATION_VALUE>Nelayan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w71" ANNOTATION_REF="a17" PREVIOUS_ANNOTATION="w70">
+                <ANNOTATION_VALUE>melaut</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w72" ANNOTATION_REF="a17" PREVIOUS_ANNOTATION="w71">
+                <ANNOTATION_VALUE>pada</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w73" ANNOTATION_REF="a17" PREVIOUS_ANNOTATION="w72">
+                <ANNOTATION_VALUE>malam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w74" ANNOTATION_REF="a17" PREVIOUS_ANNOTATION="w73">
+                <ANNOTATION_VALUE>hari</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w75" ANNOTATION_REF="a18">
+                <ANNOTATION_VALUE>Petani</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w76" ANNOTATION_REF="a18" PREVIOUS_ANNOTATION="w75">
+                <ANNOTATION_VALUE>menanam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w77" ANNOTATION_REF="a18" PREVIOUS_ANNOTATION="w76">
+                <ANNOTATION_VALUE>padi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w78" ANNOTATION_REF="a18" PREVIOUS_ANNOTATION="w77">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w79" ANNOTATION_REF="a18" PREVIOUS_ANNOTATION="w78">
+                <ANNOTATION_VALUE>sawah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w80" ANNOTATION_REF="a19">
+                <ANNOTATION_VALUE>Gadis</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w81" ANNOTATION_REF="a19" PREVIOUS_ANNOTATION="w80">
+                <ANNOTATION_VALUE>itu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w82" ANNOTATION_REF="a19" PREVIOUS_ANNOTATION="w81">
+                <ANNOTATION_VALUE>menyanyi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w83" ANNOTATION_REF="a19" PREVIOUS_ANNOTATION="w82">
+                <ANNOTATION_VALUE>lagu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w84" ANNOTATION_REF="a19" PREVIOUS_ANNOTATION="w83">
+                <ANNOTATION_VALUE>merdu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w85" ANNOTATION_REF="a20">
+                <ANNOTATION_VALUE>Pemuda</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w86" ANNOTATION_REF="a20" PREVIOUS_ANNOTATION="w85">
+                <ANNOTATION_VALUE>itu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w87" ANNOTATION_REF="a20" PREVIOUS_ANNOTATION="w86">
+                <ANNOTATION_VALUE>mengendarai</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w88" ANNOTATION_REF="a20" PREVIOUS_ANNOTATION="w87">
+                <ANNOTATION_VALUE>sepeda</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w89" ANNOTATION_REF="a20" PREVIOUS_ANNOTATION="w88">
+                <ANNOTATION_VALUE>motor</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w90" ANNOTATION_REF="a21">
+                <ANNOTATION_VALUE>Sungai</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w91" ANNOTATION_REF="a21" PREVIOUS_ANNOTATION="w90">
+                <ANNOTATION_VALUE>ini</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w92" ANNOTATION_REF="a21" PREVIOUS_ANNOTATION="w91">
+                <ANNOTATION_VALUE>airnya</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w93" ANNOTATION_REF="a21" PREVIOUS_ANNOTATION="w92">
+                <ANNOTATION_VALUE>sangat</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w94" ANNOTATION_REF="a21" PREVIOUS_ANNOTATION="w93">
+                <ANNOTATION_VALUE>jernih</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w95" ANNOTATION_REF="a22">
+                <ANNOTATION_VALUE>Gunung</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w96" ANNOTATION_REF="a22" PREVIOUS_ANNOTATION="w95">
+                <ANNOTATION_VALUE>tinggi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w97" ANNOTATION_REF="a22" PREVIOUS_ANNOTATION="w96">
+                <ANNOTATION_VALUE>itu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w98" ANNOTATION_REF="a22" PREVIOUS_ANNOTATION="w97">
+                <ANNOTATION_VALUE>diselimuti</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w99" ANNOTATION_REF="a22" PREVIOUS_ANNOTATION="w98">
+                <ANNOTATION_VALUE>awan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w100" ANNOTATION_REF="a23">
+                <ANNOTATION_VALUE>Mereka</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w101" ANNOTATION_REF="a23" PREVIOUS_ANNOTATION="w100">
+                <ANNOTATION_VALUE>bermusyawarah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w102" ANNOTATION_REF="a23" PREVIOUS_ANNOTATION="w101">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w103" ANNOTATION_REF="a23" PREVIOUS_ANNOTATION="w102">
+                <ANNOTATION_VALUE>balai</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w104" ANNOTATION_REF="a23" PREVIOUS_ANNOTATION="w103">
+                <ANNOTATION_VALUE>desa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w105" ANNOTATION_REF="a24">
+                <ANNOTATION_VALUE>Adik</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w106" ANNOTATION_REF="a24" PREVIOUS_ANNOTATION="w105">
+                <ANNOTATION_VALUE>tertawa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w107" ANNOTATION_REF="a24" PREVIOUS_ANNOTATION="w106">
+                <ANNOTATION_VALUE>senang</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w108" ANNOTATION_REF="a24" PREVIOUS_ANNOTATION="w107">
+                <ANNOTATION_VALUE>melihat</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w109" ANNOTATION_REF="a24" PREVIOUS_ANNOTATION="w108">
+                <ANNOTATION_VALUE>kartun</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w110" ANNOTATION_REF="a25">
+                <ANNOTATION_VALUE>Kakek</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w111" ANNOTATION_REF="a25" PREVIOUS_ANNOTATION="w110">
+                <ANNOTATION_VALUE>menceritakan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w112" ANNOTATION_REF="a25" PREVIOUS_ANNOTATION="w111">
+                <ANNOTATION_VALUE>kisah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w113" ANNOTATION_REF="a25" PREVIOUS_ANNOTATION="w112">
+                <ANNOTATION_VALUE>lama</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w114" ANNOTATION_REF="a26">
+                <ANNOTATION_VALUE>Nenek</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w115" ANNOTATION_REF="a26" PREVIOUS_ANNOTATION="w114">
+                <ANNOTATION_VALUE>merajut</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w116" ANNOTATION_REF="a26" PREVIOUS_ANNOTATION="w115">
+                <ANNOTATION_VALUE>kain</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w117" ANNOTATION_REF="a26" PREVIOUS_ANNOTATION="w116">
+                <ANNOTATION_VALUE>wol</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w118" ANNOTATION_REF="a27">
+                <ANNOTATION_VALUE>Siswa-siswi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w119" ANNOTATION_REF="a27" PREVIOUS_ANNOTATION="w118">
+                <ANNOTATION_VALUE>menyanyikan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w120" ANNOTATION_REF="a27" PREVIOUS_ANNOTATION="w119">
+                <ANNOTATION_VALUE>lagu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w121" ANNOTATION_REF="a27" PREVIOUS_ANNOTATION="w120">
+                <ANNOTATION_VALUE>nasional</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w122" ANNOTATION_REF="a28">
+                <ANNOTATION_VALUE>Polisi</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w123" ANNOTATION_REF="a28" PREVIOUS_ANNOTATION="w122">
+                <ANNOTATION_VALUE>mengatur</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w124" ANNOTATION_REF="a28" PREVIOUS_ANNOTATION="w123">
+                <ANNOTATION_VALUE>lalu</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w125" ANNOTATION_REF="a28" PREVIOUS_ANNOTATION="w124">
+                <ANNOTATION_VALUE>lintas</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w126" ANNOTATION_REF="a28" PREVIOUS_ANNOTATION="w125">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w127" ANNOTATION_REF="a28" PREVIOUS_ANNOTATION="w126">
+                <ANNOTATION_VALUE>persimpangan</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w128" ANNOTATION_REF="a29">
+                <ANNOTATION_VALUE>Dokter</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w129" ANNOTATION_REF="a29" PREVIOUS_ANNOTATION="w128">
+                <ANNOTATION_VALUE>memeriksa</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w130" ANNOTATION_REF="a29" PREVIOUS_ANNOTATION="w129">
+                <ANNOTATION_VALUE>pasien</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w131" ANNOTATION_REF="a29" PREVIOUS_ANNOTATION="w130">
+                <ANNOTATION_VALUE>di</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w132" ANNOTATION_REF="a29" PREVIOUS_ANNOTATION="w131">
+                <ANNOTATION_VALUE>rumah</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w133" ANNOTATION_REF="a29" PREVIOUS_ANNOTATION="w132">
+                <ANNOTATION_VALUE>sakit</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w134" ANNOTATION_REF="a30">
+                <ANNOTATION_VALUE>Pasar</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w135" ANNOTATION_REF="a30" PREVIOUS_ANNOTATION="w134">
+                <ANNOTATION_VALUE>tradisional</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w136" ANNOTATION_REF="a30" PREVIOUS_ANNOTATION="w135">
+                <ANNOTATION_VALUE>buka</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w137" ANNOTATION_REF="a30" PREVIOUS_ANNOTATION="w136">
+                <ANNOTATION_VALUE>sejak</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w138" ANNOTATION_REF="a30" PREVIOUS_ANNOTATION="w137">
+                <ANNOTATION_VALUE>subuh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w139" ANNOTATION_REF="a31">
+                <ANNOTATION_VALUE>Kita</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w140" ANNOTATION_REF="a31" PREVIOUS_ANNOTATION="w139">
+                <ANNOTATION_VALUE>harus</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w141" ANNOTATION_REF="a31" PREVIOUS_ANNOTATION="w140">
+                <ANNOTATION_VALUE>menjaga</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w142" ANNOTATION_REF="a31" PREVIOUS_ANNOTATION="w141">
+                <ANNOTATION_VALUE>kelestarian</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="w143" ANNOTATION_REF="a31" PREVIOUS_ANNOTATION="w142">
+                <ANNOTATION_VALUE>alam</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+    </TIER>
+    <TIER LINGUISTIC_TYPE_REF="morphemic_gloss" PARENT_REF="Word_Tokens" TIER_ID="GLOSS">
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w1" ANNOTATION_REF="w1">
+                <ANNOTATION_VALUE>PSV-love</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w2" ANNOTATION_REF="w2">
+                <ANNOTATION_VALUE>3SG</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w3" ANNOTATION_REF="w3">
+                <ANNOTATION_VALUE>1SG</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w4" ANNOTATION_REF="w4">
+                <ANNOTATION_VALUE>go</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w5" ANNOTATION_REF="w5">
+                <ANNOTATION_VALUE>to</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w6" ANNOTATION_REF="w6">
+                <ANNOTATION_VALUE>market</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w7" ANNOTATION_REF="w7">
+                <ANNOTATION_VALUE>yesterday</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w8" ANNOTATION_REF="w8">
+                <ANNOTATION_VALUE>3SG</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w9" ANNOTATION_REF="w9">
+                <ANNOTATION_VALUE>ACT-buy</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w10" ANNOTATION_REF="w10">
+                <ANNOTATION_VALUE>fish</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w11" ANNOTATION_REF="w11">
+                <ANNOTATION_VALUE>fresh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w12" ANNOTATION_REF="w12">
+                <ANNOTATION_VALUE>3PL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w13" ANNOTATION_REF="w13">
+                <ANNOTATION_VALUE>live</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w14" ANNOTATION_REF="w14">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w15" ANNOTATION_REF="w15">
+                <ANNOTATION_VALUE>village</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w16" ANNOTATION_REF="w16">
+                <ANNOTATION_VALUE>small</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w17" ANNOTATION_REF="w17">
+                <ANNOTATION_VALUE>child-PL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w18" ANNOTATION_REF="w18">
+                <ANNOTATION_VALUE>PROG</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w19" ANNOTATION_REF="w19">
+                <ANNOTATION_VALUE>MID-play</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w20" ANNOTATION_REF="w20">
+                <ANNOTATION_VALUE>ball</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w21" ANNOTATION_REF="w21">
+                <ANNOTATION_VALUE>mother</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w22" ANNOTATION_REF="w22">
+                <ANNOTATION_VALUE>ACT-cook</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w23" ANNOTATION_REF="w23">
+                <ANNOTATION_VALUE>rice</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w24" ANNOTATION_REF="w24">
+                <ANNOTATION_VALUE>fried</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w25" ANNOTATION_REF="w25">
+                <ANNOTATION_VALUE>father</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w26" ANNOTATION_REF="w26">
+                <ANNOTATION_VALUE>ACT-read</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w27" ANNOTATION_REF="w27">
+                <ANNOTATION_VALUE>newspaper</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w28" ANNOTATION_REF="w28">
+                <ANNOTATION_VALUE>morning</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w29" ANNOTATION_REF="w29">
+                <ANNOTATION_VALUE>tree</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w30" ANNOTATION_REF="w30">
+                <ANNOTATION_VALUE>big</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w31" ANNOTATION_REF="w31">
+                <ANNOTATION_VALUE>DEM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w32" ANNOTATION_REF="w32">
+                <ANNOTATION_VALUE>fall</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w33" ANNOTATION_REF="w33">
+                <ANNOTATION_VALUE>bird</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w34" ANNOTATION_REF="w34">
+                <ANNOTATION_VALUE>MID-chirp</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w35" ANNOTATION_REF="w35">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w36" ANNOTATION_REF="w36">
+                <ANNOTATION_VALUE>top</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w37" ANNOTATION_REF="w37">
+                <ANNOTATION_VALUE>branch</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w38" ANNOTATION_REF="w38">
+                <ANNOTATION_VALUE>1PL.EXCL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w39" ANNOTATION_REF="w39">
+                <ANNOTATION_VALUE>drink</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w40" ANNOTATION_REF="w40">
+                <ANNOTATION_VALUE>tea</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w41" ANNOTATION_REF="w41">
+                <ANNOTATION_VALUE>hot</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w42" ANNOTATION_REF="w42">
+                <ANNOTATION_VALUE>rain</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w43" ANNOTATION_REF="w43">
+                <ANNOTATION_VALUE>heavy</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w44" ANNOTATION_REF="w44">
+                <ANNOTATION_VALUE>fall</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w45" ANNOTATION_REF="w45">
+                <ANNOTATION_VALUE>past</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w46" ANNOTATION_REF="w46">
+                <ANNOTATION_VALUE>night</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w47" ANNOTATION_REF="w47">
+                <ANNOTATION_VALUE>sibling</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w48" ANNOTATION_REF="w48">
+                <ANNOTATION_VALUE>MID-learn</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w49" ANNOTATION_REF="w49">
+                <ANNOTATION_VALUE>language</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w50" ANNOTATION_REF="w50">
+                <ANNOTATION_VALUE>foreign</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w51" ANNOTATION_REF="w51">
+                <ANNOTATION_VALUE>cat</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w52" ANNOTATION_REF="w52">
+                <ANNOTATION_VALUE>DEM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w53" ANNOTATION_REF="w53">
+                <ANNOTATION_VALUE>sleep</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w54" ANNOTATION_REF="w54">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w55" ANNOTATION_REF="w55">
+                <ANNOTATION_VALUE>chair</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w56" ANNOTATION_REF="w56">
+                <ANNOTATION_VALUE>dog</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w57" ANNOTATION_REF="w57">
+                <ANNOTATION_VALUE>ACT-bark</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w58" ANNOTATION_REF="w58">
+                <ANNOTATION_VALUE>DAT</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w59" ANNOTATION_REF="w59">
+                <ANNOTATION_VALUE>person</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w60" ANNOTATION_REF="w60">
+                <ANNOTATION_VALUE>foreign</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w61" ANNOTATION_REF="w61">
+                <ANNOTATION_VALUE>sun</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w62" ANNOTATION_REF="w62">
+                <ANNOTATION_VALUE>NVOL-rise</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w63" ANNOTATION_REF="w63">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w64" ANNOTATION_REF="w64">
+                <ANNOTATION_VALUE>side</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w65" ANNOTATION_REF="w65">
+                <ANNOTATION_VALUE>east</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w66" ANNOTATION_REF="w66">
+                <ANNOTATION_VALUE>wind</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w67" ANNOTATION_REF="w67">
+                <ANNOTATION_VALUE>MID-blow</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w68" ANNOTATION_REF="w68">
+                <ANNOTATION_VALUE>very</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w69" ANNOTATION_REF="w69">
+                <ANNOTATION_VALUE>strong</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w70" ANNOTATION_REF="w70">
+                <ANNOTATION_VALUE>fisherman</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w71" ANNOTATION_REF="w71">
+                <ANNOTATION_VALUE>ACT-sea</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w72" ANNOTATION_REF="w72">
+                <ANNOTATION_VALUE>DAT</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w73" ANNOTATION_REF="w73">
+                <ANNOTATION_VALUE>night</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w74" ANNOTATION_REF="w74">
+                <ANNOTATION_VALUE>day</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w75" ANNOTATION_REF="w75">
+                <ANNOTATION_VALUE>farmer</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w76" ANNOTATION_REF="w76">
+                <ANNOTATION_VALUE>ACT-plant</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w77" ANNOTATION_REF="w77">
+                <ANNOTATION_VALUE>rice.plant</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w78" ANNOTATION_REF="w78">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w79" ANNOTATION_REF="w79">
+                <ANNOTATION_VALUE>rice.field</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w80" ANNOTATION_REF="w80">
+                <ANNOTATION_VALUE>girl</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w81" ANNOTATION_REF="w81">
+                <ANNOTATION_VALUE>DEM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w82" ANNOTATION_REF="w82">
+                <ANNOTATION_VALUE>ACT-sing</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w83" ANNOTATION_REF="w83">
+                <ANNOTATION_VALUE>song</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w84" ANNOTATION_REF="w84">
+                <ANNOTATION_VALUE>sweet</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w85" ANNOTATION_REF="w85">
+                <ANNOTATION_VALUE>youth</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w86" ANNOTATION_REF="w86">
+                <ANNOTATION_VALUE>DEM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w87" ANNOTATION_REF="w87">
+                <ANNOTATION_VALUE>ACT-ride-APPL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w88" ANNOTATION_REF="w88">
+                <ANNOTATION_VALUE>bicycle</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w89" ANNOTATION_REF="w89">
+                <ANNOTATION_VALUE>motorcycle</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w90" ANNOTATION_REF="w90">
+                <ANNOTATION_VALUE>river</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w91" ANNOTATION_REF="w91">
+                <ANNOTATION_VALUE>DEM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w92" ANNOTATION_REF="w92">
+                <ANNOTATION_VALUE>water=3SG.POSS</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w93" ANNOTATION_REF="w93">
+                <ANNOTATION_VALUE>very</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w94" ANNOTATION_REF="w94">
+                <ANNOTATION_VALUE>clear</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w95" ANNOTATION_REF="w95">
+                <ANNOTATION_VALUE>mountain</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w96" ANNOTATION_REF="w96">
+                <ANNOTATION_VALUE>high</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w97" ANNOTATION_REF="w97">
+                <ANNOTATION_VALUE>DEM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w98" ANNOTATION_REF="w98">
+                <ANNOTATION_VALUE>PASS-blanket-APPL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w99" ANNOTATION_REF="w99">
+                <ANNOTATION_VALUE>cloud</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w100" ANNOTATION_REF="w100">
+                <ANNOTATION_VALUE>3PL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w101" ANNOTATION_REF="w101">
+                <ANNOTATION_VALUE>MID-deliberate</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w102" ANNOTATION_REF="w102">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w103" ANNOTATION_REF="w103">
+                <ANNOTATION_VALUE>hall</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w104" ANNOTATION_REF="w104">
+                <ANNOTATION_VALUE>village</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w105" ANNOTATION_REF="w105">
+                <ANNOTATION_VALUE>younger.sibling</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w106" ANNOTATION_REF="w106">
+                <ANNOTATION_VALUE>NVOL-laugh</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w107" ANNOTATION_REF="w107">
+                <ANNOTATION_VALUE>happy</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w108" ANNOTATION_REF="w108">
+                <ANNOTATION_VALUE>ACT-see</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w109" ANNOTATION_REF="w109">
+                <ANNOTATION_VALUE>cartoon</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w110" ANNOTATION_REF="w110">
+                <ANNOTATION_VALUE>grandfather</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w111" ANNOTATION_REF="w111">
+                <ANNOTATION_VALUE>ACT-story-CAUS</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w112" ANNOTATION_REF="w112">
+                <ANNOTATION_VALUE>tale</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w113" ANNOTATION_REF="w113">
+                <ANNOTATION_VALUE>old</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w114" ANNOTATION_REF="w114">
+                <ANNOTATION_VALUE>grandmother</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w115" ANNOTATION_REF="w115">
+                <ANNOTATION_VALUE>ACT-knit</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w116" ANNOTATION_REF="w116">
+                <ANNOTATION_VALUE>cloth</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w117" ANNOTATION_REF="w117">
+                <ANNOTATION_VALUE>wool</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w118" ANNOTATION_REF="w118">
+                <ANNOTATION_VALUE>student-PL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w119" ANNOTATION_REF="w119">
+                <ANNOTATION_VALUE>ACT-sing-CAUS</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w120" ANNOTATION_REF="w120">
+                <ANNOTATION_VALUE>song</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w121" ANNOTATION_REF="w121">
+                <ANNOTATION_VALUE>national</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w122" ANNOTATION_REF="w122">
+                <ANNOTATION_VALUE>police</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w123" ANNOTATION_REF="w123">
+                <ANNOTATION_VALUE>ACT-arrange</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w124" ANNOTATION_REF="w124">
+                <ANNOTATION_VALUE>flow</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w125" ANNOTATION_REF="w125">
+                <ANNOTATION_VALUE>pass</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w126" ANNOTATION_REF="w126">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w127" ANNOTATION_REF="w127">
+                <ANNOTATION_VALUE>CIRC-intersect-NOM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w128" ANNOTATION_REF="w128">
+                <ANNOTATION_VALUE>doctor</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w129" ANNOTATION_REF="w129">
+                <ANNOTATION_VALUE>ACT-examine</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w130" ANNOTATION_REF="w130">
+                <ANNOTATION_VALUE>patient</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w131" ANNOTATION_REF="w131">
+                <ANNOTATION_VALUE>LOC</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w132" ANNOTATION_REF="w132">
+                <ANNOTATION_VALUE>house</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w133" ANNOTATION_REF="w133">
+                <ANNOTATION_VALUE>sick</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w134" ANNOTATION_REF="w134">
+                <ANNOTATION_VALUE>market</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w135" ANNOTATION_REF="w135">
+                <ANNOTATION_VALUE>traditional</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w136" ANNOTATION_REF="w136">
+                <ANNOTATION_VALUE>open</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w137" ANNOTATION_REF="w137">
+                <ANNOTATION_VALUE>since</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w138" ANNOTATION_REF="w138">
+                <ANNOTATION_VALUE>dawn</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w139" ANNOTATION_REF="w139">
+                <ANNOTATION_VALUE>1PL.INCL</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w140" ANNOTATION_REF="w140">
+                <ANNOTATION_VALUE>must</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w141" ANNOTATION_REF="w141">
+                <ANNOTATION_VALUE>ACT-guard</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w142" ANNOTATION_REF="w142">
+                <ANNOTATION_VALUE>CIRC-sustainable-NOM</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="g_w143" ANNOTATION_REF="w143">
+                <ANNOTATION_VALUE>nature</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+    </TIER>
+    <TIER LINGUISTIC_TYPE_REF="translation" PARENT_REF="ORT-F" TIER_ID="TRANS">
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_1" ANNOTATION_REF="a1">
+                <ANNOTATION_VALUE>loved by him/her.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_2" ANNOTATION_REF="a2">
+                <ANNOTATION_VALUE>I went to the market yesterday.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_3" ANNOTATION_REF="a3">
+                <ANNOTATION_VALUE>He bought fresh fish.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_4" ANNOTATION_REF="a4">
+                <ANNOTATION_VALUE>They live in a small village.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_5" ANNOTATION_REF="a5">
+                <ANNOTATION_VALUE>The children are playing soccer.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_6" ANNOTATION_REF="a6">
+                <ANNOTATION_VALUE>Mother is cooking fried rice.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_7" ANNOTATION_REF="a7">
+                <ANNOTATION_VALUE>Father is reading the morning newspaper.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_8" ANNOTATION_REF="a8">
+                <ANNOTATION_VALUE>That big tree collapsed.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_9" ANNOTATION_REF="a9">
+                <ANNOTATION_VALUE>Birds are chirping on the branch.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_10" ANNOTATION_REF="a10">
+                <ANNOTATION_VALUE>We drank hot tea.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_11" ANNOTATION_REF="a11">
+                <ANNOTATION_VALUE>Heavy rain fell last night.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_12" ANNOTATION_REF="a12">
+                <ANNOTATION_VALUE>Older sibling is learning a foreign language.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_13" ANNOTATION_REF="a13">
+                <ANNOTATION_VALUE>That cat is sleeping on the chair.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_14" ANNOTATION_REF="a14">
+                <ANNOTATION_VALUE>The dog barked at the stranger.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_15" ANNOTATION_REF="a15">
+                <ANNOTATION_VALUE>The sun rises in the east.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_16" ANNOTATION_REF="a16">
+                <ANNOTATION_VALUE>The wind is blowing very hard.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_17" ANNOTATION_REF="a17">
+                <ANNOTATION_VALUE>Fishermen go to sea at night.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_18" ANNOTATION_REF="a18">
+                <ANNOTATION_VALUE>Farmers plant rice in the paddy fields.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_19" ANNOTATION_REF="a19">
+                <ANNOTATION_VALUE>That girl is singing a sweet song.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_20" ANNOTATION_REF="a20">
+                <ANNOTATION_VALUE>The young man rode a motorcycle.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_21" ANNOTATION_REF="a21">
+                <ANNOTATION_VALUE>This river's water is very clear.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_22" ANNOTATION_REF="a22">
+                <ANNOTATION_VALUE>That high mountain is covered in clouds.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_23" ANNOTATION_REF="a23">
+                <ANNOTATION_VALUE>They held a discussion at the village hall.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_24" ANNOTATION_REF="a24">
+                <ANNOTATION_VALUE>Little sibling laughed happily watching cartoons.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_25" ANNOTATION_REF="a25">
+                <ANNOTATION_VALUE>Grandfather told an old tale.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_26" ANNOTATION_REF="a26">
+                <ANNOTATION_VALUE>Grandmother is knitting wool cloth.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_27" ANNOTATION_REF="a27">
+                <ANNOTATION_VALUE>The students sang the national anthem.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_28" ANNOTATION_REF="a28">
+                <ANNOTATION_VALUE>Police directed traffic at the intersection.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_29" ANNOTATION_REF="a29">
+                <ANNOTATION_VALUE>The doctor examined the patient at the hospital.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_30" ANNOTATION_REF="a30">
+                <ANNOTATION_VALUE>The traditional market is open since dawn.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+        <ANNOTATION>
+            <REF_ANNOTATION ANNOTATION_ID="a_trans_31" ANNOTATION_REF="a31">
+                <ANNOTATION_VALUE>We must preserve nature.</ANNOTATION_VALUE>
+            </REF_ANNOTATION>
+        </ANNOTATION>
+    </TIER>
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="orthography" TIME_ALIGNABLE="true"/>
+    <LINGUISTIC_TYPE CONSTRAINTS="Symbolic_Association" GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="orthography_delineated" TIME_ALIGNABLE="false"/>
+    <LINGUISTIC_TYPE CONSTRAINTS="Symbolic_Association" GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="phonetic_full" TIME_ALIGNABLE="false"/>
+    <LINGUISTIC_TYPE CONSTRAINTS="Symbolic_Association" GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="phonetic_delineated" TIME_ALIGNABLE="false"/>
+    <LINGUISTIC_TYPE CONSTRAINTS="Symbolic_Subdivision" GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="word_subdivision" TIME_ALIGNABLE="false"/>
+    <LINGUISTIC_TYPE CONSTRAINTS="Symbolic_Association" GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="morphemic_gloss" TIME_ALIGNABLE="false"/>
+    <LINGUISTIC_TYPE CONSTRAINTS="Symbolic_Association" GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="translation" TIME_ALIGNABLE="false"/>
+    <CONSTRAINT DESCRIPTION="Time subdivision of parent annotation's time interval, no time gaps allowed within this interval" STEREO_TYPE="Time_Subdivision"/>
+    <CONSTRAINT DESCRIPTION="Symbolic subdivision of a parent annotation. Annotations refering to the same parent are ordered" STEREO_TYPE="Symbolic_Subdivision"/>
+    <CONSTRAINT DESCRIPTION="1-to-1 association with a parent annotation" STEREO_TYPE="Symbolic_Association"/>
+    <CONSTRAINT DESCRIPTION="Included In" STEREO_TYPE="Included_In"/>
+</ANNOTATION_DOCUMENT>
