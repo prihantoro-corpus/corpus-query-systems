@@ -350,7 +350,10 @@ def render_concordance_view():
                                 db_cols = [c[1] for c in con_chk.execute("PRAGMA table_info(corpus)").fetchall()]
                                 standard_cols = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'SentenceTokens', 'Metadata', 'Node', 'sex', 'location', 'first_language', 'word_tokens'}
                                 legacy_mapped_cols = {'ort_d', 'phn_f', 'phn_d', 'gloss', 'trans'}
-                                candidate_cols = [c for c in db_cols if c not in standard_cols and c not in legacy_mapped_cols]
+                                candidate_cols = [c for c in db_cols if c not in standard_cols]
+                                custom_cols = [c for c in candidate_cols if c not in legacy_mapped_cols]
+                                if len(custom_cols) > 0:
+                                    candidate_cols = custom_cols
                                 
                                 # Filter out completely empty columns
                                 for c in candidate_cols:
