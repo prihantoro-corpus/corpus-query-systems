@@ -335,32 +335,53 @@ def render_concordance_view():
                                 sentence_display = st.checkbox("Sentence Display", value=get_state('kwic_sentence_display', False), key="kwic_sentence_display_cb", help="Display full sentence with aligned interlinear glossing block")
                                 set_state('kwic_sentence_display', sentence_display)
 
-                        # ELAN Annotation Tiers Display Option (Unchecked by default)
+                        # ELAN Annotation Tiers Builder
                         extra_cols = []
                         try:
                             import duckdb
                             with duckdb.connect(corpus_path, read_only=True) as con_chk:
                                 db_cols = [c[1] for c in con_chk.execute("PRAGMA table_info(corpus)").fetchall()]
                                 standard_cols = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'SentenceTokens', 'Metadata', 'Node', 'sex', 'location', 'first_language', 'word_tokens'}
-                                extra_cols = [c for c in db_cols if c not in standard_cols]
+                                candidate_cols = [c for c in db_cols if c not in standard_cols]
+                                
+                                # Filter out completely empty columns
+                                for c in candidate_cols:
+                                    cnt = con_chk.execute(f"SELECT count(*) FROM corpus WHERE {c} IS NOT NULL AND {c} != ''").fetchone()[0]
+                                    if cnt > 0:
+                                        extra_cols.append(c)
                         except Exception:
                             pass
 
                         if len(extra_cols) > 0:
-                            with st.expander("🏷️ Annotation Tiers Display (Unchecked by Default)", expanded=False):
-                                btn_all_col, _ = st.columns([1, 4])
-                                with btn_all_col:
-                                    if st.button("Select All Tiers", key="btn_select_all_elan_tiers"):
-                                        for col in extra_cols:
-                                            set_state(f'kwic_show_{col}', True)
+                            with st.expander("🛠️ Annotation Tiers Builder", expanded=True):
+                                st.markdown("<div style='font-size: 0.85em; color: #94a3b8; margin-bottom: 8px;'>Configure the custom tiers and alignment for the Interlinear Gloss display.</div>", unsafe_allow_html=True)
+                                
+                                if 'kwic_custom_tiers' not in st.session_state:
+                                    st.session_state['kwic_custom_tiers'] = []
+
+                                for i in range(len(st.session_state['kwic_custom_tiers'])):
+                                    c1, c2, c3, c4 = st.columns([1.5, 4, 3, 1])
+                                    c1.markdown(f"<div style='margin-top:8px; font-size:0.9em;'><b>Tier {i+1}</b></div>", unsafe_allow_html=True)
+                                    
+                                    curr_col = st.session_state['kwic_custom_tiers'][i]['col']
+                                    curr_align = st.session_state['kwic_custom_tiers'][i]['align']
+                                    
+                                    idx_col = extra_cols.index(curr_col) if curr_col in extra_cols else 0
+                                    idx_align = 0 if curr_align == 'word' else 1
+                                    
+                                    new_col = c2.selectbox("Column", options=extra_cols, index=idx_col, key=f"tier_col_{i}", label_visibility="collapsed")
+                                    new_align = c3.selectbox("Alignment", options=["word", "sentence"], index=idx_align, key=f"tier_align_{i}", label_visibility="collapsed")
+                                    
+                                    st.session_state['kwic_custom_tiers'][i]['col'] = new_col
+                                    st.session_state['kwic_custom_tiers'][i]['align'] = new_align
+                                    
+                                    if c4.button("❌", key=f"tier_del_{i}"):
+                                        st.session_state['kwic_custom_tiers'].pop(i)
                                         st.rerun()
 
-                                # Dynamically generate checkboxes in groups of 4
-                                cols_ui = st.columns(4)
-                                for i, col in enumerate(extra_cols):
-                                    with cols_ui[i % 4]:
-                                        is_checked = st.checkbox(f"{col.replace('_', ' ').title()} ({col})", value=get_state(f'kwic_show_{col}', False), key=f"kwic_show_{col}_cb")
-                                        set_state(f'kwic_show_{col}', is_checked)
+                                if st.button("➕ Add Tier", key="btn_add_tier"):
+                                    st.session_state['kwic_custom_tiers'].append({'col': extra_cols[0], 'align': 'word'})
+                                    st.rerun()
 
                 # --- XML Restriction Filters ---
                 comp_mode = get_state('comparison_mode', False)
@@ -1460,9 +1481,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
              standard_keys = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'sex', 'location', 'first_language', 'word_tokens'}
              available_extra_cols = [k for k in all_keys if k not in standard_keys]
              
-             for col in available_extra_cols:
-                 if get_state(f'kwic_show_{col}', False):
-                     active_extra_cols.append(col)
+             active_extra_cols = [t['col'] for t in st.session_state.get('kwic_custom_tiers', [])]
                      show_meta_effective = True
 
          with c_pag3:
@@ -1630,21 +1649,25 @@ def render_concordance_column(results, search_term, key_suffix=""):
                          interlinear_html += f"<td style='font-weight: bold; color: #f8fafc; padding: 2px 4px;'>{w_text}</td>"
                  interlinear_html += "</tr>"
 
-                 # Dynamic Extra Tiers (Word Level)
-                 for col in active_extra_cols:
-                     if col != 'trans':
+                 # Dynamic Extra Tiers (Tier Builder)
+                 sentence_level_html = ""
+                 
+                 for tier in st.session_state.get('kwic_custom_tiers', []):
+                     col = tier['col']
+                     align = tier['align']
+                     
+                     if align == 'word':
                          interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
                          for t in sent_tokens:
                              interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
                          interlinear_html += "</tr>"
+                     elif align == 'sentence':
+                         val = display_meta.get(col) or node_token_rec.get(col, '')
+                         if val:
+                             sentence_level_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>{col.replace('_', ' ').title()}:</b> {val}</div>"
 
                  interlinear_html += "</table>"
-                 
-                 # Row 2 (Bottom): Free Translation (TRANS) if checked or present
-                 if get_state('kwic_show_trans', False) or s_trans or ('trans' in active_extra_cols):
-                     if get_state('kwic_show_trans', False) or ('trans' in active_extra_cols):
-                         trans_val = s_trans if s_trans else "N/A"
-                         interlinear_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>Free Translation:</b> {trans_val}</div>"
+                 interlinear_html += sentence_level_html
              
              interlinear_html += "</div>"
              st.markdown(interlinear_html, unsafe_allow_html=True)
