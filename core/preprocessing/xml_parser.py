@@ -607,6 +607,14 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
         val = ann.find('ANNOTATION_VALUE').text or ''
         root_annos[aid] = val
 
+    # Parse ELAN <HEADER> <PROPERTY> metadata if present (e.g. sex, location, first_language, speaker)
+    header_metadata = {}
+    for prop in root.findall('HEADER/PROPERTY'):
+        prop_name = prop.attrib.get('NAME', '').strip().lower().replace(' ', '_')
+        prop_val = prop.text.strip() if prop.text else ''
+        if prop_name and prop_val:
+            header_metadata[prop_name] = prop_val
+
     # Flexible multilingual & custom tier lookup helper
     def find_tier_map(possible_names, ling_type_keywords=[]):
         # 1. Exact or case-insensitive match on TIER_ID
@@ -635,9 +643,14 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
     trans_map = find_tier_map(['TRANS', 'Free_Translation', 'Translation', 'trans', 'terjemahan', 'terjemah', 'arti'], ['translation', 'terjemahan', 'free'])
     gloss_map = find_tier_map(['GLOSS', 'Morphemic_Gloss', 'Gloss', 'gloss', 'terjemahan-morfem', 'glosa', 'morfem', 'morpheme'], ['gloss', 'morfem', 'glosa'])
 
+    # Speaker metadata tiers (e.g. sex, location, first_language, speaker)
+    sex_map = find_tier_map(['SEX', 'sex', 'gender', 'jenis_kelamin'], ['sex', 'gender'])
+    loc_map = find_tier_map(['LOCATION', 'location', 'city', 'lokasi', 'tempat'], ['location', 'lokasi'])
+    l1_map = find_tier_map(['FIRST_LANGUAGE', 'first_language', 'l1', 'bahasa_ibu', 'native_language'], ['language', 'bahasa'])
+
     # Also capture ALL custom/unmapped tiers in the EAF file dynamically
     custom_tier_maps = {}
-    known_matched_tiers = {'ort-d', 'phn-f', 'phn-d', 'trans', 'gloss', root_tier_id.lower() if root_tier_id else ''}
+    known_matched_tiers = {'ort-d', 'phn-f', 'phn-d', 'trans', 'gloss', 'sex', 'location', 'first_language', root_tier_id.lower() if root_tier_id else ''}
     for t_id in tier_map:
         if t_id.lower() not in known_matched_tiers:
             c_map = get_ref_map(t_id)
@@ -698,6 +711,10 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
         w_phn_d = s_phn_d if s_phn_d else ''
         w_gloss = gloss_map.get(wid, '') or gloss_map.get(parent_id, '')
         
+        w_sex = sex_map.get(parent_id, '') or sex_map.get(wid, '') or header_metadata.get('sex', '') or header_metadata.get('gender', '')
+        w_loc = loc_map.get(parent_id, '') or loc_map.get(wid, '') or header_metadata.get('location', '') or header_metadata.get('city', '')
+        w_l1 = l1_map.get(parent_id, '') or l1_map.get(wid, '') or header_metadata.get('first_language', '') or header_metadata.get('l1', '')
+
         rec = {
             'token': w_ort_f,
             'pos': 'TAG',
@@ -707,6 +724,9 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
             'phn_d': w_phn_d,
             'gloss': w_gloss,
             'trans': s_trans,
+            'sex': w_sex,
+            'location': w_loc,
+            'first_language': w_l1,
             'sent_id': sent_id,
             'filename': filename
         }

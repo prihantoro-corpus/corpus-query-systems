@@ -144,7 +144,7 @@ BUILT_IN_CORPUS_DETAILS = {
         """
         A **sample ELAN language documentation corpus** containing 30 annotated sentences in Indonesian.
         <br><br>
-        **Includes 7 parallel annotation layers**: Orthography (`ORT-F`), Delineated Orthography (`ORT-D`), Phonetic (`PHN-F`), Delineated Phonetic (`PHN-D`), Morphemic Gloss (`GLOSS`), POS, and Lemma.
+        **Includes 10 parallel annotation layers**: Orthography (`ORT-F`), Delineated Orthography (`ORT-D`), Phonetic (`PHN-F`), Delineated Phonetic (`PHN-D`), Morphemic Gloss (`GLOSS`), Speaker Sex (`SEX`), Location (`LOCATION`), First Language (`FIRST_LANGUAGE`), POS, and Lemma.
         """,
 }
 
