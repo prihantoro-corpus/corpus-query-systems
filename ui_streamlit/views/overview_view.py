@@ -1233,7 +1233,12 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                     unique_count = conn.execute(f'SELECT COUNT(DISTINCT "{attr}") FROM corpus').fetchone()[0]
                     
                     if unique_count > 50:
-                        st.warning(f"Attribute **{attr}** has too many unique values ({unique_count}) to visualize effectively.")
+                        st.warning(
+                            f"Attribute **{attr}** has too many unique values ({unique_count}) to visualize effectively in pie charts.\n\n"
+                            f"💡 **How to query this attribute in Concordance:** You can search these tier values directly using CORTEX tag queries like:\n"
+                            f"- `<{attr}=\".*pattern.*\">` *(e.g., `<{attr}=\".*ACT.*\">` or `<{attr}=\".*baca.*\">`)*\n"
+                            f"- `[{attr}=\"exact_value\"]`"
+                        )
                         continue
                         
                     attr_data = conn.execute(f"""
