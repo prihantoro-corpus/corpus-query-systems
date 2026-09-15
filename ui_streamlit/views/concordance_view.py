@@ -4,14 +4,21 @@ import pandas as pd
 import os
 import itertools
 import math
+import uuid
 from ui_streamlit.state_manager import get_state, set_state
 from ui_streamlit.utils import notify_timing
 from ui_streamlit.caching import cached_generate_kwic, cached_get_subcorpus_size
 from ui_streamlit.components.filters import render_xml_restriction_filters
-from core.preprocessing.xml_parser import apply_xml_restrictions
+from core.preprocessing import xml_parser
+from .styles import MAIN_CSS, TOOLTIP_CSS
 from core.ai_service import interpret_results_llm, parse_nl_query, parse_nl_query_rules_only
 from core.io_utils import df_to_excel_bytes
 import core.modules.overview as ov
+
+def sync_tier(idx, tid):
+    import streamlit as st
+    st.session_state['kwic_custom_tiers'][idx]['col'] = st.session_state[f"tier_col_{tid}"]
+    st.session_state['kwic_custom_tiers'][idx]['align'] = st.session_state[f"tier_align_{tid}"]
 
 def render_concordance_view():
     st.header("Concordance (KWIC)")
@@ -383,8 +390,8 @@ def render_concordance_view():
                                         c1, c2, c3, c4 = st.columns([1.5, 4, 3, 1])
                                         c1.markdown(f"<div style='margin-top:8px; font-size:0.9em;'><b>Tier {i+1}</b></div>", unsafe_allow_html=True)
                                         
-                                        c2.selectbox("Column", options=extra_cols, key=col_key, label_visibility="collapsed")
-                                        c3.selectbox("Alignment", options=["word", "sentence"], key=align_key, label_visibility="collapsed")
+                                        c2.selectbox("Column", options=extra_cols, key=col_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
+                                        c3.selectbox("Alignment", options=["word", "sentence"], key=align_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
                                         
                                         if c4.button("❌", key=f"tier_del_{t_id}"):
                                             st.session_state['kwic_custom_tiers'].pop(i)
