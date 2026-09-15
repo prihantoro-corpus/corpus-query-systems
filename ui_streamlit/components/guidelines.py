@@ -10,8 +10,11 @@ GUIDELINES = {
         """,
         "Sub-corpus Stats": """
             ### 📖 Sub-Corpus Statistics Guide
-            * See the corpus structure in a chart and table. Useful for searching.
-            * (Note: Sub-corpus stats will update if you choose to annotate).
+            * See the corpus structure, files, and XML attribute distributions in charts and tables.
+            * **High-Cardinality Attributes:** Attributes with more than 50 unique values (e.g. detailed glosses like `gloss`, phonetic tiers like `phn_f`, `phn_d`, `ort_d`) are not displayed in pie charts to keep the UI responsive.
+            * **Querying Tiers:** You can query any attribute tier in the **Concordance** tab using CORTEX tag queries:
+              * Regex pattern search: `<gloss=".*ACT.*">` or `<ort_d=".*mem-.*">`
+              * Exact match: `[gloss="3PL"]`
         """,
         "Frequency List": """
             ### 📖 Frequency List Guide
