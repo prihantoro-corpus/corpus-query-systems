@@ -1369,6 +1369,44 @@ def render_upload_ui():
                 label_visibility="collapsed"
             )
             
+        eaf_main_tier = None
+        eaf_gloss_tier = None
+        eaf_trans_tier = None
+
+        if fmt == ".eaf (ELAN Annotation)" and uploaded_files:
+            st.markdown("---")
+            st.info("⚙️ **Configure ELAN Tier Mappings**")
+            st.markdown("CORTEX automatically maps standard tier names (e.g. `ORT-D`, `GLOSS`), but you can explicitly specify your tiers here.")
+            
+            try:
+                import xml.etree.ElementTree as ET
+                first_file = uploaded_files[0]
+                first_file.seek(0)
+                xml_content = first_file.read().decode('utf-8', errors='ignore')
+                first_file.seek(0)
+                
+                root = ET.fromstring(xml_content.encode('utf-8'))
+                tier_ids = [tier.attrib.get('TIER_ID', '') for tier in root.findall('TIER')]
+                tier_ids = [t for t in tier_ids if t]
+                
+                if tier_ids:
+                    tier_options = ["Auto-detect"] + tier_ids
+                    c_t1, c_t2, c_t3 = st.columns(3)
+                    with c_t1:
+                        eaf_main_tier = st.selectbox("Main Tier (Root word)", tier_options, key="eaf_main_tier_select")
+                    with c_t2:
+                        eaf_gloss_tier = st.selectbox("Morphemic Gloss Tier", tier_options, key="eaf_gloss_tier_select")
+                    with c_t3:
+                        eaf_trans_tier = st.selectbox("Translation Tier", tier_options, key="eaf_trans_tier_select")
+                    
+                    eaf_main_tier = None if eaf_main_tier == "Auto-detect" else eaf_main_tier
+                    eaf_gloss_tier = None if eaf_gloss_tier == "Auto-detect" else eaf_gloss_tier
+                    eaf_trans_tier = None if eaf_trans_tier == "Auto-detect" else eaf_trans_tier
+                else:
+                    st.warning("No tiers found in the uploaded ELAN file.")
+            except Exception as e:
+                st.error(f"Error reading tiers from uploaded file: {e}")
+
         # Custom Tagger Section
         st.markdown("---")
         tagger_tool = st.radio(
@@ -1951,7 +1989,10 @@ def render_upload_ui():
                     explicit_lang_code=lang_code,
                     selected_format=fmt,
                     progress_callback=update_progress,
-                    custom_tagger_config=custom_config
+                    custom_tagger_config=custom_config,
+                    eaf_main_tier=eaf_main_tier,
+                    eaf_gloss_tier=eaf_gloss_tier,
+                    eaf_trans_tier=eaf_trans_tier
                 )
                 
                 if result.get('error'):
