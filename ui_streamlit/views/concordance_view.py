@@ -9,8 +9,7 @@ from ui_streamlit.state_manager import get_state, set_state
 from ui_streamlit.utils import notify_timing
 from ui_streamlit.caching import cached_generate_kwic, cached_get_subcorpus_size
 from ui_streamlit.components.filters import render_xml_restriction_filters
-from core.preprocessing import xml_parser
-from .styles import MAIN_CSS, TOOLTIP_CSS
+from core.preprocessing.xml_parser import apply_xml_restrictions
 from core.ai_service import interpret_results_llm, parse_nl_query, parse_nl_query_rules_only
 from core.io_utils import df_to_excel_bytes
 import core.modules.overview as ov
