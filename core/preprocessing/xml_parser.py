@@ -607,23 +607,55 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
         val = ann.find('ANNOTATION_VALUE').text or ''
         root_annos[aid] = val
 
-    # Dependent tier maps
-    ort_d_map = get_ref_map('ORT-D') or get_ref_map('Orthographic_Delineated')
-    phn_f_map = get_ref_map('PHN-F') or get_ref_map('Phonetic')
-    phn_d_map = get_ref_map('PHN-D') or get_ref_map('Phonetic_Delineated')
-    trans_map = get_ref_map('TRANS') or get_ref_map('Free_Translation') or get_ref_map('Translation')
-    gloss_map = get_ref_map('GLOSS') or get_ref_map('Morphemic_Gloss') or get_ref_map('Gloss')
+    # Flexible multilingual & custom tier lookup helper
+    def find_tier_map(possible_names, ling_type_keywords=[]):
+        # 1. Exact or case-insensitive match on TIER_ID
+        for name in possible_names:
+            for t_id in tier_map:
+                if t_id.lower() == name.lower():
+                    return get_ref_map(t_id)
+        # 2. Substring match on TIER_ID
+        for name in possible_names:
+            for t_id in tier_map:
+                if name.lower() in t_id.lower():
+                    return get_ref_map(t_id)
+        # 3. Match on LINGUISTIC_TYPE_REF attribute
+        if ling_type_keywords:
+            for t_id, tier in tier_map.items():
+                ling_ref = tier.attrib.get('LINGUISTIC_TYPE_REF', '').lower()
+                for kw in ling_type_keywords:
+                    if kw.lower() in ling_ref:
+                        return get_ref_map(t_id)
+        return {}
+
+    # Dependent tier maps with broad Indonesian, English & linguistic alias coverage
+    ort_d_map = find_tier_map(['ORT-D', 'Orthographic_Delineated', 'ort_d', 'delineated', 'ortografi_delineasi'], ['delineat', 'morpheme', 'morfem'])
+    phn_f_map = find_tier_map(['PHN-F', 'Phonetic', 'phn_f', 'fonetik', 'fonetis'], ['phonetic', 'fonetik'])
+    phn_d_map = find_tier_map(['PHN-D', 'Phonetic_Delineated', 'phn_d', 'fonetik_delineasi'], ['phonetic_d', 'fonetik_d'])
+    trans_map = find_tier_map(['TRANS', 'Free_Translation', 'Translation', 'trans', 'terjemahan', 'terjemah', 'arti'], ['translation', 'terjemahan', 'free'])
+    gloss_map = find_tier_map(['GLOSS', 'Morphemic_Gloss', 'Gloss', 'gloss', 'terjemahan-morfem', 'glosa', 'morfem', 'morpheme'], ['gloss', 'morfem', 'glosa'])
+
+    # Also capture ALL custom/unmapped tiers in the EAF file dynamically
+    custom_tier_maps = {}
+    known_matched_tiers = {'ort-d', 'phn-f', 'phn-d', 'trans', 'gloss', root_tier_id.lower() if root_tier_id else ''}
+    for t_id in tier_map:
+        if t_id.lower() not in known_matched_tiers:
+            c_map = get_ref_map(t_id)
+            if c_map:
+                # Sanitize column name for DB indexing (replace dashes/spaces with underscores)
+                clean_col = re.sub(r'\W+', '_', t_id.strip()).lower()
+                custom_tier_maps[clean_col] = c_map
 
     # Subdivided Word Tokens tier
     word_tokens = []
     word_tier_id = None
-    for t_id in ['Word_Tokens', 'Words', 'Morphemes', 'Tokens', 'ORT-D']:
+    for t_id in ['Word_Tokens', 'Words', 'Morphemes', 'Tokens', 'ORT-D', 'morfem', 'kata']:
         if t_id in tier_map:
             word_tier_id = t_id
             break
     if not word_tier_id:
         for t_id, tier in tier_map.items():
-            if tier.attrib.get('PARENT_REF') == root_tier_id and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['word_subdivision', 'morpheme', 'word']:
+            if tier.attrib.get('PARENT_REF') == root_tier_id and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['word_subdivision', 'morpheme', 'word', 'morfem', 'kata']:
                 word_tier_id = t_id
                 break
 
@@ -664,9 +696,9 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
         
         w_phn_f = s_phn_f if s_phn_f else ''
         w_phn_d = s_phn_d if s_phn_d else ''
-        w_gloss = gloss_map.get(wid, '')
+        w_gloss = gloss_map.get(wid, '') or gloss_map.get(parent_id, '')
         
-        records.append({
+        rec = {
             'token': w_ort_f,
             'pos': 'TAG',
             'lemma': w_ort_f.lower(),
@@ -677,7 +709,13 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
             'trans': s_trans,
             'sent_id': sent_id,
             'filename': filename
-        })
+        }
+        
+        # Attach any non-standard custom tiers dynamically to the DB record
+        for c_col, c_map in custom_tier_maps.items():
+            rec[c_col] = c_map.get(wid, '') or c_map.get(parent_id, '')
+
+        records.append(rec)
         
     return records
 
