@@ -1251,6 +1251,13 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                         if not attr_data.empty:
                             st.write("**Attribute: Grammatical Gloss Tags (UPPERCASE)**")
                             st.caption("Extracted grammatical categories (e.g. `3PL`, `ACT`, `LOC`, `PASS`) from the gloss tier.")
+                            
+                            st.info(
+                                "💡 **How to query the gloss tier in Concordance:**\n"
+                                "- `<gloss=\".*pattern.*\">` *(e.g. `<gloss=\".*ACT.*\">` or `<gloss=\".*3PL.*\">`)*\n"
+                                "- `[gloss=\"exact_value\"]` *(e.g. `[gloss=\"live\"]`)*"
+                            )
+                            
                             ac1, ac2 = st.columns([1, 1])
                             with ac1:
                                 fig_a = px.pie(attr_data, names='Value', values='Tokens', title="Distribution by Grammatical Gloss Tag")
