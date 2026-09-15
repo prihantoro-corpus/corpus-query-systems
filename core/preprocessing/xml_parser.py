@@ -562,9 +562,10 @@ def apply_xml_restrictions(filters):
     return " AND " + " AND ".join(clauses), params
 
 
-def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_code='en', filename='file.eaf'):
+def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_code='en', filename='file.eaf', eaf_main_tier=None, eaf_gloss_tier=None, eaf_trans_tier=None):
     """
     Parses ELAN .eaf XML into aligned 7-layer token records for CORTEX.
+    If explicit tier mappings are provided, uses them. Otherwise relies on heuristics.
     """
     if isinstance(xml_content, str):
         root = ET.fromstring(xml_content.encode('utf-8'))
@@ -586,16 +587,17 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
         return res
 
     # 1. Identify Root Orthographic Tier
-    root_tier_id = None
-    for t_id, tier in tier_map.items():
-        if 'PARENT_REF' not in tier.attrib and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['orthography', 'orthographic', 'transcription', 'ORT-F']:
-            root_tier_id = t_id
-            break
+    root_tier_id = eaf_main_tier
     if not root_tier_id:
         for t_id, tier in tier_map.items():
-            if 'PARENT_REF' not in tier.attrib:
+            if 'PARENT_REF' not in tier.attrib and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['orthography', 'orthographic', 'transcription', 'ORT-F']:
                 root_tier_id = t_id
                 break
+        if not root_tier_id:
+            for t_id, tier in tier_map.items():
+                if 'PARENT_REF' not in tier.attrib:
+                    root_tier_id = t_id
+                    break
 
     if not root_tier_id:
         return []
@@ -640,8 +642,12 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
     ort_d_map = find_tier_map(['ORT-D', 'Orthographic_Delineated', 'ort_d', 'delineated', 'ortografi_delineasi'], ['delineat', 'morpheme', 'morfem'])
     phn_f_map = find_tier_map(['PHN-F', 'Phonetic', 'phn_f', 'fonetik', 'fonetis'], ['phonetic', 'fonetik'])
     phn_d_map = find_tier_map(['PHN-D', 'Phonetic_Delineated', 'phn_d', 'fonetik_delineasi'], ['phonetic_d', 'fonetik_d'])
-    trans_map = find_tier_map(['TRANS', 'Free_Translation', 'Translation', 'trans', 'terjemahan', 'terjemah', 'arti'], ['translation', 'terjemahan', 'free'])
-    gloss_map = find_tier_map(['GLOSS', 'Morphemic_Gloss', 'Gloss', 'gloss', 'terjemahan-morfem', 'glosa', 'morfem', 'morpheme'], ['gloss', 'morfem', 'glosa'])
+    
+    if eaf_trans_tier: trans_map = find_tier_map([eaf_trans_tier])
+    else: trans_map = find_tier_map(['TRANS', 'Free_Translation', 'Translation', 'trans', 'terjemahan', 'terjemah', 'arti'], ['translation', 'terjemahan', 'free'])
+    
+    if eaf_gloss_tier: gloss_map = find_tier_map([eaf_gloss_tier])
+    else: gloss_map = find_tier_map(['GLOSS', 'Morphemic_Gloss', 'Gloss', 'gloss', 'terjemahan-morfem', 'glosa', 'morfem', 'morpheme'], ['gloss', 'morfem', 'glosa'])
 
     # Speaker metadata tiers (e.g. sex, location, first_language, speaker)
     sex_map = find_tier_map(['SEX', 'sex', 'gender', 'jenis_kelamin'], ['sex', 'gender'])

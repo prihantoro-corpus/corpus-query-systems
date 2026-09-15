@@ -14,6 +14,9 @@ def main():
     parser.add_argument("-o", "--output", default="compiled_corpus.db", help="Output database filename (e.g. corpus.db)")
     parser.add_argument("-l", "--lang", default="English", help="Language of the corpus (e.g. English, Indonesian)")
     parser.add_argument("-f", "--format", default="Raw (Natural text)", help="Format: 'Raw (Natural text)' or 'Tagged (Vertical)'")
+    parser.add_argument("--eaf-main", default=None, help="Main tier for ELAN files")
+    parser.add_argument("--eaf-gloss", default=None, help="Morphemic gloss tier for ELAN files")
+    parser.add_argument("--eaf-trans", default=None, help="Translation tier for ELAN files")
 
     args = parser.parse_args()
 
@@ -36,7 +39,10 @@ def main():
         file_sources, 
         explicit_lang_code=args.lang, 
         selected_format=args.format, 
-        progress_callback=print_progress
+        progress_callback=print_progress,
+        eaf_main_tier=args.eaf_main,
+        eaf_gloss_tier=args.eaf_gloss,
+        eaf_trans_tier=args.eaf_trans
     )
 
     # Close all files

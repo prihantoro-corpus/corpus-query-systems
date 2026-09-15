@@ -16,7 +16,7 @@ import time
 from core.utils.profiler import profile_func
 
 @profile_func
-def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None, custom_tagger_config=None):
+def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None, custom_tagger_config=None, eaf_main_tier=None, eaf_gloss_tier=None, eaf_trans_tier=None):
     """
     Loads one or more monolingual files into a DuckDB database.
     Returns: dict { 'db_path': str, 'stats': dict, 'structure': dict, 'lang_code': str, 'error': str }
@@ -172,7 +172,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     elif stanza_lang_code and stanza_lang_code != "OTHER":
                         stanza_proc = tagging.tag_text_with_stanza
 
-                    eaf_records = parse_eaf_content_to_df_records(cleaned_xml, stanza_processor=stanza_proc, lang_code=stanza_lang_code, filename=filename)
+                    eaf_records = parse_eaf_content_to_df_records(cleaned_xml, stanza_processor=stanza_proc, lang_code=stanza_lang_code, filename=filename, eaf_main_tier=eaf_main_tier, eaf_gloss_tier=eaf_gloss_tier, eaf_trans_tier=eaf_trans_tier)
                     all_df_data.extend(eaf_records)
                 else:
                     # 1. Structure Extraction
