@@ -1481,8 +1481,8 @@ def render_concordance_column(results, search_term, key_suffix=""):
          html = f"""
          <style>
          .kwic-table-wrapper {{
-             max-height: 650px;
-             overflow-y: auto;
+             max-height: none;
+             overflow-y: visible;
              overflow-x: auto;
              border: 1px solid #334155;
              border-radius: 8px;
