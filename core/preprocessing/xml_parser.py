@@ -686,6 +686,13 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
                 word_tokens.append({'wid': f'w{w_counter}', 'parent_id': parent_id, 'word': w})
                 w_counter += 1
 
+    word_index_by_parent = {}
+    for wt in word_tokens:
+        pid = wt['parent_id']
+        idx = word_index_by_parent.get(pid, 0)
+        wt['word_idx'] = idx
+        word_index_by_parent[pid] = idx + 1
+
     records = []
     sent_id_map = {parent_id: idx+1 for idx, parent_id in enumerate(root_annos.keys())}
     
@@ -693,6 +700,7 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
         wid = wt['wid']
         parent_id = wt['parent_id']
         w_ort_f = wt['word']
+        word_idx = wt['word_idx']
         sent_id = sent_id_map.get(parent_id, 1)
         
         s_ort_d = ort_d_map.get(parent_id, '')
@@ -707,8 +715,19 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
                     w_ort_d = chunk
                     break
         
-        w_phn_f = s_phn_f if s_phn_f else ''
-        w_phn_d = s_phn_d if s_phn_d else ''
+        # Get word-level phonetic annotations if they exist, otherwise fallback to space-separated sentence string
+        w_phn_f = phn_f_map.get(wid, '')
+        if not w_phn_f and s_phn_f:
+            chunks = s_phn_f.split()
+            if word_idx < len(chunks):
+                w_phn_f = chunks[word_idx]
+                
+        w_phn_d = phn_d_map.get(wid, '')
+        if not w_phn_d and s_phn_d:
+            chunks = s_phn_d.split()
+            if word_idx < len(chunks):
+                w_phn_d = chunks[word_idx]
+
         w_gloss = gloss_map.get(wid, '') or gloss_map.get(parent_id, '')
         
         w_sex = sex_map.get(parent_id, '') or sex_map.get(wid, '') or header_metadata.get('sex', '') or header_metadata.get('gender', '')
