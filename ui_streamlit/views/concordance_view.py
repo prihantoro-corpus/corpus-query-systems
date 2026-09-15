@@ -381,16 +381,17 @@ def render_concordance_view():
                                         col_key = f"tier_col_{t_id}"
                                         align_key = f"tier_align_{t_id}"
                                         
-                                        if col_key not in st.session_state:
-                                            st.session_state[col_key] = tier.get('col', extra_cols[0])
-                                        if align_key not in st.session_state:
-                                            st.session_state[align_key] = tier.get('align', 'word')
+                                        current_col = tier.get('col', extra_cols[0])
+                                        idx_col = extra_cols.index(current_col) if current_col in extra_cols else 0
+                                        
+                                        current_align = tier.get('align', 'word')
+                                        idx_align = 0 if current_align == 'word' else 1
                                             
                                         c1, c2, c3, c4 = st.columns([1.5, 4, 3, 1])
                                         c1.markdown(f"<div style='margin-top:8px; font-size:0.9em;'><b>Tier {i+1}</b></div>", unsafe_allow_html=True)
                                         
-                                        c2.selectbox("Column", options=extra_cols, key=col_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
-                                        c3.selectbox("Alignment", options=["word", "sentence"], key=align_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
+                                        c2.selectbox("Column", options=extra_cols, index=idx_col, key=col_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
+                                        c3.selectbox("Alignment", options=["word", "sentence"], index=idx_align, key=align_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
                                         
                                         if c4.button("❌", key=f"tier_del_{t_id}"):
                                             st.session_state['kwic_custom_tiers'].pop(i)
