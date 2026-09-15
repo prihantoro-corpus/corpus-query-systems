@@ -674,7 +674,7 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
             break
     if not word_tier_id:
         for t_id, tier in tier_map.items():
-            if tier.attrib.get('PARENT_REF') == root_tier_id and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['word_subdivision', 'morpheme', 'word', 'morfem', 'kata']:
+            if tier.attrib.get('PARENT_REF') == root_tier_id and tier.attrib.get('LINGUISTIC_TYPE_REF') in ['word_subdivision', 'morpheme', 'word', 'words', 'morfem', 'kata']:
                 word_tier_id = t_id
                 break
 
@@ -744,17 +744,18 @@ def parse_eaf_content_to_df_records(xml_content, stanza_processor=None, lang_cod
             'token': w_ort_f,
             'pos': 'TAG',
             'lemma': w_ort_f.lower(),
-            'ort_d': w_ort_d,
-            'phn_f': w_phn_f,
-            'phn_d': w_phn_d,
-            'gloss': w_gloss,
-            'trans': s_trans,
             'sex': w_sex,
             'location': w_loc,
             'first_language': w_l1,
             'sent_id': sent_id,
             'filename': filename
         }
+        
+        if w_ort_d: rec['ort_d'] = w_ort_d
+        if w_phn_f: rec['phn_f'] = w_phn_f
+        if w_phn_d: rec['phn_d'] = w_phn_d
+        if w_gloss: rec['gloss'] = w_gloss
+        if s_trans: rec['trans'] = s_trans
         
         # Attach any non-standard custom tiers dynamically to the DB record
         for c_col, c_map in custom_tier_maps.items():
