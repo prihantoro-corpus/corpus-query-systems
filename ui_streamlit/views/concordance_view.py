@@ -341,7 +341,7 @@ def render_concordance_view():
                             import duckdb
                             with duckdb.connect(corpus_path, read_only=True) as con_chk:
                                 db_cols = [c[1] for c in con_chk.execute("PRAGMA table_info(corpus)").fetchall()]
-                                standard_cols = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'SentenceTokens', 'Metadata', 'Node'}
+                                standard_cols = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'SentenceTokens', 'Metadata', 'Node', 'sex', 'location', 'first_language', 'word_tokens'}
                                 extra_cols = [c for c in db_cols if c not in standard_cols]
                         except Exception:
                             pass
@@ -1308,12 +1308,8 @@ def render_concordance_column(results, search_term, key_suffix=""):
      name = results['name']
      is_simple = (results.get('source') == 'simple')
      show_meta = False if is_simple else get_state('kwic_show_meta', False)
-     show_ort_d = get_state('kwic_show_ort_d', False)
-     show_phn_f = get_state('kwic_show_phn_f', False)
-     show_phn_d = get_state('kwic_show_phn_d', False)
-     show_gloss = get_state('kwic_show_gloss', False)
      show_trans = get_state('kwic_show_trans', False)
-     show_meta_effective = show_meta or show_ort_d or show_phn_f or show_phn_d or show_gloss or show_trans
+     show_meta_effective = show_meta or show_trans
      
      # metrics (Target Query Summary table replacement)
      stats_key = 'corpus_stats' if key_suffix != "c2" else 'comp_corpus_stats'
@@ -1461,7 +1457,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
              for t in sent_tokens:
                  all_keys.update(t.keys())
              
-             standard_keys = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node'}
+             standard_keys = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'sex', 'location', 'first_language', 'word_tokens'}
              available_extra_cols = [k for k in all_keys if k not in standard_keys]
              
              for col in available_extra_cols:
@@ -1576,7 +1572,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  # Standard sentence/file metadata
                  if display_meta:
                      for k, v in display_meta.items():
-                         if v is None or str(v).strip() == "" or k in ('ort_d', 'phn_f', 'phn_d', 'gloss') or k in available_extra_cols:
+                         if v is None or str(v).strip() == "" or k in available_extra_cols:
                              continue
                              
                          render_key = False
@@ -1590,23 +1586,6 @@ def render_concordance_column(results, search_term, key_suffix=""):
 
                          if render_key:
                              meta_html += f"<div style='margin-bottom:2px;'><span style='background-color: #1e293b; color: #38bdf8; font-size: 0.85em; padding: 2px 4px; border-radius: 3px; border: 1px solid #0284c7; display: inline-block;' title='{k}'><b>{label_prefix}</b>{v}</span></div>"
-
-                 # Tier annotations for KWIC node word or sentence
-                 if show_ort_d:
-                     val = node_token_rec.get('ort_d') or display_meta.get('ort_d', '')
-                     if val: meta_html += f"<div style='margin-bottom:2px;'><span style='background-color: #1e293b; color: #38bdf8; font-size: 0.85em; padding: 2px 4px; border-radius: 3px; border: 1px solid #0284c7; display: inline-block;'><b>ORT-D: </b>{val}</span></div>"
-                 
-                 if show_phn_f:
-                     val = node_token_rec.get('phn_f') or display_meta.get('phn_f', '')
-                     if val: meta_html += f"<div style='margin-bottom:2px;'><span style='background-color: #1e293b; color: #c084fc; font-size: 0.85em; padding: 2px 4px; border-radius: 3px; border: 1px solid #9333ea; display: inline-block;'><b>PHN-F: </b>{val}</span></div>"
-
-                 if show_phn_d:
-                     val = node_token_rec.get('phn_d') or display_meta.get('phn_d', '')
-                     if val: meta_html += f"<div style='margin-bottom:2px;'><span style='background-color: #1e293b; color: #e879f9; font-size: 0.85em; padding: 2px 4px; border-radius: 3px; border: 1px solid #c026d3; display: inline-block;'><b>PHN-D: </b>{val}</span></div>"
-
-                 if show_gloss:
-                     val = node_token_rec.get('gloss') or display_meta.get('gloss', '')
-                     if val: meta_html += f"<div style='margin-bottom:2px;'><span style='background-color: #1e293b; color: #4ade80; font-size: 0.85em; padding: 2px 4px; border-radius: 3px; border: 1px solid #16a34a; display: inline-block;'><b>GLOSS: </b>{val}</span></div>"
 
                  if show_trans:
                      val = display_meta.get('trans') or node_token_rec.get('trans', '')
@@ -1651,34 +1630,6 @@ def render_concordance_column(results, search_term, key_suffix=""):
                          interlinear_html += f"<td style='font-weight: bold; color: #f8fafc; padding: 2px 4px;'>{w_text}</td>"
                  interlinear_html += "</tr>"
 
-                 # Row 2: Orthography Delineated (ORT-D) if checked
-                 if show_ort_d:
-                     interlinear_html += "<tr style='line-height: 1.5; color: #38bdf8; font-size: 0.88em;'>"
-                     for t in sent_tokens:
-                         interlinear_html += f"<td style='padding: 2px 4px;'>{t.get('ort_d', '')}</td>"
-                     interlinear_html += "</tr>"
-
-                 # Row 3: Phonetic Full (PHN-F) if checked
-                 if show_phn_f:
-                     interlinear_html += "<tr style='line-height: 1.5; color: #c084fc; font-size: 0.88em;'>"
-                     for t in sent_tokens:
-                         interlinear_html += f"<td style='padding: 2px 4px;'>{t.get('phn_f', '')}</td>"
-                     interlinear_html += "</tr>"
-
-                 # Row 4: Phonetic Delineated (PHN-D) if checked
-                 if show_phn_d:
-                     interlinear_html += "<tr style='line-height: 1.5; color: #e879f9; font-size: 0.88em;'>"
-                     for t in sent_tokens:
-                         interlinear_html += f"<td style='padding: 2px 4px;'>{t.get('phn_d', '')}</td>"
-                     interlinear_html += "</tr>"
-
-                 # Row 5: Morphemic Gloss (GLOSS) if checked
-                 if show_gloss:
-                     interlinear_html += "<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
-                     for t in sent_tokens:
-                         interlinear_html += f"<td style='padding: 2px 4px;'>{t.get('gloss', '')}</td>"
-                     interlinear_html += "</tr>"
-
                  # Dynamic Extra Tiers (Word Level)
                  for col in active_extra_cols:
                      if col != 'trans':
@@ -1690,8 +1641,8 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  interlinear_html += "</table>"
                  
                  # Row 2 (Bottom): Free Translation (TRANS) if checked or present
-                 if show_trans or s_trans or ('trans' in active_extra_cols):
-                     if show_trans or ('trans' in active_extra_cols):
+                 if get_state('kwic_show_trans', False) or s_trans or ('trans' in active_extra_cols):
+                     if get_state('kwic_show_trans', False) or ('trans' in active_extra_cols):
                          trans_val = s_trans if s_trans else "N/A"
                          interlinear_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>Free Translation:</b> {trans_val}</div>"
              
