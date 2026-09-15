@@ -157,7 +157,7 @@ def cached_get_related_forms(db_path, word, xml_where_clause="", xml_params=(), 
 
 @st.cache_data(show_spinner="Generating KWIC...")
 def _cached_generate_kwic(db_path, query, left, right, corpus_name,
-                           xml_where_clause="", xml_params=(), **kwargs):
+                           xml_where_clause="", xml_params=(), cache_bust="v2", **kwargs):
     """
     xml_params must be a tuple here so st.cache_data can hash it.
     We convert it back to list before passing to the engine.
@@ -175,7 +175,7 @@ def cached_generate_kwic(db_path, query, left, right, corpus_name,
     return _timed("generate_kwic", _cached_generate_kwic,
                   db_path, query, left, right, corpus_name,
                   xml_where_clause=xml_where_clause,
-                  xml_params=xml_params, **kwargs)
+                  xml_params=xml_params, cache_bust="v2", **kwargs)
 
 
 # -------------------------------------------------------------------------
