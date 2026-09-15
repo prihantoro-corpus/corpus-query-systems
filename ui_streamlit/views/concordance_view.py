@@ -1364,6 +1364,8 @@ def render_concordance_column(results, search_term, key_suffix=""):
          with st.expander("Token Breakdown Stats", expanded=True):
              st.dataframe(breakdown.head(20), use_container_width=True, hide_index=True)
      
+     ann_mode = get_state('kwic_ann_mode', False)
+
      # Results Table
      if kwic_rows:
          # Clickable Headers for Sorting
