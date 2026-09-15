@@ -336,43 +336,31 @@ def render_concordance_view():
                                 set_state('kwic_sentence_display', sentence_display)
 
                         # ELAN Annotation Tiers Display Option (Unchecked by default)
+                        extra_cols = []
                         try:
                             import duckdb
                             with duckdb.connect(corpus_path, read_only=True) as con_chk:
                                 db_cols = [c[1] for c in con_chk.execute("PRAGMA table_info(corpus)").fetchall()]
-                                has_elan_tiers = any(col in db_cols for col in ['ort_d', 'phn_f', 'phn_d', 'gloss', 'trans'])
+                                standard_cols = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'SentenceTokens', 'Metadata', 'Node'}
+                                extra_cols = [c for c in db_cols if c not in standard_cols]
                         except Exception:
-                            has_elan_tiers = False
+                            pass
 
-                        if has_elan_tiers:
-                            with st.expander("🏷️ ELAN Annotation Tiers Display (Unchecked by Default)", expanded=False):
+                        if len(extra_cols) > 0:
+                            with st.expander("🏷️ Annotation Tiers Display (Unchecked by Default)", expanded=False):
                                 btn_all_col, _ = st.columns([1, 4])
                                 with btn_all_col:
-                                    if st.button("Select All ELAN Tiers", key="btn_select_all_elan_tiers"):
-                                        set_state('kwic_show_ort_d', True)
-                                        set_state('kwic_show_phn_f', True)
-                                        set_state('kwic_show_phn_d', True)
-                                        set_state('kwic_show_gloss', True)
-                                        set_state('kwic_show_trans', True)
+                                    if st.button("Select All Tiers", key="btn_select_all_elan_tiers"):
+                                        for col in extra_cols:
+                                            set_state(f'kwic_show_{col}', True)
                                         st.rerun()
 
-                                c_e1, c_e2, c_e3, c_e4, c_e5 = st.columns(5)
-                                with c_e1:
-                                    show_ort_d = st.checkbox("Orthography Delineated (ORT-D)", value=get_state('kwic_show_ort_d', False), key="kwic_show_ort_d_cb")
-                                with c_e2:
-                                    show_phn_f = st.checkbox("Phonetic Full (PHN-F)", value=get_state('kwic_show_phn_f', False), key="kwic_show_phn_f_cb")
-                                with c_e3:
-                                    show_phn_d = st.checkbox("Phonetic Delineated (PHN-D)", value=get_state('kwic_show_phn_d', False), key="kwic_show_phn_d_cb")
-                                with c_e4:
-                                    show_gloss = st.checkbox("Morphemic Gloss (GLOSS)", value=get_state('kwic_show_gloss', False), key="kwic_show_gloss_cb")
-                                with c_e5:
-                                    show_trans = st.checkbox("Free Translation (TRANS)", value=get_state('kwic_show_trans', False), key="kwic_show_trans_cb")
-
-                                set_state('kwic_show_ort_d', show_ort_d)
-                                set_state('kwic_show_phn_f', show_phn_f)
-                                set_state('kwic_show_phn_d', show_phn_d)
-                                set_state('kwic_show_gloss', show_gloss)
-                                set_state('kwic_show_trans', show_trans)
+                                # Dynamically generate checkboxes in groups of 4
+                                cols_ui = st.columns(4)
+                                for i, col in enumerate(extra_cols):
+                                    with cols_ui[i % 4]:
+                                        is_checked = st.checkbox(f"{col.replace('_', ' ').title()} ({col})", value=get_state(f'kwic_show_{col}', False), key=f"kwic_show_{col}_cb")
+                                        set_state(f'kwic_show_{col}', is_checked)
 
                 # --- XML Restriction Filters ---
                 comp_mode = get_state('comparison_mode', False)
@@ -1462,6 +1450,25 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  unsafe_allow_html=True
              )
 
+         # Dynamically find extra columns from rows to determine show_meta_effective
+         active_extra_cols = []
+         available_extra_cols = []
+         if kwic_rows:
+             first_row = kwic_rows[0]
+             display_meta = first_row.get('Metadata', {})
+             sent_tokens = first_row.get('SentenceTokens', [])
+             all_keys = set(display_meta.keys())
+             for t in sent_tokens:
+                 all_keys.update(t.keys())
+             
+             standard_keys = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node'}
+             available_extra_cols = [k for k in all_keys if k not in standard_keys]
+             
+             for col in available_extra_cols:
+                 if get_state(f'kwic_show_{col}', False):
+                     active_extra_cols.append(col)
+                     show_meta_effective = True
+
          with c_pag3:
              b_prev, b_next = st.columns(2)
              with b_prev:
@@ -1569,7 +1576,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  # Standard sentence/file metadata
                  if display_meta:
                      for k, v in display_meta.items():
-                         if v is None or str(v).strip() == "" or k in ('ort_d', 'phn_f', 'phn_d', 'gloss'):
+                         if v is None or str(v).strip() == "" or k in ('ort_d', 'phn_f', 'phn_d', 'gloss') or k in available_extra_cols:
                              continue
                              
                          render_key = False
@@ -1604,6 +1611,12 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  if show_trans:
                      val = display_meta.get('trans') or node_token_rec.get('trans', '')
                      if val and not show_meta: meta_html += f"<div style='margin-bottom:2px;'><span style='background-color: #1e293b; color: #fbbf24; font-size: 0.85em; padding: 2px 4px; border-radius: 3px; border: 1px solid #d97706; display: inline-block;'><b>TRANS: </b>{val}</span></div>"
+
+                 # Dynamic tier annotations for KWIC node word or sentence
+                 for col in active_extra_cols:
+                     val = node_token_rec.get(col) or display_meta.get(col, '')
+                     if val: 
+                         meta_html += f"<div style='margin-bottom:2px;'><span style='background-color: #1e293b; color: #4ade80; font-size: 0.85em; padding: 2px 4px; border-radius: 3px; border: 1px solid #16a34a; display: inline-block;'><b>{col.upper()}: </b>{val}</span></div>"
              
              ann_cell_html = ""
              if ann_mode:
@@ -1666,11 +1679,19 @@ def render_concordance_column(results, search_term, key_suffix=""):
                          interlinear_html += f"<td style='padding: 2px 4px;'>{t.get('gloss', '')}</td>"
                      interlinear_html += "</tr>"
 
+                 # Dynamic Extra Tiers (Word Level)
+                 for col in active_extra_cols:
+                     if col != 'trans':
+                         interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
+                         for t in sent_tokens:
+                             interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
+                         interlinear_html += "</tr>"
+
                  interlinear_html += "</table>"
                  
                  # Row 2 (Bottom): Free Translation (TRANS) if checked or present
-                 if show_trans or s_trans:
-                     if show_trans:
+                 if show_trans or s_trans or ('trans' in active_extra_cols):
+                     if show_trans or ('trans' in active_extra_cols):
                          trans_val = s_trans if s_trans else "N/A"
                          interlinear_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>Free Translation:</b> {trans_val}</div>"
              
