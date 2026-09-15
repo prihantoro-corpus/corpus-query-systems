@@ -362,31 +362,39 @@ def render_concordance_view():
                                 with st.expander("🛠️ Annotation Tiers Builder", expanded=True):
                                     st.markdown("<div style='font-size: 0.85em; color: #94a3b8; margin-bottom: 8px;'>Configure the custom tiers and alignment for the Interlinear Gloss display.</div>", unsafe_allow_html=True)
                                     
+                                    import uuid
+                                    
                                     if 'kwic_custom_tiers' not in st.session_state:
                                         st.session_state['kwic_custom_tiers'] = []
 
-                                    for i in range(len(st.session_state['kwic_custom_tiers'])):
+                                    for i, tier in enumerate(st.session_state['kwic_custom_tiers']):
+                                        if 'id' not in tier:
+                                            tier['id'] = str(uuid.uuid4())
+                                        t_id = tier['id']
+                                        
+                                        col_key = f"tier_col_{t_id}"
+                                        align_key = f"tier_align_{t_id}"
+                                        
+                                        if col_key not in st.session_state:
+                                            st.session_state[col_key] = tier.get('col', extra_cols[0])
+                                        if align_key not in st.session_state:
+                                            st.session_state[align_key] = tier.get('align', 'word')
+                                            
                                         c1, c2, c3, c4 = st.columns([1.5, 4, 3, 1])
                                         c1.markdown(f"<div style='margin-top:8px; font-size:0.9em;'><b>Tier {i+1}</b></div>", unsafe_allow_html=True)
                                         
-                                        curr_col = st.session_state['kwic_custom_tiers'][i]['col']
-                                        curr_align = st.session_state['kwic_custom_tiers'][i]['align']
+                                        c2.selectbox("Column", options=extra_cols, key=col_key, label_visibility="collapsed")
+                                        c3.selectbox("Alignment", options=["word", "sentence"], key=align_key, label_visibility="collapsed")
                                         
-                                        idx_col = extra_cols.index(curr_col) if curr_col in extra_cols else 0
-                                        idx_align = 0 if curr_align == 'word' else 1
-                                        
-                                        new_col = c2.selectbox("Column", options=extra_cols, index=idx_col, key=f"tier_col_{i}", label_visibility="collapsed")
-                                        new_align = c3.selectbox("Alignment", options=["word", "sentence"], index=idx_align, key=f"tier_align_{i}", label_visibility="collapsed")
-                                        
-                                        st.session_state['kwic_custom_tiers'][i]['col'] = new_col
-                                        st.session_state['kwic_custom_tiers'][i]['align'] = new_align
-                                        
-                                        if c4.button("❌", key=f"tier_del_{i}"):
+                                        if c4.button("❌", key=f"tier_del_{t_id}"):
                                             st.session_state['kwic_custom_tiers'].pop(i)
+                                            # Clean up state
+                                            if col_key in st.session_state: del st.session_state[col_key]
+                                            if align_key in st.session_state: del st.session_state[align_key]
                                             st.rerun()
 
                                     if st.button("➕ Add Tier", key="btn_add_tier"):
-                                        st.session_state['kwic_custom_tiers'].append({'col': extra_cols[0], 'align': 'word'})
+                                        st.session_state['kwic_custom_tiers'].append({'id': str(uuid.uuid4()), 'col': extra_cols[0], 'align': 'word'})
                                         st.rerun()
                             else:
                                 with st.expander("🏷️ Annotation Tiers Display (Unchecked by Default)", expanded=False):
@@ -1505,7 +1513,12 @@ def render_concordance_column(results, search_term, key_suffix=""):
              is_eaf_corpus = display_meta.get('filename', '').lower().endswith('.eaf')
 
              if is_eaf_corpus:
-                 active_extra_cols = [t['col'] for t in st.session_state.get('kwic_custom_tiers', []) if t['col'] in available_extra_cols]
+                 active_extra_cols = []
+                 for tier in st.session_state.get('kwic_custom_tiers', []):
+                     t_id = tier.get('id')
+                     col = st.session_state.get(f"tier_col_{t_id}", tier.get('col'))
+                     if col in available_extra_cols:
+                         active_extra_cols.append(col)
              else:
                  active_extra_cols = []
                  for col in available_extra_cols:
@@ -1684,8 +1697,9 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  if is_eaf_corpus:
                      # Tier Builder style (EAF)
                      for tier in st.session_state.get('kwic_custom_tiers', []):
-                         col = tier['col']
-                         align = tier['align']
+                         t_id = tier.get('id')
+                         col = st.session_state.get(f"tier_col_{t_id}", tier.get('col'))
+                         align = st.session_state.get(f"tier_align_{t_id}", tier.get('align'))
                          
                          if align == 'word':
                              interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
