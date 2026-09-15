@@ -192,12 +192,14 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                         else:
                             query_where.append("1=0")
                 elif tag_name in cols:
-                    # Token-level metadata property (e.g. <dep_rel="nsubj">)
+                    # Token-level metadata property (e.g. <dep_rel="nsubj"> or <gloss=".*ACV.*">)
                     # Use 'value' attribute or first attribute as the target for the column
                     target_val = attrs.get('value') or (list(attrs.values())[0] if attrs else None)
                     if target_val:
-                        if '*' in target_val:
-                            regex_pat = '(?i)^' + re.escape(target_val).replace(r'\*', '.*') + '$'
+                        if '.*' in target_val or '*' in target_val:
+                            # Convert plain * to .* while keeping existing .* intact
+                            clean_pat = re.sub(r'(?<!\.)\*', '.*', target_val)
+                            regex_pat = '(?i)^' + clean_pat + '$'
                         else:
                             regex_pat = '(?i)' + re.escape(target_val)
                         query_where.append(f"regexp_matches({alias}.{tag_name}, ?)")
