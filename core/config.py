@@ -18,7 +18,8 @@ KNOWN_CORPORA_MAP = {
     "ICNALE Spoken Monologue": "english/sm_icnale.db",
     "BNC Spoken": "english/BNC Spoken.duckdb",
     "BNC": "english/BNC.duckdb",
-    "sample of ELAN file": "indonesian/tag_sample_elan_30_sentences.db",
+    "sample of ELAN file (Indonesian)": "indonesian/tag_sample_elan_30_sentences.db",
+    "sample of ELAN file (Korean)": "korean/korean_sample.db",
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
@@ -140,11 +141,17 @@ BUILT_IN_CORPUS_DETAILS = {
         <br><br>
         **Source/Citation:** Ishikawa, S. (2023). **The ICNALE Guide: An Introduction to a Learner Corpus Study on Asian Learners' L2 English.** Routledge. [Link](https://www.taylorfrancis.com/books/mono/10.4324/9781003252528/icnale-guide-shin-ichiro-ishikawa)
         """,
-    "sample of ELAN file":
+    "sample of ELAN file (Indonesian)":
         """
         A **sample ELAN language documentation corpus** containing 30 annotated sentences in Indonesian.
         <br><br>
         **Includes 10 parallel annotation layers**: Orthography (`ORT-F`), Delineated Orthography (`ORT-D`), Phonetic (`PHN-F`), Delineated Phonetic (`PHN-D`), Morphemic Gloss (`GLOSS`), Speaker Sex (`SEX`), Location (`LOCATION`), First Language (`FIRST_LANGUAGE`), POS, and Lemma.
+        """,
+    "sample of ELAN file (Korean)":
+        """
+        A **sample ELAN language documentation corpus** containing 3 annotated sentences in Korean.
+        <br><br>
+        **Includes 7 parallel annotation layers**: Hangul (`hangul`), Hangul Delineated (`hangul-delineated`), Transliteration Full (`transliteration-full`), Transliteration Delineated (`transliteration-delineated`), Word Translation (`word-translation`), Morphemic Gloss (`morpheme`), and Free Translation (`free-translation`).
         """,
 }
 
