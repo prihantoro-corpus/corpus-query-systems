@@ -733,6 +733,13 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     'gloss': group.iloc[row_idx]['gloss'] if 'gloss' in group.columns and pd.notna(group.iloc[row_idx]['gloss']) else '',
                     'trans': group.iloc[row_idx]['trans'] if 'trans' in group.columns and pd.notna(group.iloc[row_idx]['trans']) else metadata.get('trans', '')
                 }
+                
+                if meta_cols:
+                    for mc in meta_cols:
+                        if mc not in ['ort_d', 'phn_f', 'phn_d', 'gloss', 'trans'] and mc in group.columns:
+                            val = group.iloc[row_idx][mc]
+                            rec[mc] = val if pd.notna(val) else ''
+                            
                 sentence_token_records.append(rec)
 
             kwic_rows.append({
