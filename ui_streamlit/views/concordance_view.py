@@ -349,7 +349,8 @@ def render_concordance_view():
                             with duckdb.connect(corpus_path, read_only=True) as con_chk:
                                 db_cols = [c[1] for c in con_chk.execute("PRAGMA table_info(corpus)").fetchall()]
                                 standard_cols = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'SentenceTokens', 'Metadata', 'Node', 'sex', 'location', 'first_language', 'word_tokens'}
-                                candidate_cols = [c for c in db_cols if c not in standard_cols]
+                                legacy_mapped_cols = {'ort_d', 'phn_f', 'phn_d', 'gloss', 'trans'}
+                                candidate_cols = [c for c in db_cols if c not in standard_cols and c not in legacy_mapped_cols]
                                 
                                 # Filter out completely empty columns
                                 for c in candidate_cols:
@@ -387,11 +388,11 @@ def render_concordance_view():
                                         current_align = tier.get('align', 'word')
                                         idx_align = 0 if current_align == 'word' else 1
                                             
-                                        c1, c2, c3, c4 = st.columns([1.5, 4, 3, 1])
+                                        c1, c2, c3, c4 = st.columns([1, 4, 3, 1])
                                         c1.markdown(f"<div style='margin-top:8px; font-size:0.9em;'><b>Tier {i+1}</b></div>", unsafe_allow_html=True)
                                         
-                                        c2.selectbox("Column", options=extra_cols, index=idx_col, key=col_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
-                                        c3.selectbox("Alignment", options=["word", "sentence"], index=idx_align, key=align_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id))
+                                        c2.radio("Column", options=extra_cols, index=idx_col, key=col_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id), horizontal=True)
+                                        c3.radio("Alignment", options=["word", "sentence"], index=idx_align, key=align_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id), horizontal=True)
                                         
                                         if c4.button("❌", key=f"tier_del_{t_id}"):
                                             st.session_state['kwic_custom_tiers'].pop(i)
