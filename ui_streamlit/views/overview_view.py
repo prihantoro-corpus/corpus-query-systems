@@ -1229,6 +1229,41 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                 st.caption("Distribution of tokens across various document attributes.")
                 
                 for attr in attr_cols:
+                    if attr == 'gloss':
+                        # Extract UPPERCASE grammatical gloss tags (e.g., 3PL, ACT, LOC) from gloss tier
+                        attr_data = conn.execute("""
+                            SELECT 
+                                tag_val as Value,
+                                COUNT(*) as Tokens,
+                                CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
+                            FROM (
+                                SELECT 
+                                    _token_low,
+                                    UNNEST(regexp_extract_all(gloss, '[A-Z0-9]{2,}')) as tag_val
+                                FROM corpus
+                                WHERE gloss IS NOT NULL AND gloss != ''
+                            )
+                            WHERE tag_val IS NOT NULL AND tag_val != ''
+                            GROUP BY tag_val
+                            ORDER BY Tokens DESC
+                        """).fetch_df()
+
+                        if not attr_data.empty:
+                            st.write("**Attribute: Grammatical Gloss Tags (UPPERCASE)**")
+                            st.caption("Extracted grammatical categories (e.g. `3PL`, `ACT`, `LOC`, `PASS`) from the gloss tier.")
+                            ac1, ac2 = st.columns([1, 1])
+                            with ac1:
+                                fig_a = px.pie(attr_data, names='Value', values='Tokens', title="Distribution by Grammatical Gloss Tag")
+                                st.plotly_chart(fig_a, use_container_width=True)
+                            with ac2:
+                                st.dataframe(
+                                    attr_data.style.format({'TTR': '{:.4f}'}), 
+                                    use_container_width=True, 
+                                    hide_index=True
+                                )
+                            st.markdown("---")
+                            continue
+
                     # We limit unique values to avoid crashing charts with high-cardinality attributes (like IDs)
                     unique_count = conn.execute(f'SELECT COUNT(DISTINCT "{attr}") FROM corpus').fetchone()[0]
                     
