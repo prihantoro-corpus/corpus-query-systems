@@ -1676,149 +1676,149 @@ def render_concordance_column(results, search_term, key_suffix=""):
              html += f"<tr><td class='meta-col'>{meta_html}</td><td class='ctx-l'>{l_text}</td><td class='node'>{row['Node']}</td><td class='ctx-r'>{r_text}</td></tr>"
          html += "</tbody></table></div>"
          
-     is_sent_display = get_state('kwic_sentence_display', False)
+         is_sent_display = get_state('kwic_sentence_display', False)
 
-     if is_sent_display and not ann_mode:
-         st.markdown("---")
-         st.markdown("##### 💬 Sentence Display (Interlinear Glossing Mode)")
+         if is_sent_display and not ann_mode:
+             st.markdown("---")
+             st.markdown("##### 💬 Sentence Display (Interlinear Glossing Mode)")
          
-         for i, row in enumerate(page_rows):
-             sent_tokens = row.get('SentenceTokens', [])
-             display_meta = row.get('Metadata', {}).copy()
-             s_trans = display_meta.get('trans', '')
+             for i, row in enumerate(page_rows):
+                 sent_tokens = row.get('SentenceTokens', [])
+                 display_meta = row.get('Metadata', {}).copy()
+                 s_trans = display_meta.get('trans', '')
              
-             interlinear_html = "<div style='background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 14px; overflow-x: auto;'>"
+                 interlinear_html = "<div style='background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 14px; overflow-x: auto;'>"
              
-             if sent_tokens:
-                 interlinear_html += "<table style='border-spacing: 14px 4px; border-collapse: separate; font-family: monospace; font-size: 0.95em; width: max-content; margin-bottom: 8px;'>"
+                 if sent_tokens:
+                     interlinear_html += "<table style='border-spacing: 14px 4px; border-collapse: separate; font-family: monospace; font-size: 0.95em; width: max-content; margin-bottom: 8px;'>"
                  
-                 # Row 1: Orthography (ORT-F)
-                 interlinear_html += "<tr style='line-height: 1.8;'>"
-                 for t in sent_tokens:
-                     w_text = t['token']
-                     if t['is_node']:
-                         interlinear_html += f"<td style='font-weight: bold; background-color: #FFEA00; color: #000000; padding: 3px 8px; border-radius: 4px;'>{w_text}</td>"
-                     else:
-                         interlinear_html += f"<td style='font-weight: bold; color: #f8fafc; padding: 2px 4px;'>{w_text}</td>"
-                 interlinear_html += "</tr>"
+                     # Row 1: Orthography (ORT-F)
+                     interlinear_html += "<tr style='line-height: 1.8;'>"
+                     for t in sent_tokens:
+                         w_text = t['token']
+                         if t['is_node']:
+                             interlinear_html += f"<td style='font-weight: bold; background-color: #FFEA00; color: #000000; padding: 3px 8px; border-radius: 4px;'>{w_text}</td>"
+                         else:
+                             interlinear_html += f"<td style='font-weight: bold; color: #f8fafc; padding: 2px 4px;'>{w_text}</td>"
+                     interlinear_html += "</tr>"
 
-                 # Dynamic Extra Tiers (Word Level)
-                 sentence_level_html = ""
+                     # Dynamic Extra Tiers (Word Level)
+                     sentence_level_html = ""
                  
-                 if is_eaf_corpus:
-                     # Tier Builder style (EAF)
-                     for tier in st.session_state.get('kwic_custom_tiers', []):
-                         t_id = tier.get('id')
-                         col = st.session_state.get(f"tier_col_{t_id}", tier.get('col'))
-                         align = st.session_state.get(f"tier_align_{t_id}", tier.get('align'))
+                     if is_eaf_corpus:
+                         # Tier Builder style (EAF)
+                         for tier in st.session_state.get('kwic_custom_tiers', []):
+                             t_id = tier.get('id')
+                             col = st.session_state.get(f"tier_col_{t_id}", tier.get('col'))
+                             align = st.session_state.get(f"tier_align_{t_id}", tier.get('align'))
                          
-                         if align == 'word':
-                             interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
-                             for t in sent_tokens:
-                                 interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
-                             interlinear_html += "</tr>"
-                         elif align == 'sentence':
-                             val = display_meta.get(col) or node_token_rec.get(col, '')
-                             if val:
-                                 sentence_level_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>{col.replace('_', ' ').title()}:</b> {val}</div>"
-                 else:
-                     # Legacy Checkboxes style (Non-EAF)
-                     for col in active_extra_cols:
-                         if col != 'trans':
-                             interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
-                             for t in sent_tokens:
-                                 interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
-                             interlinear_html += "</tr>"
+                             if align == 'word':
+                                 interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
+                                 for t in sent_tokens:
+                                     interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
+                                 interlinear_html += "</tr>"
+                             elif align == 'sentence':
+                                 val = display_meta.get(col) or node_token_rec.get(col, '')
+                                 if val:
+                                     sentence_level_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>{col.replace('_', ' ').title()}:</b> {val}</div>"
+                     else:
+                         # Legacy Checkboxes style (Non-EAF)
+                         for col in active_extra_cols:
+                             if col != 'trans':
+                                 interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
+                                 for t in sent_tokens:
+                                     interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
+                                 interlinear_html += "</tr>"
                      
-                     if get_state('kwic_show_trans', False) or s_trans or ('trans' in active_extra_cols):
-                         if get_state('kwic_show_trans', False) or ('trans' in active_extra_cols):
-                             trans_val = s_trans if s_trans else "N/A"
-                             sentence_level_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>Free Translation:</b> {trans_val}</div>"
+                         if get_state('kwic_show_trans', False) or s_trans or ('trans' in active_extra_cols):
+                             if get_state('kwic_show_trans', False) or ('trans' in active_extra_cols):
+                                 trans_val = s_trans if s_trans else "N/A"
+                                 sentence_level_html += f"<div style='margin-top: 8px; font-style: italic; color: #fbbf24; font-size: 0.92em; border-top: 1px dashed #334155; padding-top: 6px;'><b>Free Translation:</b> {trans_val}</div>"
 
-                 interlinear_html += "</table>"
-                 interlinear_html += sentence_level_html
+                     interlinear_html += "</table>"
+                     interlinear_html += sentence_level_html
              
-             interlinear_html += "</div>"
-             st.markdown(interlinear_html, unsafe_allow_html=True)
-     elif not ann_mode:
-         st.markdown(html, unsafe_allow_html=True)
-     else:
-         # INTERACTIVE ANNOTATION MODE
-         st.markdown("##### ✍️ Annotation Mode Active")
-         st.caption("Enter attribute (upper) and value (lower). No spaces, alphanumeric only.")
+                 interlinear_html += "</div>"
+                 st.markdown(interlinear_html, unsafe_allow_html=True)
+         elif not ann_mode:
+             st.markdown(html, unsafe_allow_html=True)
+         else:
+             # INTERACTIVE ANNOTATION MODE
+             st.markdown("##### ✍️ Annotation Mode Active")
+             st.caption("Enter attribute (upper) and value (lower). No spaces, alphanumeric only.")
          
-         # Save progress button at the top too
-         if st.button("💾 Save Annotation Progress", key=f"save_ann_top_{key_suffix}"):
-             save_annotations(results, kwic_annotations)
+             # Save progress button at the top too
+             if st.button("💾 Save Annotation Progress", key=f"save_ann_top_{key_suffix}"):
+                 save_annotations(results, kwic_annotations)
 
-         show_meta_active = show_meta
-         for i, row in enumerate(page_rows):
-             m_id = str(row['match_id'])
-             if show_meta_active:
-                 col_m, col_l, col_n, col_r, col_a = st.columns([1, 3.5, 2, 3.5, 2])
-                 with col_m:
-                     m = row.get('Metadata', {})
-                     for k, v in m.items():
-                         st.caption(f"{v}")
-             else:
-                 col_l, col_n, col_r, col_a = st.columns([4, 2, 4, 2])
+             show_meta_active = show_meta
+             for i, row in enumerate(page_rows):
+                 m_id = str(row['match_id'])
+                 if show_meta_active:
+                     col_m, col_l, col_n, col_r, col_a = st.columns([1, 3.5, 2, 3.5, 2])
+                     with col_m:
+                         m = row.get('Metadata', {})
+                         for k, v in m.items():
+                             st.caption(f"{v}")
+                 else:
+                     col_l, col_n, col_r, col_a = st.columns([4, 2, 4, 2])
              
-             with col_l:
-                 st.markdown(f"<div style='text-align:right; color:#bbb;'>{row['Left']}</div>", unsafe_allow_html=True)
-             with col_n:
-                 st.markdown(f"<div style='text-align:center; font-weight:bold; color:#FFEA00;'>{row['Node']}</div>", unsafe_allow_html=True)
-             with col_r:
-                 st.markdown(f"<div style='text-align:left; color:#bbb;'>{row['Right']}</div>", unsafe_allow_html=True)
+                 with col_l:
+                     st.markdown(f"<div style='text-align:right; color:#bbb;'>{row['Left']}</div>", unsafe_allow_html=True)
+                 with col_n:
+                     st.markdown(f"<div style='text-align:center; font-weight:bold; color:#FFEA00;'>{row['Node']}</div>", unsafe_allow_html=True)
+                 with col_r:
+                     st.markdown(f"<div style='text-align:left; color:#bbb;'>{row['Right']}</div>", unsafe_allow_html=True)
              
-             with col_a:
-                 current_list = kwic_annotations.get(m_id, [{"attr": "", "val": ""}])
-                 if not isinstance(current_list, list): current_list = [current_list]
+                 with col_a:
+                     current_list = kwic_annotations.get(m_id, [{"attr": "", "val": ""}])
+                     if not isinstance(current_list, list): current_list = [current_list]
                  
-                 updated_list = []
-                 for idx, ann in enumerate(current_list):
-                     c1, c2 = st.columns([6, 1])
-                     with c1:
-                         new_attr = st.text_input("Attr", value=ann['attr'], key=f"ann_attr_{m_id}_{idx}_{key_suffix}", label_visibility="collapsed", placeholder="attr")
-                         new_val = st.text_input("Val", value=ann['val'], key=f"ann_val_{m_id}_{idx}_{key_suffix}", label_visibility="collapsed", placeholder="value")
-                     with c2:
-                         if st.button("🗑️", key=f"del_ann_{m_id}_{idx}", help="Remove this pair"):
-                             continue # Skip adding to updated_list
+                     updated_list = []
+                     for idx, ann in enumerate(current_list):
+                         c1, c2 = st.columns([6, 1])
+                         with c1:
+                             new_attr = st.text_input("Attr", value=ann['attr'], key=f"ann_attr_{m_id}_{idx}_{key_suffix}", label_visibility="collapsed", placeholder="attr")
+                             new_val = st.text_input("Val", value=ann['val'], key=f"ann_val_{m_id}_{idx}_{key_suffix}", label_visibility="collapsed", placeholder="value")
+                         with c2:
+                             if st.button("🗑️", key=f"del_ann_{m_id}_{idx}", help="Remove this pair"):
+                                 continue # Skip adding to updated_list
                      
-                     clean_attr = re.sub(r'[^a-zA-Z0-9]', '', new_attr)
-                     clean_val = re.sub(r'[^a-zA-Z0-9]', '', new_val)
-                     updated_list.append({"attr": clean_attr, "val": clean_val})
+                         clean_attr = re.sub(r'[^a-zA-Z0-9]', '', new_attr)
+                         clean_val = re.sub(r'[^a-zA-Z0-9]', '', new_val)
+                         updated_list.append({"attr": clean_attr, "val": clean_val})
                  
-                 if st.button("➕ Add Pair", key=f"add_pair_{m_id}"):
-                     updated_list.append({"attr": "", "val": ""})
+                     if st.button("➕ Add Pair", key=f"add_pair_{m_id}"):
+                         updated_list.append({"attr": "", "val": ""})
+                         st.session_state['kwic_annotations'][m_id] = updated_list
+                         st.rerun()
+                 
                      st.session_state['kwic_annotations'][m_id] = updated_list
-                     st.rerun()
-                 
-                 st.session_state['kwic_annotations'][m_id] = updated_list
 
-         st.markdown("---")
-         if st.button("💾 Save Annotation Progress", key=f"save_ann_bottom_{key_suffix}", type="primary", use_container_width=True):
-             save_annotations(results, st.session_state['kwic_annotations'])
+             st.markdown("---")
+             if st.button("💾 Save Annotation Progress", key=f"save_ann_bottom_{key_suffix}", type="primary", use_container_width=True):
+                 save_annotations(results, st.session_state['kwic_annotations'])
 
-     # Bottom Pagination Bar
-     if total_pages > 1:
-         c_bot1, c_bot2, c_bot3 = st.columns([2, 3, 2])
-         with c_bot2:
-             st.markdown(
-                 f"<div style='text-align: center; margin-top: 5px; font-weight: bold; color: #00FFF5;'>"
-                 f"Page {current_page} of {total_pages}"
-                 f"</div>",
-                 unsafe_allow_html=True
-             )
-         with c_bot3:
-             b_prev_b, b_next_b = st.columns(2)
-             with b_prev_b:
-                 if st.button("◀ Prev", key=f"btn_prev_bot_{key_suffix}", disabled=(current_page <= 1), use_container_width=True):
-                     set_state(f'kwic_page_num_{key_suffix}', current_page - 1)
-                     st.rerun()
-             with b_next_b:
-                 if st.button("Next ▶", key=f"btn_next_bot_{key_suffix}", disabled=(current_page >= total_pages), use_container_width=True):
-                     set_state(f'kwic_page_num_{key_suffix}', current_page + 1)
-                     st.rerun()
+         # Bottom Pagination Bar
+         if total_pages > 1:
+             c_bot1, c_bot2, c_bot3 = st.columns([2, 3, 2])
+             with c_bot2:
+                 st.markdown(
+                     f"<div style='text-align: center; margin-top: 5px; font-weight: bold; color: #00FFF5;'>"
+                     f"Page {current_page} of {total_pages}"
+                     f"</div>",
+                     unsafe_allow_html=True
+                 )
+             with c_bot3:
+                 b_prev_b, b_next_b = st.columns(2)
+                 with b_prev_b:
+                     if st.button("◀ Prev", key=f"btn_prev_bot_{key_suffix}", disabled=(current_page <= 1), use_container_width=True):
+                         set_state(f'kwic_page_num_{key_suffix}', current_page - 1)
+                         st.rerun()
+                 with b_next_b:
+                     if st.button("Next ▶", key=f"btn_next_bot_{key_suffix}", disabled=(current_page >= total_pages), use_container_width=True):
+                         set_state(f'kwic_page_num_{key_suffix}', current_page + 1)
+                         st.rerun()
      else:
          st.info("No matches found.")
          

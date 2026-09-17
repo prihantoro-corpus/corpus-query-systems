@@ -133,6 +133,16 @@ GUIDELINES = {
         #### 8. Annotation Tags Guide
         * In the **Search Controls** (or Advanced Settings), you can click the **❓ Annotation Tags Guide** popover to explore the active tags in your corpus.
         * Use the dropdown menu to view definitions and random corpus examples for **Part-of-Speech (POS)** tags, as well as other annotations you might have added from the Overview module (such as **Named Entity Recognition (NER)**, **Dependency Parsing**, or **Sentiment Analysis**).
+        
+        #### 9. Working with .eaf Corpora (Glossing Style)
+        When dealing with corpora imported from `.eaf` (ELAN) files, you can display the concordance lines in a glossing style. Follow these steps:
+        * **1. Choose sentence display**: Ensure that your display mode is set to show sentences.
+        * **2. Set up annotation tier**: Configure the tiers so that the annotations match your imported structure.
+        * **3. Sentence-level translation**: Make sure that the translation tier is aligned at the sentence level.
+        * **4. Word-level alignment**: Other tiers (such as gloss or POS) are ideally aligned at the word level.
+        * **5. Searching attributes**: To search within specific tiers, use the syntax `<attribute="value">`.
+          * For example, if the attribute for your gloss tier is `gloss` and you want to search for a value `ACT`, type: `<gloss="ACT">`
+          * If you are in doubt about the exact position or want a partial match, use regex: `<gloss=".*ACT.*">`
     """,
     "N-Gram": """
         ### 📖 N-Gram Analysis User Guide

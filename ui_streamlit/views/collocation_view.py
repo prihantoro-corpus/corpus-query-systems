@@ -714,6 +714,7 @@ def render_collocation_view():
                                             comp_name)
 
 
+
 def run_collocation_query(identifier, path, word, window, min_freq, max_rows, stats, xml_where, xml_params, 
                           token_filter="", pos_filter="", lemma_filter="", pattern_text="", pattern_limit=50,
                           stat_measure="Log-Likelihood", source='advanced'):
