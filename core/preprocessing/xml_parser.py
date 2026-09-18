@@ -60,7 +60,7 @@ def extract_xml_structure(xml_input, max_values=20):
     process_element(root)
     return structure, None
 
-def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, combined_attrs, tag_counters, stanza_processor=None, lang_code='en'):
+def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combined_attrs, tag_counters, stanza_processor=None, lang_code='en'):
     """
     Recursively parse XML element, preserving inline tag context.
     
@@ -149,16 +149,19 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
             meta_keys = list(merged_meta.keys())
             meta_vals = [merged_meta[k] for k in meta_keys]
             
+            has_lines = False
             for line in lines:
                 parts = line.strip().split('\t')
                 if not parts or not parts[0]: continue
+                has_lines = True
                 token = parts[0]
                 pos = parts[1] if len(parts) > 1 else "TAG"
                 lemma = parts[2] if len(parts) > 2 else parts[0]
-                d = {'token': token, 'pos': pos, 'lemma': lemma, 'sent_id': sent_id}
+                d = {'token': token, 'pos': pos, 'lemma': lemma, 'sent_id': state['global_sent_id']}
                 for i in range(len(meta_keys)):
                     d[meta_keys[i]] = meta_vals[i]
                 tokens_data.append(d)
+            if has_lines: state['global_sent_id'] += 1
             return
 
         # 2. Use Stanza if available (for horizontal/inline text)
@@ -167,16 +170,24 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
                 tagged_data, err = stanza_processor(text, lang_code)
                 if not err and tagged_data:
                     for rec in tagged_data:
-                        s_id = rec.get('sent_id', sent_id)
+                        local_sent = rec.get('sent_id', 1)
+                        if 'current_local_sent' not in state: state['current_local_sent'] = local_sent
+                        if local_sent != state['current_local_sent']:
+                            state['global_sent_id'] += 1
+                            state['current_local_sent'] = local_sent
+
                         row = {
                             'token': rec['token'],
                             'pos': rec['pos'],
                             'lemma': rec['lemma'],
-                            'sent_id': s_id
+                            'sent_id': state['global_sent_id']
                         }
                         row.update(combined_attrs)
                         row.update(context)
                         tokens_data.append(row)
+                        
+                    state['global_sent_id'] += 1
+                    if 'current_local_sent' in state: del state['current_local_sent']
                     return
             except Exception:
                 pass
@@ -184,16 +195,18 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
         # 3. Fallback: simple whitespace tokenization
         cleaned_text = re.sub(r'([^\w\s])', r' \1 ', text)
         tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
-        for token in tokens:
-            row = {
-                'token': token,
-                'pos': '##TAG',
-                'lemma': token,
-                'sent_id': sent_id
-            }
-            row.update(combined_attrs)
-            row.update(context)
-            tokens_data.append(row)
+        if tokens:
+            for token in tokens:
+                row = {
+                    'token': token,
+                    'pos': '##TAG',
+                    'lemma': token,
+                    'sent_id': state['global_sent_id']
+                }
+                row.update(combined_attrs)
+                row.update(context)
+                tokens_data.append(row)
+            state['global_sent_id'] += 1
     
     # Process text BEFORE first child
     tokens_before = len(tokens_data)
@@ -202,7 +215,7 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, sent_id, comb
     
     # Process children recursively
     for child in element:
-        parse_xml_with_inline_tags(child, current_context, tokens_data, sent_id, combined_attrs, tag_counters, stanza_processor, lang_code)
+        parse_xml_with_inline_tags(child, current_context, tokens_data, state, combined_attrs, tag_counters, stanza_processor, lang_code)
         
         # Process tail text (text AFTER child tag but inside parent)
         if child.tail:
@@ -272,6 +285,28 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
     for k, v in base_root_attrs.items():
         if k not in detected_attrs: detected_attrs[k] = set()
         detected_attrs[k].add(v)
+
+    if preserve_inline_tags:
+        tag_counters = {}
+        state = {'global_sent_id': 1}
+        parse_xml_with_inline_tags(
+            root, 
+            {}, 
+            df_data, 
+            state, 
+            base_root_attrs,
+            tag_counters,
+            stanza_processor,
+            final_lang
+        )
+        temp_sent_parts = {}
+        for r in df_data:
+            sid = r.get('sent_id')
+            if sid not in sent_map:
+                temp_sent_parts.setdefault(sid, []).append(r['token'])
+        for sid, parts in temp_sent_parts.items():
+            sent_map[sid] = " ".join(parts)
+        return {'lang_code': final_lang, 'df_data': df_data, 'sent_map': sent_map, 'attributes': detected_attrs}
 
     elements_to_process = []
     pass1_tags = {'sent', 's', 'u', 'utterance', 'turn'}
@@ -374,7 +409,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
                 sent_elem, 
                 {}, # Start with empty tag context
                 df_data, 
-                sent_id, 
+                {'global_sent_id': sent_id}, 
                 combined_row_attrs,
                 tag_counters,
                 stanza_processor,

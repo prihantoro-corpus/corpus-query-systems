@@ -195,7 +195,7 @@ def tag_text_with_treetagger(text, lang_code):
 
     try:
         # Tokenize text safely first
-        sentences_tokens = tokenize_text_only(text, lang_code)
+        sentences_tokens = tokenize_text_only(text, lang_code, fast=True)
         
         # Apply Indonesian Clitic Splitter if ID
         if lang_code == 'id':
@@ -264,65 +264,47 @@ def tag_text_with_treetagger(text, lang_code):
 
 def tag_text_with_stanza(text, lang_code):
     """
-    Process text. Tries SpaCy first (fast in-memory pipeline), then TreeTagger, then Stanza.
+    Process text. Tries Custom HMM first, then SpaCy, then TreeTagger, then Stanza.
     Returns a tuple (list of dicts, error_msg)
     """
-    # 1. Try SpaCy first (In-memory, ~40x faster)
-    spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
-    if spacy_results is not None:
-        return spacy_results, None
-
-    # 2. Try TreeTagger
-    tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
-    if tt_results is not None:
-        return tt_results, None
-        
-    # 3. Try Stanza
-    try:
-        nlp = get_stanza_pipeline(lang_code)
-        if nlp:
-            # Use Stanza's native sentence splitting for better results
-            doc = nlp(text)
-            
-            results = []
-            for sent_id, stanza_sent in enumerate(doc.sentences, 1):
-                for word in stanza_sent.words:
-                    results.append({
-                        'token': word.text,
-                        'pos': word.upos, 
-                        'lemma': word.lemma if word.lemma else word.text,
-                        'sent_id': sent_id,
-                        'ent_type': ""
-                    })
-            return results, f"treetagger/spacy fail, switching to Stanza. {tt_err}" if tt_err else None
-    except Exception as e:
-        print(f"Stanza error for {lang_code}: {str(e)}")
-        
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     pkl_path = os.path.join(base_dir, 'model', f'{lang_code}-hmm.pkl')
+    json_path = os.path.join(base_dir, 'model', f'{lang_code}-hmm.json')
     
-    custom_tagger = None
+    global _CUSTOM_TAGGERS
+    if '_CUSTOM_TAGGERS' not in globals():
+        _CUSTOM_TAGGERS = {}
+        
+    custom_tagger = _CUSTOM_TAGGERS.get(lang_code)
     
-    if os.path.exists(json_path):
-        print(f"Found custom {lang_code}-hmm.json model. Using it as last resort fallback...")
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            custom_tagger = CustomDataDrivenTagger.from_json(data)
-        except Exception as e:
-            print(f"Failed to load custom {lang_code}-hmm.json: {e}")
-            
-    if custom_tagger is None and os.path.exists(pkl_path):
-        print(f"Found custom {lang_code}-hmm.pkl model. Using it as last resort fallback...")
-        try:
-            import pickle
-            with open(pkl_path, 'rb') as f:
-                custom_tagger = pickle.load(f)
-        except Exception as e:
-            print(f"Failed to load custom {lang_code}-hmm.pkl: {e}")
-            
+    # 0. Try Custom HMM Tagger first (fastest and custom trained)
+    if custom_tagger is None:
+        if os.path.exists(json_path):
+            print(f"Found custom {lang_code}-hmm.json model. Using it as fast fallback...")
+            try:
+                import json
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                from core.preprocessing.custom_tagger import CustomDataDrivenTagger
+                custom_tagger = CustomDataDrivenTagger.from_json(data)
+                _CUSTOM_TAGGERS[lang_code] = custom_tagger
+            except Exception as e:
+                print(f"Failed to load custom {lang_code}-hmm.json: {e}")
+                
+        if custom_tagger is None and os.path.exists(pkl_path):
+            print(f"Found custom {lang_code}-hmm.pkl model. Using it as fast fallback...")
+            try:
+                import pickle
+                with open(pkl_path, 'rb') as f:
+                    custom_tagger = pickle.load(f)
+                _CUSTOM_TAGGERS[lang_code] = custom_tagger
+            except Exception as e:
+                print(f"Failed to load custom {lang_code}-hmm.pkl: {e}")
+                
     if custom_tagger is not None:
         try:
-            sentences_tokens = tokenize_text_only(text, lang_code)
+            # Use fast regex tokenizer to prevent invoking Stanza/SpaCy just for tokenization
+            sentences_tokens = tokenize_text_only(text, lang_code, fast=True)
             results = []
             sent_id = 0
             for sent_tokens in sentences_tokens:
@@ -339,8 +321,45 @@ def tag_text_with_stanza(text, lang_code):
                     })
             return results, None
         except Exception as e:
-            print(f"Failed to tag with custom model: {e}")
-    # 4. Fallback to Simple Regex Tokenizer
+            import traceback
+            traceback.print_exc()
+            print(f"Failed to tag with custom model: {e}", flush=True)
+
+    # 1. Try SpaCy (In-memory, ~40x faster than TreeTagger/Stanza)
+    spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
+    if spacy_results is not None:
+        return spacy_results, None
+
+    # 2. Try TreeTagger
+    tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
+    if tt_results is not None:
+        return tt_results, None
+        
+
+            
+    # 4. Try Stanza if Custom Tagger failed or wasn't found
+    try:
+        print("Falling back to Stanza...", flush=True)
+        nlp = get_stanza_pipeline(lang_code)
+        if nlp:
+            # Use Stanza's native sentence splitting for better results
+            doc = nlp(text)
+            
+            results = []
+            for sent_id, stanza_sent in enumerate(doc.sentences, 1):
+                for word in stanza_sent.words:
+                    results.append({
+                        'token': word.text,
+                        'pos': word.upos, 
+                        'lemma': word.lemma if word.lemma else word.text,
+                        'sent_id': sent_id,
+                        'ent_type': ""
+                    })
+            return results, f"treetagger/spacy/custom fail, switching to Stanza. {tt_err}" if tt_err else None
+    except Exception as e:
+        print(f"Stanza error for {lang_code}: {str(e)}")
+        
+    # 5. Fallback to Simple Regex Tokenizer
     fallback_res, fallback_err = tag_text_simple_fallback(text)
     return fallback_res, f"treetagger fail, switching to fallback. {tt_err}" if tt_err else fallback_err
 
