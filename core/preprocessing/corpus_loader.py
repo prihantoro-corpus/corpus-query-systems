@@ -133,6 +133,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
 
     # Identify companion .wav files to skip them in the main loop (they are handled by TextGrid/EAF parsers)
     standalone_wav_sources = []
+    companion_wav_sources = {}
     other_sources = []
     
     textgrid_basenames = {os.path.splitext(fs.name.lower())[0] for fs in file_sources if fs.name.lower().endswith(('.textgrid', '.eaf'))}
@@ -142,6 +143,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
             base = os.path.splitext(fs.name.lower())[0]
             if base not in textgrid_basenames:
                 standalone_wav_sources.append(fs)
+            else:
+                companion_wav_sources[base] = fs
         else:
             other_sources.append(fs)
             
@@ -317,17 +320,25 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         elif is_textgrid_ext:
             try:
                 from .textgrid_parser import textgrid_to_dataframe
+                import tempfile
                 
-                # Check for companion .wav file in the same directory, or rely on naming
+                # Check for companion .wav file in the same directory, or from companion_wav_sources
                 audio_path = None
-                if hasattr(file_source, 'name'):
+                tmp_audio_path = None
+                
+                base = os.path.splitext(filename.lower())[0]
+                if base in companion_wav_sources:
+                    companion_fs = companion_wav_sources[base]
+                    companion_fs.seek(0)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as taf:
+                        taf.write(companion_fs.read())
+                        audio_path = taf.name
+                        tmp_audio_path = taf.name
+                elif hasattr(file_source, 'name'):
                     possible_audio = file_source.name.replace('.TextGrid', '.wav').replace('.textgrid', '.wav')
                     if os.path.exists(possible_audio):
                         audio_path = possible_audio
                         
-                # Actually, in Streamlit file upload, we might not have a real path.
-                # But if it's a built-in corpus, file_source.name is the full path.
-                
                 if hasattr(file_source, 'seek'):
                     # Save temporary file because parsers need paths
                     file_source.seek(0)
@@ -345,6 +356,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     for r in tg_records:
                         r['filename'] = filename
                     all_df_data.extend(tg_records)
+                    
+                if tmp_audio_path and os.path.exists(tmp_audio_path):
+                    os.remove(tmp_audio_path)
             except Exception as e:
                 return {'error': f"TextGrid Error ({filename}): {str(e)}"}
                 
