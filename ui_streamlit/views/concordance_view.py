@@ -357,13 +357,15 @@ def render_concordance_view():
                                 
                                 # Filter out completely empty columns
                                 for c in candidate_cols:
-                                    cnt = con_chk.execute(f"SELECT count(*) FROM corpus WHERE {c} IS NOT NULL AND {c} != ''").fetchone()[0]
+                                    cnt = con_chk.execute(f"SELECT count(*) FROM corpus WHERE {c} IS NOT NULL AND CAST({c} AS VARCHAR) != ''").fetchone()[0]
                                     if cnt > 0:
                                         extra_cols.append(c)
 
                                 eaf_check = con_chk.execute("SELECT filename FROM corpus LIMIT 1").fetchone()
-                                if eaf_check and eaf_check[0] and str(eaf_check[0]).lower().endswith('.eaf'):
-                                    is_eaf_corpus = True
+                                if eaf_check and eaf_check[0]:
+                                    filename_str = str(eaf_check[0]).lower()
+                                    if filename_str.endswith('.eaf') or filename_str.endswith('.textgrid'):
+                                        is_eaf_corpus = True
                         except Exception:
                             pass
 
@@ -1521,7 +1523,8 @@ def render_concordance_column(results, search_term, key_suffix=""):
              standard_keys = {'token', 'pos', 'lemma', 'sent_id', 'filename', 'ent_type', 'id', '_token_low', '_left_context', '_right_context', 'match_id', 'is_node', 'sex', 'location', 'first_language', 'word_tokens'}
              available_extra_cols = [k for k in all_keys if k not in standard_keys]
              
-             is_eaf_corpus = display_meta.get('filename', '').lower().endswith('.eaf')
+             fname = display_meta.get('filename', '').lower()
+             is_eaf_corpus = fname.endswith('.eaf') or fname.endswith('.textgrid')
 
              if is_eaf_corpus:
                  active_extra_cols = []
@@ -1694,6 +1697,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
                  
                      # Row 1: Orthography (ORT-F)
                      interlinear_html += "<tr style='line-height: 1.8;'>"
+                     interlinear_html += "<td style='font-weight: bold; color: #94a3b8; padding: 2px 8px 2px 0px; text-align: right; border-right: 1px solid #334155;'>Token</td>"
                      for t in sent_tokens:
                          w_text = t['token']
                          if t['is_node']:
@@ -1701,6 +1705,16 @@ def render_concordance_column(results, search_term, key_suffix=""):
                          else:
                              interlinear_html += f"<td style='font-weight: bold; color: #f8fafc; padding: 2px 4px;'>{w_text}</td>"
                      interlinear_html += "</tr>"
+
+                     # Helper for units
+                     def format_tier_val(val, col_name):
+                         if val == "" or val is None: return ""
+                         col_n = col_name.lower()
+                         if "f0" in col_n or "f1" in col_n or "f2" in col_n:
+                             return f"{val} Hz"
+                         if col_n == "duration":
+                             return f"{val} s"
+                         return str(val)
 
                      # Dynamic Extra Tiers (Word Level)
                      sentence_level_html = ""
@@ -1714,8 +1728,11 @@ def render_concordance_column(results, search_term, key_suffix=""):
                          
                              if align == 'word':
                                  interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
+                                 display_name = col.replace('_', ' ').title()
+                                 interlinear_html += f"<td style='font-weight: bold; color: #64748b; padding: 2px 8px 2px 0px; text-align: right; border-right: 1px solid #334155;'>{display_name}</td>"
                                  for t in sent_tokens:
-                                     interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
+                                     val = format_tier_val(t.get(col, ''), col)
+                                     interlinear_html += f"<td style='padding: 2px 4px;'>{val}</td>"
                                  interlinear_html += "</tr>"
                              elif align == 'sentence':
                                  val = display_meta.get(col) or node_token_rec.get(col, '')
@@ -1726,8 +1743,11 @@ def render_concordance_column(results, search_term, key_suffix=""):
                          for col in active_extra_cols:
                              if col != 'trans':
                                  interlinear_html += f"<tr style='line-height: 1.5; color: #4ade80; font-size: 0.88em;'>"
+                                 display_name = col.replace('_', ' ').title()
+                                 interlinear_html += f"<td style='font-weight: bold; color: #64748b; padding: 2px 8px 2px 0px; text-align: right; border-right: 1px solid #334155;'>{display_name}</td>"
                                  for t in sent_tokens:
-                                     interlinear_html += f"<td style='padding: 2px 4px;'>{t.get(col, '')}</td>"
+                                     val = format_tier_val(t.get(col, ''), col)
+                                     interlinear_html += f"<td style='padding: 2px 4px;'>{val}</td>"
                                  interlinear_html += "</tr>"
                      
                          if get_state('kwic_show_trans', False) or s_trans or ('trans' in active_extra_cols):

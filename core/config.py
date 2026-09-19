@@ -20,6 +20,7 @@ KNOWN_CORPORA_MAP = {
     "BNC": "english/BNC.duckdb",
     "sample of ELAN file (Indonesian)": "indonesian/tag_sample_elan_30_sentences.db",
     "sample of ELAN file (Korean)": "korean/korean_sample.db",
+    "ITA3 Spoken Sample": "spoken/ITA3.TextGrid",
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
@@ -57,7 +58,7 @@ def get_available_corpora():
                 dirs.remove("BROWN FILES")
                 
             for file_name in files:
-                if file_name.lower().endswith(('.xml', '.txt', '.csv', '.xlsx', '.db', '.duckdb')):
+                if file_name.lower().endswith(('.xml', '.txt', '.csv', '.xlsx', '.db', '.duckdb', '.textgrid')):
                     full_path = os.path.join(root, file_name)
                     
                     # Get relative path from CORPORA_DIR
@@ -134,6 +135,14 @@ BUILT_IN_CORPUS_DETAILS = {
     "JP-DICO-JALF":
         """
         The **DICO-JALF Corpus** is a Japanese language learner corpus.
+        """,
+    "ITA3 Spoken Sample":
+        """
+        A **multimodal spoken corpus demo** showing integration with Praat `.TextGrid` files and `.wav` audio. 
+        <br><br>
+        This demo parses TextGrid tiers (like `TA - words`, `TA - phones`, `syllables`, and `ToneUnit`) and automatically links them with acoustic features extracted natively from the audio file using Parselmouth!
+        <br><br>
+        **Use this to test queries on:** `duration`, `syllable_count`, `f0_mean` (pitch), `f1_mean` (formants), and `pitch_pattern`.
         """,
     "ICNALE Written English":
         """

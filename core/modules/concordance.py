@@ -187,7 +187,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                                 regex_pat = '(?i)^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
                             else:
                                 regex_pat = '(?i)' + re.escape(attr_val)
-                            query_where.append(f"regexp_matches({alias}.{attr_col}, ?)")
+                            query_where.append(f"regexp_matches(CAST({alias}.{attr_col} AS VARCHAR), ?)")
                             query_params.append(regex_pat)
                         else:
                             query_where.append("1=0")
@@ -202,7 +202,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                             regex_pat = '(?i)^' + clean_pat + '$'
                         else:
                             regex_pat = '(?i)' + re.escape(target_val)
-                        query_where.append(f"regexp_matches({alias}.{tag_name}, ?)")
+                        query_where.append(f"regexp_matches(CAST({alias}.{tag_name} AS VARCHAR), ?)")
                         query_params.append(regex_pat)
                     else:
                         # Just <TAG> (ensure it's not null)
@@ -321,7 +321,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                                 attr_col = f"{tag_name}_{attr_key}"
                                 if '*' in attr_val:
                                     regex_pat = '^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
-                                    coll_filter_parts.append(f"regexp_matches(c_coll.{attr_col}, ?)")
+                                    coll_filter_parts.append(f"regexp_matches(CAST(c_coll.{attr_col} AS VARCHAR), ?)")
                                     coll_filter_params.append(regex_pat)
                                 else:
                                     coll_filter_parts.append(f"c_coll.{attr_col} = ?")
@@ -331,7 +331,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                             if target_val:
                                 if '*' in target_val:
                                     regex_pat = '^' + re.escape(target_val).replace(r'\*', '.*') + '$'
-                                    coll_filter_parts.append(f"regexp_matches(c_coll.{tag_name}, ?)")
+                                    coll_filter_parts.append(f"regexp_matches(CAST(c_coll.{tag_name} AS VARCHAR), ?)")
                                     coll_filter_params.append(regex_pat)
                                 else:
                                     coll_filter_parts.append(f"c_coll.{tag_name} = ?")
