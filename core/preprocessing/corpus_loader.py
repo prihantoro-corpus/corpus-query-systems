@@ -331,7 +331,6 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         elif is_textgrid_ext:
             try:
                 from .textgrid_parser import textgrid_to_dataframe
-                import tempfile
                 
                 # Check for companion .wav file in the same directory, or from companion_wav_sources
                 audio_path = None
@@ -1046,7 +1045,6 @@ def load_built_in_corpus(name, url, progress_callback=None):
                     
                     import uuid
                     import shutil
-                    import tempfile
                     import json
                     
                     # For pre-built DuckDB database files, use local_path directly without copying to temp
