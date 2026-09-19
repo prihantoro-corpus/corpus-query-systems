@@ -270,34 +270,10 @@ def render_collocation_view():
                     st.markdown("### 🔍 Collocation Patterns (Optional)")
 
                     # Pattern syntax help
-                    with st.expander("ℹ️ Pattern Syntax Guide", expanded=False):
-                        st.markdown("""
-                        **Pattern Format:** `label : pattern`
-
-                        **Symbols:**
-                        - `<>` : the node word
-                        - `#` : the collocate
-                        - `*` : optional token (any word, 0 or 1)
-                        - `+` : required token (exactly 1 word)
-                        - `token` : specific token (obligatory)
-                        - `(token)` : optional specific token
-
-                        **Constraints:**
-                        - `[lemma]` : token must be from specified lemma
-                        - `_TAG` : token must have specified POS tag
-                        - `(_TAG)` : optional POS tag constraint
-                        - `([lemma])` : optional lemma constraint
-
-                        **Examples:**
-                        ```
-                        Agent of passive di- : <> * * #
-                        Patient/theme : # * <>
-                        Strict adjacency : # <>
-                        Gap of one : <> + #
-                        ```
-
-                        **Note:** One pattern per line, up to 50 patterns.
-                        """)
+                    st.info('''**Pattern Format:** `label : pattern`
+**Symbols:** `<>` (node), `#` (collocate), `*` (optional token), `+` (required token), `token` (exact match), `(token)` (optional).
+**Constraints:** `[lemma]`, `_TAG`, `(_TAG)`, `([lemma])`.
+**Examples:** `Agent of passive di- : <> * * #` | `Strict adjacency : # <>`''')
 
                     # Pattern input
                     pattern_text = st.text_area(

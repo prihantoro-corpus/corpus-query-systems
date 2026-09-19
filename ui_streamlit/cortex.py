@@ -1,6 +1,15 @@
 import os
 os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1000"
 import streamlit as st
+
+# Page Configuration must be the first Streamlit command
+st.set_page_config(
+    page_title="CORTEX Corpus Query System",
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 import sys
 
 # Ensure corpora are downloaded from Hugging Face Dataset if running in Spaces or missing locally
@@ -66,14 +75,6 @@ except ImportError as e:
 
 from ui_streamlit.state_manager import init_session_state
 from core.visualiser.styles import POS_COLOR_MAP
-
-# Page Configuration
-st.set_page_config(
-    page_title="CORTEX Corpus Query System",
-    page_icon="🧠",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Initialize State
 init_session_state()

@@ -371,7 +371,8 @@ def render_concordance_view():
 
                         if len(extra_cols) > 0:
                             if is_eaf_corpus:
-                                with st.expander("🛠️ Annotation Tiers Builder", expanded=True):
+                                with st.container(border=True):
+                                    st.markdown("##### 🛠️ Annotation Tiers Builder")
                                     st.markdown("<div style='font-size: 0.85em; color: #94a3b8; margin-bottom: 8px;'>Configure the custom tiers and alignment for the Interlinear Gloss display.</div>", unsafe_allow_html=True)
                                     
                                     import uuid
@@ -410,7 +411,8 @@ def render_concordance_view():
                                         st.session_state['kwic_custom_tiers'].append({'id': str(uuid.uuid4()), 'col': extra_cols[0], 'align': 'word'})
                                         st.rerun()
                             else:
-                                with st.expander("🏷️ Annotation Tiers Display (Unchecked by Default)", expanded=False):
+                                with st.container(border=True):
+                                    st.markdown("##### 🏷️ Annotation Tiers Display (Unchecked by Default)")
                                     btn_all_col, _ = st.columns([1, 4])
                                     with btn_all_col:
                                         if st.button("Select All Tiers", key="btn_select_all_elan_tiers"):
