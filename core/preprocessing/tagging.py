@@ -327,17 +327,19 @@ def tag_text_with_stanza(text, lang_code):
 
     # 1. Try TreeTagger (Prioritized as requested)
     tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
+    if tt_err:
+        print(f"TreeTagger Warning: {tt_err}", flush=True)
     if tt_results is not None:
         return tt_results, None
         
     # 2. Try SpaCy (Fallback if TreeTagger not available)
     spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
+    if spacy_err:
+        print(f"SpaCy Warning: {spacy_err}", flush=True)
     if spacy_results is not None:
         return spacy_results, None
-        
-
             
-    # 4. Try Stanza if Custom Tagger failed or wasn't found
+    # 3. Try Stanza if Custom/TreeTagger/SpaCy failed or weren't found
     try:
         print("Falling back to Stanza...", flush=True)
         nlp = get_stanza_pipeline(lang_code)
