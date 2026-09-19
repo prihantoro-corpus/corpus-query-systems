@@ -14,6 +14,13 @@ class AcousticExtractor:
         self.snd = None
         self.pitch = None
         self.formant = None
+        
+        self.pitch_values = None
+        self.pitch_times = None
+        self.f1_values = None
+        self.f2_values = None
+        self.formant_times = None
+        
         self._loaded = False
         self.has_parselmouth = HAS_PARSELMOUTH
         
@@ -32,6 +39,17 @@ class AcousticExtractor:
             self.snd = parselmouth.Sound(self.audio_path)
             self.pitch = self.snd.to_pitch()
             self.formant = self.snd.to_formant_burg()
+            
+            # Precompute numpy arrays for blazing fast slicing!
+            self.pitch_values = self.pitch.selected_array['frequency']
+            self.pitch_times = self.pitch.xs()
+            
+            self.formant_times = self.formant.xs()
+            # Formant values aren't as easily accessible as a single flat array, so we precompute them in python.
+            # This happens exactly ONCE per file, taking ~0.5s instead of doing it per-word!
+            self.f1_values = np.array([self.formant.get_value_at_time(1, t) for t in self.formant_times])
+            self.f2_values = np.array([self.formant.get_value_at_time(2, t) for t in self.formant_times])
+            
             self._loaded = True
             return True
         except Exception as e:
@@ -40,7 +58,7 @@ class AcousticExtractor:
             
     def get_features_for_interval(self, start_time, end_time, time_step=0.01):
         """
-        Returns dictionary of acoustic features for the given interval.
+        Returns dictionary of acoustic features for the given interval instantly via array slicing.
         """
         if not self.has_parselmouth or not self.load():
             return {
@@ -50,29 +68,18 @@ class AcousticExtractor:
                 'f2_mean': None
             }
             
-        time_steps = np.arange(start_time, end_time, time_step)
-        if len(time_steps) == 0:
-            return {
-                'pitch_pattern': None,
-                'f0_mean': None,
-                'f1_mean': None,
-                'f2_mean': None
-            }
-            
-        # F0 (Pitch)
-        f0_values = []
-        for t in time_steps:
-            f0 = self.pitch.get_value_at_time(t)
-            if not np.isnan(f0):
-                f0_values.append(f0)
-                
-        f0_mean = np.mean(f0_values) if f0_values else None
+        # Slice pitch
+        p_mask = (self.pitch_times >= start_time) & (self.pitch_times <= end_time)
+        f0_interval = self.pitch_values[p_mask]
         
-        # Determine contour pattern
+        # Filter out unvoiced frames (0 Hz) and nan
+        f0_interval = f0_interval[(f0_interval > 0) & (~np.isnan(f0_interval))]
+        f0_mean = np.mean(f0_interval) if len(f0_interval) > 0 else None
+        
+        # Determine contour pattern using the sliced array
         pitch_pattern = None
-        if len(f0_values) > 2:
-            # Smooth the curve slightly to avoid micro-jitters
-            smoothed = np.convolve(f0_values, np.ones(3)/3, mode='valid') if len(f0_values) >= 3 else f0_values
+        if len(f0_interval) > 2:
+            smoothed = np.convolve(f0_interval, np.ones(3)/3, mode='valid') if len(f0_interval) >= 3 else f0_interval
             
             if len(smoothed) > 2:
                 global_max_idx = np.argmax(smoothed)
@@ -99,21 +106,20 @@ class AcousticExtractor:
             else:
                 pitch_pattern = "level"
                 
-        # Formants
-        f1_values = []
-        f2_values = []
-        for t in time_steps:
-            f1 = self.formant.get_value_at_time(1, t)
-            f2 = self.formant.get_value_at_time(2, t)
-            if not np.isnan(f1): f1_values.append(f1)
-            if not np.isnan(f2): f2_values.append(f2)
-            
-        f1_mean = np.mean(f1_values) if f1_values else None
-        f2_mean = np.mean(f2_values) if f2_values else None
+        # Slice formants
+        f_mask = (self.formant_times >= start_time) & (self.formant_times <= end_time)
+        f1_interval = self.f1_values[f_mask]
+        f2_interval = self.f2_values[f_mask]
+        
+        f1_interval = f1_interval[~np.isnan(f1_interval)]
+        f2_interval = f2_interval[~np.isnan(f2_interval)]
+        
+        f1_mean = np.mean(f1_interval) if len(f1_interval) > 0 else None
+        f2_mean = np.mean(f2_interval) if len(f2_interval) > 0 else None
         
         return {
             'pitch_pattern': pitch_pattern,
-            'f0_mean': round(f0_mean, 1) if f0_mean else None,
-            'f1_mean': round(f1_mean, 1) if f1_mean else None,
-            'f2_mean': round(f2_mean, 1) if f2_mean else None
+            'f0_mean': round(float(f0_mean), 1) if f0_mean is not None else None,
+            'f1_mean': round(float(f1_mean), 1) if f1_mean is not None else None,
+            'f2_mean': round(float(f2_mean), 1) if f2_mean is not None else None
         }
