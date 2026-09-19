@@ -131,6 +131,21 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
             
     file_sources = expanded_file_sources
 
+    # Identify companion .wav files to skip them in the main loop (they are handled by TextGrid/EAF parsers)
+    standalone_wav_sources = []
+    other_sources = []
+    
+    textgrid_basenames = {os.path.splitext(fs.name.lower())[0] for fs in file_sources if fs.name.lower().endswith(('.textgrid', '.eaf'))}
+    
+    for fs in file_sources:
+        if fs.name.lower().endswith('.wav'):
+            base = os.path.splitext(fs.name.lower())[0]
+            if base not in textgrid_basenames:
+                standalone_wav_sources.append(fs)
+        else:
+            other_sources.append(fs)
+            
+    file_sources = other_sources + standalone_wav_sources
     num_files = len(file_sources)
 
     for idx, file_source in enumerate(file_sources):
@@ -151,8 +166,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         is_docx_ext = filename.lower().endswith('.docx')
         is_pdf_ext = filename.lower().endswith('.pdf')
         is_textgrid_ext = filename.lower().endswith('.textgrid')
+        is_wav_ext = filename.lower().endswith('.wav')
         is_pseudo_xml = False
-        if not is_xml_ext and not is_conllu_ext and not is_docx_ext and not is_pdf_ext and not is_textgrid_ext:
+        if not is_xml_ext and not is_conllu_ext and not is_docx_ext and not is_pdf_ext and not is_textgrid_ext and not is_wav_ext:
             if sample_str.startswith('<'):
                 is_pseudo_xml = True
             elif any(tag in sample_str.lower() for tag in ['<text', '<corpus', '<p>', '<p ']):
@@ -331,6 +347,50 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     all_df_data.extend(tg_records)
             except Exception as e:
                 return {'error': f"TextGrid Error ({filename}): {str(e)}"}
+                
+        # --- RAW AUDIO PROCESSING (ASR) ---
+        elif is_wav_ext:
+            try:
+                from .asr_extractor import transcribe_audio_to_words
+                from .acoustic_extractor import AcousticExtractor
+                
+                # We need a path for librosa to load the audio
+                audio_path = None
+                if hasattr(file_source, 'seek'):
+                    file_source.seek(0)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tf:
+                        tf.write(file_source.read())
+                        audio_path = tf.name
+                else:
+                    audio_path = file_source.name
+                    
+                # 1. Run ASR
+                asr_records = transcribe_audio_to_words(audio_path, model_size="base")
+                
+                # 2. Run Acoustic Extraction on the generated boundaries
+                if asr_records:
+                    extractor = AcousticExtractor(audio_path)
+                    for r in asr_records:
+                        start = r.get('start_time')
+                        end = r.get('end_time')
+                        if start is not None and end is not None:
+                            feats = extractor.get_features_for_interval(start, end)
+                            if feats:
+                                r.update(feats)
+                        r['filename'] = filename
+                        
+                    all_df_data.extend(asr_records)
+                else:
+                    print(f"Warning: ASR returned no words for {filename}")
+                
+                # Cleanup if temporary
+                if hasattr(file_source, 'seek') and audio_path:
+                    os.remove(audio_path)
+                    
+            except Exception as e:
+                import traceback
+                print(traceback.format_exc())
+                return {'error': f"ASR Error ({filename}): {str(e)}"}
                 
         # --- TXT/CSV/DOCX/PDF PROCESSING ---
         else: 
