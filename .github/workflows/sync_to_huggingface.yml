@@ -13,7 +13,14 @@ jobs:
           fetch-depth: 0
           lfs: true
           
-      - name: Push to hub
+      - name: Push to hub without history
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://oauth2:$HF_TOKEN@huggingface.co/spaces/prihantoro-corpus/cortex main
+        run: |
+          rm -rf .git
+          git init
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Sync from GitHub"
+          git push --force https://oauth2:$HF_TOKEN@huggingface.co/spaces/prihantoro-corpus/cortex master:main
