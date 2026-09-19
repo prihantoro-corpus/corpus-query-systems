@@ -1991,11 +1991,27 @@ def render_upload_ui():
                 print(f"Reload Error: {e}")
 
             progress_bar = st.progress(0)
-            status_text = st.empty()
+            status_container = st.empty()
+            
+            completed_tasks = []
             
             def update_progress(val, text):
                 progress_bar.progress(val)
-                status_text.caption(text)
+                if text:
+                    # Clean up the text a bit for display
+                    clean_text = text.replace("...", "").strip()
+                    if not completed_tasks or completed_tasks[-1] != clean_text:
+                        completed_tasks.append(clean_text)
+                    
+                # Build the checklist markdown
+                lines = []
+                for i, t in enumerate(completed_tasks):
+                    if i == len(completed_tasks) - 1 and val < 1.0:
+                        lines.append(f"🔄 **{t}...**")
+                    else:
+                        lines.append(f"✅ {t}")
+                        
+                status_container.markdown("\n\n".join(lines))
 
             with st.spinner("Processing Corpus..."):
                 result = notify_timing("Corpus loaded")(corpus_loader.load_monolingual_corpus_files)(
