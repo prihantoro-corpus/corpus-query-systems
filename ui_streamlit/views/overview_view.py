@@ -1321,14 +1321,28 @@ def render_upload_ui():
     from core.config import STANZA_LANG_MAP
     
     st.subheader("📤 Upload Corpus Files")
-    st.write("Select XML, TXT, CSV, XLSX, or DB/DUCKDB database files from your device:")
+    upload_tabs = st.tabs(["📄 Written Text Corpus", "🎙️ Spoken Audio Corpus"])
     
-    uploaded_files = st.file_uploader(
-        "Choose files", 
-        accept_multiple_files=True,
-        type=['xml', 'eaf', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf', 'zip'],
-        key="main_corpus_file_uploader"
-    )
+    with upload_tabs[0]:
+        st.write("Select XML, TXT, CSV, XLSX, or DB/DUCKDB database files from your device:")
+        written_files = st.file_uploader(
+            "Choose written files", 
+            accept_multiple_files=True,
+            type=['xml', 'eaf', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf', 'zip'],
+            key="written_corpus_file_uploader"
+        )
+        
+    with upload_tabs[1]:
+        st.write("Upload raw audio files (.wav) and optional transcriptions (.TextGrid, .eaf):")
+        st.caption("*(Note: If uploading both, the audio and its transcription file must share the exact same base name to be matched correctly, e.g. `recording1.wav` and `recording1.TextGrid`)*")
+        spoken_files = st.file_uploader(
+            "Choose spoken files",
+            accept_multiple_files=True,
+            type=['wav', 'textgrid', 'eaf', 'xml'],
+            key="spoken_corpus_file_uploader"
+        )
+        
+    uploaded_files = (written_files or []) + (spoken_files or [])
     
     # Hide options if uploading database
     is_db_upload = len(uploaded_files) == 1 and uploaded_files[0].name.lower().endswith(('.db', '.duckdb')) if uploaded_files else False
