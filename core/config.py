@@ -190,5 +190,17 @@ STANZA_LANG_MAP = {
     "Lithuanian": "lt",
     "Macedonian": "mk",
     "Slovenian": "sl",
-    "Malagasy": "mg"
+    "Malagasy": "mg",
+    "Albanian": "sq",
+    "Belarusian": "be",
+    "Bulgarian": "bg",
+    "Czech": "cs",
+    "Estonian": "et",
+    "Galician": "gl",
+    "Hungarian": "hu",
+    "Latin": "la",
+    "Mongolian": "mn",
+    "Persian": "fa",
+    "Slovak": "sk",
+    "Swahili": "sw"
 }

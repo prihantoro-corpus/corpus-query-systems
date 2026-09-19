@@ -7,6 +7,7 @@ __pycache__/
 # Environments
 env/
 venv/
+.venv/
 lib/
 
 # Database
@@ -18,114 +19,65 @@ lib/
 stanza_resources/
 home/stanza_resources/
 
-# User Data / Corpora (unless specifically added)
+# Corpora (Exclude all by default, then selectively include)
 corpora/**/*.txt
 corpora/**/*.xml
+corpora/**/*.db
+corpora/**/*.duckdb
+
+# Corpora Whitelist (User explicitly wants these pushed)
 !corpora/english/xml_tag_demo.xml
 !corpora/indonesian/ID-BPPT-tagged.xml
 !corpora/english/EN-BPPT-tagged.xml
 !corpora/english/BrownCorpus.xml
 !corpora/indonesian/KOSLAT-full.xml
-
-# Temporary / Testing
-test_stanza_standalone.py
-dummy_corpus.duckdb/
-
-# Streamlit
-.streamlit/secrets.toml
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Presentations
-*.pptx
-
-# Scripts and scratch files in tests/
-tests/*.txt
-tests/*.xml
-tests/debug_*.py
-tests/diag_*.py
-tests/check_*.py
-tests/prototype_*.py
-tests/trace_*.py
-tests/verify_*.py
-tests/extract_*.py
-tests/generate_*.py
-
-# Misplaced
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Environments
-env/
-venv/
-lib/
-
-# Database
-*.duckdb
-*.duckdb.wal
-*.db
-
-# Stanza Resources
-stanza_resources/
-home/stanza_resources/
-
-# User Data / Corpora (unless specifically added)
-corpora/**/*.txt
-corpora/**/*.xml
-!corpora/english/xml_tag_demo.xml
-!corpora/indonesian/ID-BPPT-tagged.xml
-!corpora/english/EN-BPPT-tagged.xml
-!corpora/english/BrownCorpus.xml
-!corpora/indonesian/KOSLAT-full.xml
-
-# Temporary / Testing
-test_stanza_standalone.py
-dummy_corpus.duckdb/
-
-# Streamlit
-.streamlit/secrets.toml
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Presentations
-*.pptx
-
-# Scripts and scratch files in tests/
-tests/*.txt
-tests/*.xml
-tests/debug_*.py
-tests/diag_*.py
-tests/check_*.py
-tests/prototype_*.py
-tests/trace_*.py
-tests/verify_*.py
-tests/extract_*.py
-tests/generate_*.py
-
-# Misplaced
-corpora/ai_service.py
-corpora/english/XML_TAG_DEMO_GUIDE.md
-
-# Logs and Scratch
-*.log
-scratch/
 !corpora/english/ICNALE_WE.db  
 !corpora/english/sm_icnale.db
 !corpora/english/BNC Spoken.db
 !corpora/english/EN-BPPT-tagged.db
 !corpora/indonesian/ID-BPPT-tagged.db
 !corpora/english/BrownCorpus.db
-! c o r p o r a / i n d o n e s i a n / t a g _ s a m p l e _ e l a n _ 3 0 _ s e n t e n c e s . d b  
- ! c o r p o r a / k o r e a n / k o r e a n _ s a m p l e . d b  
- 
-# Ignore _dont_push directory
-_dont_push/  
+!corpora/indonesian/tag_sample_elan_30_sentences.db  
+!corpora/korean/korean_sample.db
+
+# Temporary / Testing
+test_stanza_standalone.py
+dummy_corpus.duckdb/
+.streamlit/secrets.toml
+.DS_Store
+Thumbs.db
+*.pptx
+tests/*.txt
+tests/*.xml
+tests/debug_*.py
+tests/diag_*.py
+tests/check_*.py
+tests/prototype_*.py
+tests/trace_*.py
+tests/verify_*.py
+tests/extract_*.py
+tests/generate_*.py
+
+# Logs and Scratch
+*.log
+scratch/
+
+# _dont_push folder
+_dont_push/
+
+# TreeTagger Models
+treetagger/language_model/*
+!treetagger/language_model/english/
+!treetagger/language_model/indonesian/
+!treetagger/language_model/chinese/
+!treetagger/language_model/malagasy/
+
+# Ensure Chinese tokenizer is pushed
+!treetagger/tokenizer/
+!treetagger/tokenizer/chinese/
+
+# Misplaced
+corpora/ai_service.py
+corpora/english/XML_TAG_DEMO_GUIDE.md
 core/modules/divergence.py
 ui_streamlit/views/divergence_view.py
