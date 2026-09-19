@@ -77,7 +77,7 @@ def render_sidebar():
     st.sidebar.title("AI Interpretation")
     
     # AI Provider Selection
-    ai_providers = ["Ollama", "Gemini", "OpenRouter"]
+    ai_providers = ["Ollama", "Gemini", "OpenRouter", "Hugging Face"]
     curr_prov = get_state('ai_provider', 'Ollama')
     prov_idx = ai_providers.index(curr_prov) if curr_prov in ai_providers else 0
     ai_provider = st.sidebar.radio("AI Provider", ai_providers, 
@@ -220,6 +220,22 @@ def render_sidebar():
                         st.sidebar.success(msg)
                     else:
                         st.sidebar.error(msg)
+    elif ai_provider == "Hugging Face":
+        hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        if hf_token:
+            st.sidebar.success("✅ Auto-connected to Hugging Face Spaces AI!")
+        else:
+            hf_input_key = st.sidebar.text_input("Hugging Face API Token", value=get_state('huggingface_api_key', ''), type="password")
+            set_state("huggingface_api_key", hf_input_key)
+            if not hf_input_key:
+                st.sidebar.warning("Token required when running locally. (In Spaces, HF_TOKEN is injected automatically)")
+        
+        # Model Selection
+        hf_models = ["meta-llama/Meta-Llama-3-8B-Instruct", "mistralai/Mistral-7B-Instruct-v0.2", "google/gemma-7b-it"]
+        current_hf_model = get_state('huggingface_model', hf_models[0])
+        model_index = hf_models.index(current_hf_model) if current_hf_model in hf_models else 0
+        selected_hf_model = st.sidebar.selectbox("HF Serverless Model", hf_models, index=model_index)
+        set_state('huggingface_model', selected_hf_model)
     else:
         # Connection Check Button (Always Visible)
         if st.sidebar.button("Check Local AI Status"):

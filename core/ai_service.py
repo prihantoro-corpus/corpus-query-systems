@@ -21,6 +21,8 @@ def _resolve_ai_settings(ai_provider=None, gemini_api_key=None, gemini_model=Non
     resolved_openrouter_model = openrouter_model or st_state.get('openrouter_model') or "google/gemini-2.5-flash"
     resolved_ollama_url = ollama_url or st_state.get('ollama_url') or "http://127.0.0.1:11434/api/generate"
     resolved_ollama_model = ollama_model or st_state.get('ai_model') or "phi3:latest"
+    resolved_hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or st_state.get("huggingface_api_key") or ""
+    resolved_hf_model = st_state.get("huggingface_model") or "meta-llama/Meta-Llama-3-8B-Instruct"
     
     return {
         "ai_provider": resolved_provider,
@@ -29,7 +31,9 @@ def _resolve_ai_settings(ai_provider=None, gemini_api_key=None, gemini_model=Non
         "openrouter_api_key": resolved_openrouter_key,
         "openrouter_model": resolved_openrouter_model,
         "ollama_url": resolved_ollama_url,
-        "ollama_model": resolved_ollama_model
+        "ollama_model": resolved_ollama_model,
+        "huggingface_api_key": resolved_hf_token,
+        "huggingface_model": resolved_hf_model
     }
 
 def test_openrouter_connection(api_key, model=None):
@@ -198,6 +202,17 @@ def interpret_results_llm(target_word, analysis_type, data_description, data,
     """
     settings = _resolve_ai_settings(ai_provider, gemini_api_key, gemini_model, ollama_url, ollama_model, openrouter_api_key, openrouter_model)
     
+    if settings["ai_provider"] == "Hugging Face" and settings["huggingface_api_key"]:
+        url = f"https://api-inference.huggingface.co/models/{settings['huggingface_model']}/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {settings['huggingface_api_key']}", "Content-Type": "application/json"}
+        prompt_full = f"Role: Corpus Linguist.\nTask: Analyze {analysis_type} for '{target_word}'.\nContext: {data_description}\nData:\n{data}\nProvide empirical markdown summary based ONLY on the data."
+        try:
+            response = requests.post(url, json={"model": settings["huggingface_model"], "messages": [{"role": "user", "content": prompt_full}]}, headers=headers, timeout=60)
+            res_json = response.json()
+            if 'error' in res_json: return None, f"HF API Error: {res_json['error']}"
+            return res_json['choices'][0]['message']['content'], None
+        except Exception as e: return None, f"HF Connection Error: {e}"
+
     if settings["ai_provider"] == "OpenRouter" and settings["openrouter_api_key"]:
         return interpret_results_openrouter(target_word, analysis_type, data_description, data, settings["openrouter_api_key"], settings["openrouter_model"])
     
@@ -445,7 +460,16 @@ def chat_with_llm(user_message, context, chat_history=[],
     User: {user_message}
     AI (Instructions: Answer in natural language only.):"""
 
-    if settings["ai_provider"] == "Gemini" and settings["gemini_api_key"]:
+    if settings["ai_provider"] == "Hugging Face" and settings["huggingface_api_key"]:
+        url = f"https://api-inference.huggingface.co/models/{settings['huggingface_model']}/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {settings['huggingface_api_key']}", "Content-Type": "application/json"}
+        try:
+            response = requests.post(url, json={"model": settings["huggingface_model"], "messages": [{"role": "user", "content": prompt}]}, headers=headers, timeout=60)
+            res_json = response.json()
+            if 'error' in res_json: return None, f"HF Error: {res_json['error']}"
+            return res_json['choices'][0]['message']['content'], None
+        except Exception as e: return None, f"HF Error: {e}"
+    elif settings["ai_provider"] == "Gemini" and settings["gemini_api_key"]:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings['gemini_model']}:generateContent?key={settings['gemini_api_key']}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         try:
