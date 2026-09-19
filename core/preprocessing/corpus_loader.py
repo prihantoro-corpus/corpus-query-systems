@@ -500,8 +500,13 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 
                 # 2. Run Acoustic Extraction on the generated boundaries
                 if asr_records:
+                    if progress_callback: progress_callback(idx/num_files + 0.1, f"Extracting acoustic features from audio...")
                     extractor = AcousticExtractor(audio_path)
+                    
+                    # Assign a dummy sent_id so it can be batched for tagging
+                    sent_id_counter = 1
                     for r in asr_records:
+                        r['sent_id'] = sent_id_counter
                         start = r.get('start_time')
                         end = r.get('end_time')
                         if start is not None and end is not None:
@@ -509,6 +514,60 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                             if feats:
                                 r.update(feats)
                         r['filename'] = filename
+                        # Basic punctuation heuristic to increment sentence ID for batching
+                        if r['token'].endswith(('.', '!', '?')):
+                            sent_id_counter += 1
+                            
+                    # 3. NLP Tagging
+                    if stanza_lang_code and stanza_lang_code != "OTHER":
+                        stanza_proc = None
+                        if custom_tagger:
+                            stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
+                        else:
+                            stanza_proc = tagging.tag_text_with_stanza
+                            
+                        if progress_callback: progress_callback(idx/num_files + 0.2, f"Starting tagging pipeline for {filename}...")
+                        
+                        sents = {}
+                        for r in asr_records:
+                            s = r['sent_id']
+                            if s not in sents: sents[s] = []
+                            sents[s].append(r)
+                            
+                        sentence_texts = [" ".join([r['token'] for r in records]) for records in sents.values()]
+                        full_text = "\n".join(sentence_texts)
+                        
+                        all_res, err = stanza_proc(full_text, stanza_lang_code, progress_callback=progress_callback, base_progress=idx/num_files)
+                        
+                        if all_res:
+                            # Try to perfectly align back to asr_records
+                            if len(all_res) == len(asr_records):
+                                for i, r in enumerate(asr_records):
+                                    r['pos'] = all_res[i]['pos']
+                                    r['lemma'] = all_res[i]['lemma']
+                            else:
+                                import difflib
+                                tg_tokens = [r['token'].lower() for r in asr_records]
+                                nlp_tokens = [t['token'].lower() for t in all_res]
+                                seq = difflib.SequenceMatcher(None, tg_tokens, nlp_tokens)
+                                
+                                for tag, i1, i2, j1, j2 in seq.get_opcodes():
+                                    if tag == 'equal':
+                                        for i, j in zip(range(i1, i2), range(j1, j2)):
+                                            asr_records[i]['pos'] = all_res[j]['pos']
+                                            asr_records[i]['lemma'] = all_res[j]['lemma']
+                                    else:
+                                        if i2 > i1 and j2 > j1:
+                                            for k in range(i2 - i1):
+                                                i = i1 + k
+                                                j = j1 + min(k, (j2 - j1) - 1)
+                                                asr_records[i]['pos'] = all_res[j]['pos']
+                                                asr_records[i]['lemma'] = all_res[j]['lemma']
+                                                
+                    # Fill missing tags with fallbacks if NLP failed or was skipped
+                    for r in asr_records:
+                        if 'pos' not in r: r['pos'] = '##TAG'
+                        if 'lemma' not in r: r['lemma'] = r['token']
                         
                     all_df_data.extend(asr_records)
                 else:
