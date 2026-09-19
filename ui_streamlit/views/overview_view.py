@@ -2172,6 +2172,7 @@ def render_built_in_corpora_selection_ui():
                     status_text = st.empty()
                     
                     def update_progress(val, text):
+                        val = max(0.0, min(1.0, float(val)))
                         progress_bar.progress(val)
                         status_text.caption(text)
                         
@@ -2427,6 +2428,7 @@ def render_online_builder_ui():
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     def up_detik_proc(val, text):
+                        val = max(0.0, min(1.0, float(val)))
                         progress_bar.progress(val)
                         status_text.caption(text)
 
@@ -2486,7 +2488,7 @@ def render_online_builder_ui():
                 progress_bar = st.progress(0)
                 status = st.empty()
                 def up(p, m):
-                    progress_bar.progress(p)
+                    progress_bar.progress(min(max(p, 0.0), 1.0))
                     status.caption(m)
                 
                 with st.spinner("Downloading..."):
@@ -2859,6 +2861,7 @@ def render_online_builder_ui():
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 def update_progress(val, text):
+                    val = max(0.0, min(1.0, float(val)))
                     progress_bar.progress(val)
                     status_text.caption(text)
                     
