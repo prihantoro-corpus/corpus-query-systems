@@ -325,15 +325,15 @@ def tag_text_with_stanza(text, lang_code):
             traceback.print_exc()
             print(f"Failed to tag with custom model: {e}", flush=True)
 
-    # 1. Try SpaCy (In-memory, ~40x faster than TreeTagger/Stanza)
-    spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
-    if spacy_results is not None:
-        return spacy_results, None
-
-    # 2. Try TreeTagger
+    # 1. Try TreeTagger (Prioritized as requested)
     tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
     if tt_results is not None:
         return tt_results, None
+        
+    # 2. Try SpaCy (Fallback if TreeTagger not available)
+    spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
+    if spacy_results is not None:
+        return spacy_results, None
         
 
             
