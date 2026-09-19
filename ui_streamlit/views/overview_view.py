@@ -1990,28 +1990,81 @@ def render_upload_ui():
             except Exception as e:
                 print(f"Reload Error: {e}")
 
+            if "TextGrid" in fmt or "eaf" in fmt or "wav" in fmt:
+                expected_steps = [
+                    "Initializing Corpus Loader",
+                    "Reading and parsing files",
+                    "Extracting and aligning acoustic features",
+                    "Tagging with NLP Pipeline",
+                    "Structuring data for database",
+                    "Building DuckDB database",
+                    "Finalizing Metadata"
+                ]
+            else:
+                expected_steps = [
+                    "Initializing Corpus Loader",
+                    "Reading and parsing files",
+                    "Tagging with NLP Pipeline",
+                    "Structuring data for database",
+                    "Building DuckDB database",
+                    "Finalizing Metadata"
+                ]
+
             progress_bar = st.progress(0)
             status_container = st.empty()
             
-            completed_tasks = []
+            completed_logs = []
             
+            def get_step_idx(text, fmt_type):
+                text_lower = text.lower()
+                if "initializ" in text_lower: return 0
+                
+                if "TextGrid" in fmt_type or "eaf" in fmt_type or "wav" in fmt_type:
+                    if "reading" in text_lower or "parsing" in text_lower: return 1
+                    if "acoustic" in text_lower or "aligning" in text_lower: return 2
+                    if "tagging" in text_lower or "tagged" in text_lower: return 3
+                    if "structuring" in text_lower: return 4
+                    if "duckdb" in text_lower: return 5
+                    if "finalizing" in text_lower: return 6
+                else:
+                    if "reading" in text_lower or "parsing" in text_lower: return 1
+                    if "tagging" in text_lower or "tagged" in text_lower: return 2
+                    if "structuring" in text_lower: return 3
+                    if "duckdb" in text_lower: return 4
+                    if "finalizing" in text_lower: return 5
+                return -1
+
             def update_progress(val, text):
                 progress_bar.progress(val)
                 if text:
-                    # Clean up the text a bit for display
                     clean_text = text.replace("...", "").strip()
-                    if not completed_tasks or completed_tasks[-1] != clean_text:
-                        completed_tasks.append(clean_text)
-                    
-                # Build the checklist markdown
+                    if not completed_logs or completed_logs[-1] != clean_text:
+                        completed_logs.append(clean_text)
+                        
+                current_step_idx = -1
+                if completed_logs:
+                    current_step_idx = get_step_idx(completed_logs[-1], fmt)
+                    if current_step_idx == -1 and len(completed_logs) > 1:
+                        # Fallback to previous known step if this one is unrecognized
+                        current_step_idx = get_step_idx(completed_logs[-2], fmt)
+
                 lines = []
-                for i, t in enumerate(completed_tasks):
-                    if i == len(completed_tasks) - 1 and val < 1.0:
-                        lines.append(f"🔄 **{t}...**")
-                    elif "failed" in t.lower():
-                        lines.append(f"❌ {t}")
+                for i, step_name in enumerate(expected_steps):
+                    if val >= 1.0 or i < current_step_idx:
+                        lines.append(f"✅ **{step_name}**")
+                    elif i == current_step_idx:
+                        lines.append(f"🔄 **{step_name}...**")
+                        # Inject all logs for the current step under it
+                        for log in completed_logs:
+                            if get_step_idx(log, fmt) == current_step_idx:
+                                if "failed" in log.lower():
+                                    lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;❌ _{log}_")
+                                elif log == completed_logs[-1] and val < 1.0:
+                                    lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;🔄 _{log}..._")
+                                else:
+                                    lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;✅ _{log}_")
                     else:
-                        lines.append(f"✅ {t}")
+                        lines.append(f"⏳ {step_name}")
                         
                 status_container.markdown("\n\n".join(lines))
 
