@@ -5,3 +5,5 @@ corpora/english/BrownCorpus.db filter=lfs diff=lfs merge=lfs -text
 *.whl filter=lfs diff=lfs merge=lfs -text
 *.json filter=lfs diff=lfs merge=lfs -text
 *.par filter=lfs diff=lfs merge=lfs -text
+config_output.txt filter=lfs diff=lfs merge=lfs -text
+*.TextGrid filter=lfs diff=lfs merge=lfs -text
