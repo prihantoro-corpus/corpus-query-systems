@@ -364,7 +364,7 @@ def render_concordance_view():
                                 eaf_check = con_chk.execute("SELECT filename FROM corpus LIMIT 1").fetchone()
                                 if eaf_check and eaf_check[0]:
                                     filename_str = str(eaf_check[0]).lower()
-                                    if filename_str.endswith('.eaf') or filename_str.endswith('.textgrid'):
+                                    if filename_str.endswith(('.eaf', '.textgrid', '.wav')):
                                         is_eaf_corpus = True
                         except Exception:
                             pass
