@@ -2008,6 +2008,8 @@ def render_upload_ui():
                 for i, t in enumerate(completed_tasks):
                     if i == len(completed_tasks) - 1 and val < 1.0:
                         lines.append(f"🔄 **{t}...**")
+                    elif "failed" in t.lower():
+                        lines.append(f"❌ {t}")
                     else:
                         lines.append(f"✅ {t}")
                         

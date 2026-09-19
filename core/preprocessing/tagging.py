@@ -262,9 +262,9 @@ def tag_text_with_treetagger(text, lang_code):
     except Exception as e:
         return None, f"TreeTagger error: {str(e)}"
 
-def tag_text_with_stanza(text, lang_code):
+def tag_text_with_stanza(text, lang_code, progress_callback=None, base_progress=0.0):
     """
-    Process text. Tries Custom HMM first, then SpaCy, then TreeTagger, then Stanza.
+    Process text. Tries Custom HMM first, then TreeTagger, then SpaCy, then Stanza.
     Returns a tuple (list of dicts, error_msg)
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -302,6 +302,7 @@ def tag_text_with_stanza(text, lang_code):
                 print(f"Failed to load custom {lang_code}-hmm.pkl: {e}")
                 
     if custom_tagger is not None:
+        if progress_callback: progress_callback(base_progress, f"Tagging with Custom Tagger...")
         try:
             # Use fast regex tokenizer to prevent invoking Stanza/SpaCy just for tokenization
             sentences_tokens = tokenize_text_only(text, lang_code, fast=True)
@@ -319,27 +320,36 @@ def tag_text_with_stanza(text, lang_code):
                         'sent_id': sent_id,
                         'ent_type': ""
                     })
+            if progress_callback: progress_callback(base_progress, f"Tagged with Custom Tagger successfully!")
             return results, None
         except Exception as e:
             import traceback
             traceback.print_exc()
+            if progress_callback: progress_callback(base_progress, f"Tagging with Custom Tagger failed.")
             print(f"Failed to tag with custom model: {e}", flush=True)
 
     # 1. Try TreeTagger (Prioritized as requested)
+    if progress_callback: progress_callback(base_progress, f"Tagging with TreeTagger...")
     tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
     if tt_err:
+        if progress_callback: progress_callback(base_progress, f"Tagging with TreeTagger failed.")
         print(f"TreeTagger Warning: {tt_err}", flush=True)
     if tt_results is not None:
+        if progress_callback: progress_callback(base_progress, f"Tagged with TreeTagger successfully!")
         return tt_results, None
         
     # 2. Try SpaCy (Fallback if TreeTagger not available)
+    if progress_callback: progress_callback(base_progress, f"Tagging with SpaCy...")
     spacy_results, spacy_err = tag_text_with_spacy(text, lang_code)
     if spacy_err:
+        if progress_callback: progress_callback(base_progress, f"Tagging with SpaCy failed.")
         print(f"SpaCy Warning: {spacy_err}", flush=True)
     if spacy_results is not None:
+        if progress_callback: progress_callback(base_progress, f"Tagged with SpaCy successfully!")
         return spacy_results, None
             
     # 3. Try Stanza if Custom/TreeTagger/SpaCy failed or weren't found
+    if progress_callback: progress_callback(base_progress, f"Tagging with Stanza...")
     try:
         print("Falling back to Stanza...", flush=True)
         nlp = get_stanza_pipeline(lang_code)

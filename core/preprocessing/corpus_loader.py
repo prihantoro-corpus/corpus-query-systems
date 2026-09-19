@@ -74,40 +74,46 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         custom_tagger.annotated_corpus_text = ""
 
     def make_custom_tagger_wrapper(tagger, s_lang):
-        def custom_tagger_wrapper(text, lang_code=None):
-            if hasattr(tagger, 'tokenize_with_mwu'):
-                sentences = tagger.tokenize_with_mwu(text, s_lang)
-            else:
-                sentences = tagging.tokenize_text_only(text, s_lang)
-            tagged_results = []
-            sent_id = 0
-            
-            # Build vertical representation
-            annotated_lines = []
-            
-            for sent_tokens in sentences:
-                sent_id += 1
-                tagged_tokens = tagger.tag(sent_tokens)
-                for t_idx, token_info in enumerate(tagged_tokens):
-                    word = sent_tokens[t_idx]
-                    pos = token_info['pos']
-                    lemma = token_info['lemma']
-                    tagged_results.append({
-                        'token': word,
-                        'pos': pos,
-                        'lemma': lemma,
-                        'sent_id': sent_id,
-                        'ent_type': ""
-                    })
-                    # Format: word <tab> tag <tab> lemma
-                    annotated_lines.append(f"{word}\t{pos}\t{lemma}")
+        def custom_tagger_wrapper(text, lang_code=None, progress_callback=None, base_progress=0.0):
+            if progress_callback: progress_callback(base_progress, f"Tagging with Custom Tagger...")
+            try:
+                if hasattr(tagger, 'tokenize_with_mwu'):
+                    sentences = tagger.tokenize_with_mwu(text, s_lang)
+                else:
+                    sentences = tagging.tokenize_text_only(text, s_lang)
+                tagged_results = []
+                sent_id = 0
                 
-                # Separate sentences by an empty line
-                annotated_lines.append("")
+                # Build vertical representation
+                annotated_lines = []
                 
-            # Append vertical output of this text block/file to the tagger buffer
-            tagger.annotated_corpus_text += "\n".join(annotated_lines) + "\n"
-            return tagged_results, None
+                for sent_tokens in sentences:
+                    sent_id += 1
+                    tagged_tokens = tagger.tag(sent_tokens)
+                    for t_idx, token_info in enumerate(tagged_tokens):
+                        word = sent_tokens[t_idx]
+                        pos = token_info['pos']
+                        lemma = token_info['lemma']
+                        tagged_results.append({
+                            'token': word,
+                            'pos': pos,
+                            'lemma': lemma,
+                            'sent_id': sent_id,
+                            'ent_type': ""
+                        })
+                        # Format: word <tab> tag <tab> lemma
+                        annotated_lines.append(f"{word}\t{pos}\t{lemma}")
+                    
+                    # Separate sentences by an empty line
+                    annotated_lines.append("")
+                    
+                # Append vertical output of this text block/file to the tagger buffer
+                tagger.annotated_corpus_text += "\n".join(annotated_lines) + "\n"
+                if progress_callback: progress_callback(base_progress, f"Tagged with Custom Tagger successfully!")
+                return tagged_results, None
+            except Exception as e:
+                if progress_callback: progress_callback(base_progress, f"Tagging with Custom Tagger failed.")
+                return None, str(e)
         return custom_tagger_wrapper
     
     print(f"DEBUG: load_monolingual_corpus_files called. Lang: {explicit_lang_code} (Stanza: {stanza_lang_code}), Format: {selected_format}")
@@ -361,7 +367,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                             stanza_proc = tagging.tag_text_with_stanza
                             
                         if progress_callback:
-                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with TreeTagger/SpaCy/Stanza {stanza_lang_code} pipeline...")
+                            progress_callback(idx / num_files, f"Starting tagging pipeline for {filename}...")
                             
                         # Group by sent_id
                         sents = {}
@@ -374,7 +380,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                         sentence_texts = [" ".join([r['token'] for r in records]) for records in sents.values()]
                         full_text = "\n".join(sentence_texts)
                         
-                        all_res, err = stanza_proc(full_text, stanza_lang_code)
+                        all_res, err = stanza_proc(full_text, stanza_lang_code, progress_callback=progress_callback, base_progress=idx/num_files)
                         
                         if all_res:
                             # Try to perfectly align back to tg_records
@@ -420,7 +426,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                             stanza_proc = tagging.tag_text_with_stanza
                             
                         if progress_callback:
-                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with TreeTagger/SpaCy/Stanza {stanza_lang_code} pipeline...")
+                            progress_callback(idx / num_files, f"Starting tagging pipeline for {filename}...")
                             
                         # Group by sent_id
                         sents = {}
@@ -433,7 +439,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                         sentence_texts = [" ".join([r['token'] for r in records]) for records in sents.values()]
                         full_text = "\n".join(sentence_texts)
                         
-                        all_res, err = stanza_proc(full_text, stanza_lang_code)
+                        all_res, err = stanza_proc(full_text, stanza_lang_code, progress_callback=progress_callback, base_progress=idx/num_files)
                         
                         if all_res:
                             # Try to perfectly align back to tg_records
