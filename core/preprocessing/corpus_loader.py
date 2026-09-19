@@ -379,25 +379,26 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                                     r['lemma'] = all_res[i]['lemma']
                             else:
                                 # Desync occurred (e.g. tokenizer split "don't" into "do" "n't")
-                                # Fall back to robust string alignment
-                                res_idx = 0
-                                for r in tg_records:
-                                    w_token = r['token'].lower()
-                                    
-                                    # Fast forward res_idx if it's pointing to punctuation that wasn't in TextGrid
-                                    while res_idx < len(all_res) and all_res[res_idx]['token'].lower() != w_token and not all_res[res_idx]['token'].isalnum():
-                                        res_idx += 1
-                                        
-                                    if res_idx < len(all_res) and all_res[res_idx]['token'].lower() == w_token:
-                                        r['pos'] = all_res[res_idx]['pos']
-                                        r['lemma'] = all_res[res_idx]['lemma']
-                                        res_idx += 1
+                                # Use difflib for robust sequence alignment instantly!
+                                import difflib
+                                tg_tokens = [r['token'].lower() for r in tg_records]
+                                nlp_tokens = [t['token'].lower() for t in all_res]
+                                seq = difflib.SequenceMatcher(None, tg_tokens, nlp_tokens)
+                                
+                                for tag, i1, i2, j1, j2 in seq.get_opcodes():
+                                    if tag == 'equal':
+                                        for i, j in zip(range(i1, i2), range(j1, j2)):
+                                            tg_records[i]['pos'] = all_res[j]['pos']
+                                            tg_records[i]['lemma'] = all_res[j]['lemma']
                                     else:
-                                        # If we completely lost sync for this word, just tag it individually
-                                        single_res, _ = stanza_proc(r['token'], stanza_lang_code)
-                                        if single_res and len(single_res) > 0:
-                                            r['pos'] = single_res[0]['pos']
-                                            r['lemma'] = single_res[0]['lemma']
+                                        # For mismatched chunks (e.g. "it's" vs "it", "'s")
+                                        # Map the NLP tags as best as possible without launching new processes
+                                        if i2 > i1 and j2 > j1:
+                                            for k in range(i2 - i1):
+                                                i = i1 + k
+                                                j = j1 + min(k, (j2 - j1) - 1)
+                                                tg_records[i]['pos'] = all_res[j]['pos']
+                                                tg_records[i]['lemma'] = all_res[j]['lemma']
                                         
                     for r in tg_records:
                         r['filename'] = filename
@@ -437,25 +438,26 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                                     r['lemma'] = all_res[i]['lemma']
                             else:
                                 # Desync occurred (e.g. tokenizer split "don't" into "do" "n't")
-                                # Fall back to robust string alignment
-                                res_idx = 0
-                                for r in tg_records:
-                                    w_token = r['token'].lower()
-                                    
-                                    # Fast forward res_idx if it's pointing to punctuation that wasn't in TextGrid
-                                    while res_idx < len(all_res) and all_res[res_idx]['token'].lower() != w_token and not all_res[res_idx]['token'].isalnum():
-                                        res_idx += 1
-                                        
-                                    if res_idx < len(all_res) and all_res[res_idx]['token'].lower() == w_token:
-                                        r['pos'] = all_res[res_idx]['pos']
-                                        r['lemma'] = all_res[res_idx]['lemma']
-                                        res_idx += 1
+                                # Use difflib for robust sequence alignment instantly!
+                                import difflib
+                                tg_tokens = [r['token'].lower() for r in tg_records]
+                                nlp_tokens = [t['token'].lower() for t in all_res]
+                                seq = difflib.SequenceMatcher(None, tg_tokens, nlp_tokens)
+                                
+                                for tag, i1, i2, j1, j2 in seq.get_opcodes():
+                                    if tag == 'equal':
+                                        for i, j in zip(range(i1, i2), range(j1, j2)):
+                                            tg_records[i]['pos'] = all_res[j]['pos']
+                                            tg_records[i]['lemma'] = all_res[j]['lemma']
                                     else:
-                                        # If we completely lost sync for this word, just tag it individually
-                                        single_res, _ = stanza_proc(r['token'], stanza_lang_code)
-                                        if single_res and len(single_res) > 0:
-                                            r['pos'] = single_res[0]['pos']
-                                            r['lemma'] = single_res[0]['lemma']
+                                        # For mismatched chunks (e.g. "it's" vs "it", "'s")
+                                        # Map the NLP tags as best as possible without launching new processes
+                                        if i2 > i1 and j2 > j1:
+                                            for k in range(i2 - i1):
+                                                i = i1 + k
+                                                j = j1 + min(k, (j2 - j1) - 1)
+                                                tg_records[i]['pos'] = all_res[j]['pos']
+                                                tg_records[i]['lemma'] = all_res[j]['lemma']
                                         
                     for r in tg_records:
                         r['filename'] = filename
