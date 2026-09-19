@@ -56,10 +56,11 @@ def parse_textgrid_content(filepath):
             
     return interval_tiers, point_tiers
 
-def textgrid_to_dataframe(filepath, audio_path=None):
+def textgrid_to_dataframe(filepath, audio_path=None, progress_callback=None, base_progress=0.0):
     """
     Converts a TextGrid (and optional companion .wav) to a flat token-level dictionary list.
     """
+    if progress_callback: progress_callback(base_progress + 0.05, f"Parsing TextGrid structural tiers...")
     interval_tiers, point_tiers = parse_textgrid_content(filepath)
     
     # 1. Identify Word Tier (Backbone)
@@ -97,8 +98,13 @@ def textgrid_to_dataframe(filepath, audio_path=None):
     structural_tiers = {k: v for k, v in interval_tiers.items() if k not in [word_tier_name, phone_tier_name]}
     
     # 5. Acoustic Extractor
-    acoustic = AcousticExtractor(audio_path) if audio_path else None
+    if audio_path:
+        if progress_callback: progress_callback(base_progress + 0.1, f"Extracting acoustic features from audio...")
+        acoustic = AcousticExtractor(audio_path)
+    else:
+        acoustic = None
     
+    if progress_callback: progress_callback(base_progress + 0.2, f"Aligning words with acoustic data...")
     # 6. Align!
     tokens_data = []
     

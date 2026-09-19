@@ -21,6 +21,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     Loads one or more monolingual files into a DuckDB database.
     Returns: dict { 'db_path': str, 'stats': dict, 'structure': dict, 'lang_code': str, 'error': str }
     """
+    if progress_callback:
+        progress_callback(0.0, "Initializing Corpus Loader...")
+
     if not file_sources:
         return {'error': "No files provided"}
 
@@ -153,7 +156,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
 
     for idx, file_source in enumerate(file_sources):
         if progress_callback:
-            progress_callback(idx / num_files, f"Processing {file_source.name}...")
+            progress_callback(idx / num_files, f"Reading file: {file_source.name}...")
             
         file_source.seek(0)
         filename = file_source.name
@@ -282,6 +285,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     parts = line.split('\t')
                     if len(parts) >= 8:
                         token_id = parts[0]
+                        if progress_callback:
+                            progress_callback(0.92, "Building DuckDB analytical database...")
                         if '-' in token_id or '.' in token_id:
                             continue # skip multi-word tokens or empty nodes
                             
@@ -346,7 +351,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                         tf.write(file_source.read())
                         tmp_tg_path = tf.name
                         
-                    tg_records = textgrid_to_dataframe(tmp_tg_path, audio_path=audio_path)
+                    tg_records = textgrid_to_dataframe(tmp_tg_path, audio_path=audio_path, progress_callback=progress_callback, base_progress=idx/num_files)
                     
                     if stanza_lang_code and stanza_lang_code != "OTHER":
                         stanza_proc = None
@@ -405,7 +410,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     all_df_data.extend(tg_records)
                     os.remove(tmp_tg_path)
                 else:
-                    tg_records = textgrid_to_dataframe(file_source.name, audio_path=audio_path)
+                    tg_records = textgrid_to_dataframe(file_source.name, audio_path=audio_path, progress_callback=progress_callback, base_progress=idx/num_files)
                     
                     if stanza_lang_code and stanza_lang_code != "OTHER":
                         stanza_proc = None
@@ -612,6 +617,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 
                 all_df_data.extend(tagged_data)
 
+    if progress_callback: progress_callback(0.9, "Structuring data for database indexing...")
+    
     if not all_df_data:
         return {'error': "No valid data extracted from files"}
 
