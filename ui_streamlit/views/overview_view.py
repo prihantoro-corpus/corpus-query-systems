@@ -2035,6 +2035,7 @@ def render_upload_ui():
                 return -1
 
             def update_progress(val, text):
+                val = max(0.0, min(1.0, float(val)))
                 progress_bar.progress(val)
                 if text:
                     clean_text = text.replace("...", "").strip()
