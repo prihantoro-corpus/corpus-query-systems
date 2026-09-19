@@ -355,6 +355,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                         else:
                             stanza_proc = tagging.tag_text_with_stanza
                             
+                        if progress_callback:
+                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with {stanza_lang_code} model...")
+                            
                         # Group by sent_id
                         sents = {}
                         for r in tg_records:
@@ -362,22 +365,39 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                             if s not in sents: sents[s] = []
                             sents[s].append(r)
                             
-                        for s_id, records in sents.items():
-                            sentence_text = " ".join([r['token'] for r in records])
-                            res, err = stanza_proc(sentence_text, stanza_lang_code)
-                            
-                            if res and len(res) == len(records):
-                                # Perfect token alignment
-                                for i, r in enumerate(records):
-                                    r['pos'] = res[i]['pos']
-                                    r['lemma'] = res[i]['lemma']
+                        # Batch process ALL sentences at once to avoid launching TreeTagger for every sentence
+                        sentence_texts = [" ".join([r['token'] for r in records]) for records in sents.values()]
+                        full_text = "\n".join(sentence_texts)
+                        
+                        all_res, err = stanza_proc(full_text, stanza_lang_code)
+                        
+                        if all_res:
+                            # Try to perfectly align back to tg_records
+                            if len(all_res) == len(tg_records):
+                                for i, r in enumerate(tg_records):
+                                    r['pos'] = all_res[i]['pos']
+                                    r['lemma'] = all_res[i]['lemma']
                             else:
-                                # Tokenization mismatch, fallback to word-by-word
-                                for r in records:
-                                    single_res, _ = stanza_proc(r['token'], stanza_lang_code)
-                                    if single_res and len(single_res) > 0:
-                                        r['pos'] = single_res[0]['pos']
-                                        r['lemma'] = single_res[0]['lemma']
+                                # Desync occurred (e.g. tokenizer split "don't" into "do" "n't")
+                                # Fall back to robust string alignment
+                                res_idx = 0
+                                for r in tg_records:
+                                    w_token = r['token'].lower()
+                                    
+                                    # Fast forward res_idx if it's pointing to punctuation that wasn't in TextGrid
+                                    while res_idx < len(all_res) and all_res[res_idx]['token'].lower() != w_token and not all_res[res_idx]['token'].isalnum():
+                                        res_idx += 1
+                                        
+                                    if res_idx < len(all_res) and all_res[res_idx]['token'].lower() == w_token:
+                                        r['pos'] = all_res[res_idx]['pos']
+                                        r['lemma'] = all_res[res_idx]['lemma']
+                                        res_idx += 1
+                                    else:
+                                        # If we completely lost sync for this word, just tag it individually
+                                        single_res, _ = stanza_proc(r['token'], stanza_lang_code)
+                                        if single_res and len(single_res) > 0:
+                                            r['pos'] = single_res[0]['pos']
+                                            r['lemma'] = single_res[0]['lemma']
                                         
                     for r in tg_records:
                         r['filename'] = filename
@@ -393,6 +413,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                         else:
                             stanza_proc = tagging.tag_text_with_stanza
                             
+                        if progress_callback:
+                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with {stanza_lang_code} model...")
+                            
                         # Group by sent_id
                         sents = {}
                         for r in tg_records:
@@ -400,22 +423,39 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                             if s not in sents: sents[s] = []
                             sents[s].append(r)
                             
-                        for s_id, records in sents.items():
-                            sentence_text = " ".join([r['token'] for r in records])
-                            res, err = stanza_proc(sentence_text, stanza_lang_code)
-                            
-                            if res and len(res) == len(records):
-                                # Perfect token alignment
-                                for i, r in enumerate(records):
-                                    r['pos'] = res[i]['pos']
-                                    r['lemma'] = res[i]['lemma']
+                        # Batch process ALL sentences at once to avoid launching TreeTagger for every sentence
+                        sentence_texts = [" ".join([r['token'] for r in records]) for records in sents.values()]
+                        full_text = "\n".join(sentence_texts)
+                        
+                        all_res, err = stanza_proc(full_text, stanza_lang_code)
+                        
+                        if all_res:
+                            # Try to perfectly align back to tg_records
+                            if len(all_res) == len(tg_records):
+                                for i, r in enumerate(tg_records):
+                                    r['pos'] = all_res[i]['pos']
+                                    r['lemma'] = all_res[i]['lemma']
                             else:
-                                # Tokenization mismatch, fallback to word-by-word
-                                for r in records:
-                                    single_res, _ = stanza_proc(r['token'], stanza_lang_code)
-                                    if single_res and len(single_res) > 0:
-                                        r['pos'] = single_res[0]['pos']
-                                        r['lemma'] = single_res[0]['lemma']
+                                # Desync occurred (e.g. tokenizer split "don't" into "do" "n't")
+                                # Fall back to robust string alignment
+                                res_idx = 0
+                                for r in tg_records:
+                                    w_token = r['token'].lower()
+                                    
+                                    # Fast forward res_idx if it's pointing to punctuation that wasn't in TextGrid
+                                    while res_idx < len(all_res) and all_res[res_idx]['token'].lower() != w_token and not all_res[res_idx]['token'].isalnum():
+                                        res_idx += 1
+                                        
+                                    if res_idx < len(all_res) and all_res[res_idx]['token'].lower() == w_token:
+                                        r['pos'] = all_res[res_idx]['pos']
+                                        r['lemma'] = all_res[res_idx]['lemma']
+                                        res_idx += 1
+                                    else:
+                                        # If we completely lost sync for this word, just tag it individually
+                                        single_res, _ = stanza_proc(r['token'], stanza_lang_code)
+                                        if single_res and len(single_res) > 0:
+                                            r['pos'] = single_res[0]['pos']
+                                            r['lemma'] = single_res[0]['lemma']
                                         
                     for r in tg_records:
                         r['filename'] = filename
