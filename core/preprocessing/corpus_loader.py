@@ -481,6 +481,10 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                 
         # --- RAW AUDIO PROCESSING (ASR) ---
         elif is_wav_ext:
+            # Skip if there is a corresponding TextGrid file in the upload
+            if any(os.path.splitext(f.name)[0] == base and f.name.lower().endswith('.textgrid') for f in file_sources if hasattr(f, 'name')):
+                continue
+                
             try:
                 from .asr_extractor import transcribe_audio_to_words
                 from .acoustic_extractor import AcousticExtractor
