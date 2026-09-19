@@ -1,3 +1,0 @@
-VERB	ing
-NOUN	tion
-ADJ	al
