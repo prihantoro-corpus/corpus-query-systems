@@ -361,7 +361,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                             stanza_proc = tagging.tag_text_with_stanza
                             
                         if progress_callback:
-                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with {stanza_lang_code} model...")
+                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with TreeTagger/SpaCy/Stanza {stanza_lang_code} pipeline...")
                             
                         # Group by sent_id
                         sents = {}
@@ -420,7 +420,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                             stanza_proc = tagging.tag_text_with_stanza
                             
                         if progress_callback:
-                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with {stanza_lang_code} model...")
+                            progress_callback(idx / num_files, f"Tagging TextGrid ({filename}) with TreeTagger/SpaCy/Stanza {stanza_lang_code} pipeline...")
                             
                         # Group by sent_id
                         sents = {}
