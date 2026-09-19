@@ -150,8 +150,9 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
         is_conllu_ext = filename.lower().endswith('.conllu')
         is_docx_ext = filename.lower().endswith('.docx')
         is_pdf_ext = filename.lower().endswith('.pdf')
+        is_textgrid_ext = filename.lower().endswith('.textgrid')
         is_pseudo_xml = False
-        if not is_xml_ext and not is_conllu_ext and not is_docx_ext and not is_pdf_ext:
+        if not is_xml_ext and not is_conllu_ext and not is_docx_ext and not is_pdf_ext and not is_textgrid_ext:
             if sample_str.startswith('<'):
                 is_pseudo_xml = True
             elif any(tag in sample_str.lower() for tag in ['<text', '<corpus', '<p>', '<p ']):
@@ -296,6 +297,41 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
             except Exception as e:
                 return {'error': f"CoNLL-U Error ({filename}): {str(e)}"}
         
+        # --- TEXTGRID PROCESSING ---
+        elif is_textgrid_ext:
+            try:
+                from .textgrid_parser import textgrid_to_dataframe
+                
+                # Check for companion .wav file in the same directory, or rely on naming
+                audio_path = None
+                if hasattr(file_source, 'name'):
+                    possible_audio = file_source.name.replace('.TextGrid', '.wav').replace('.textgrid', '.wav')
+                    if os.path.exists(possible_audio):
+                        audio_path = possible_audio
+                        
+                # Actually, in Streamlit file upload, we might not have a real path.
+                # But if it's a built-in corpus, file_source.name is the full path.
+                
+                if hasattr(file_source, 'seek'):
+                    # Save temporary file because parsers need paths
+                    file_source.seek(0)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".TextGrid") as tf:
+                        tf.write(file_source.read())
+                        tmp_tg_path = tf.name
+                        
+                    tg_records = textgrid_to_dataframe(tmp_tg_path, audio_path=audio_path)
+                    for r in tg_records:
+                        r['filename'] = filename
+                    all_df_data.extend(tg_records)
+                    os.remove(tmp_tg_path)
+                else:
+                    tg_records = textgrid_to_dataframe(file_source.name, audio_path=audio_path)
+                    for r in tg_records:
+                        r['filename'] = filename
+                    all_df_data.extend(tg_records)
+            except Exception as e:
+                return {'error': f"TextGrid Error ({filename}): {str(e)}"}
+                
         # --- TXT/CSV/DOCX/PDF PROCESSING ---
         else: 
             try:
@@ -819,7 +855,7 @@ def load_built_in_corpus(name, url, progress_callback=None):
                 with open(local_path, 'rb') as f:
                     file_bytes = f.read()
                     fs = io.BytesIO(file_bytes)
-                    fs.name = filename
+                    fs.name = local_path
                     file_sources.append(fs)
             else:
                 if filename.startswith("http"):
