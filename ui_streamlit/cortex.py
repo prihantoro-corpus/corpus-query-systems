@@ -1,3 +1,5 @@
+import os
+os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1000"
 import streamlit as st
 import sys
 import os
