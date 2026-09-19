@@ -386,11 +386,32 @@ def tag_text_simple_fallback(text):
     results = []
     sent_id = 0
     
+    has_cjk = bool(re.search(r'[\u4e00-\u9fff]', text))
+    use_jieba = False
+    
+    if has_cjk:
+        try:
+            import jieba
+            use_jieba = True
+        except ImportError:
+            pass
+    
     for sent_text in sentences:
         sent_id += 1
-        # Simple tokenization: split but preserve punctuation
-        cleaned_text = re.sub(r'([^\w\s])', r' \1 ', sent_text)
-        tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
+        
+        if use_jieba:
+            import jieba
+            tokens = list(jieba.cut(sent_text))
+            tokens = [t.strip() for t in tokens if t.strip()]
+        else:
+            # Simple tokenization: split but preserve punctuation
+            cleaned_text = re.sub(r'([^\w\s])', r' \1 ', sent_text)
+            
+            # Insert space around CJK characters for fallback tokenization if jieba is missing
+            if has_cjk:
+                cleaned_text = re.sub(r'([\u4e00-\u9fff])', r' \1 ', cleaned_text)
+                
+            tokens = [t.strip() for t in cleaned_text.split() if t.strip()]
         
         for token in tokens:
             results.append({
