@@ -2,7 +2,24 @@ import os
 os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1000"
 import streamlit as st
 import sys
-import os
+
+# Ensure corpora are downloaded from Hugging Face Dataset if running in Spaces or missing locally
+@st.cache_resource
+def ensure_corpora_downloaded():
+    try:
+        from huggingface_hub import snapshot_download
+        print("Checking for required corpora from Hugging Face Datasets...")
+        snapshot_download(
+            repo_id="prihantoro-corpus/cortex-data",
+            repo_type="dataset",
+            local_dir="corpora",
+            allow_patterns=["*.db", "*.duckdb", "*.xml", "*.txt"]
+        )
+        print("Corpora sync complete.")
+    except Exception as e:
+        print(f"Warning: Failed to sync corpora from Hugging Face: {e}")
+
+ensure_corpora_downloaded()
 
 # Add project root to path so we can import from core/ui_streamlit
 # Add project root to path so we can import from core/ui_streamlit

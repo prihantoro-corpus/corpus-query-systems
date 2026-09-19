@@ -31,14 +31,7 @@ corpora/**/*.duckdb
 !corpora/english/EN-BPPT-tagged.xml
 !corpora/english/BrownCorpus.xml
 !corpora/indonesian/KOSLAT-full.xml
-!corpora/english/ICNALE_WE.db  
-!corpora/english/sm_icnale.db
-!corpora/english/BNC Spoken.db
-!corpora/english/EN-BPPT-tagged.db
-!corpora/indonesian/ID-BPPT-tagged.db
-!corpora/english/BrownCorpus.db
-!corpora/indonesian/tag_sample_elan_30_sentences.db  
-!corpora/korean/korean_sample.db
+
 
 # Temporary / Testing
 test_stanza_standalone.py
