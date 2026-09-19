@@ -2013,7 +2013,7 @@ def render_upload_ui():
                         
                 status_container.markdown("\n\n".join(lines))
 
-            with st.spinner("Processing Corpus..."):
+            if True: # Replaced spinner with dynamic checklist
                 result = notify_timing("Corpus loaded")(corpus_loader.load_monolingual_corpus_files)(
                     uploaded_files, 
                     explicit_lang_code=lang_code,
