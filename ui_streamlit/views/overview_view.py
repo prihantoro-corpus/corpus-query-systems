@@ -1873,8 +1873,15 @@ def render_upload_ui():
             st.error("⚠️ No corpus file(s) selected! Please upload your raw corpus file(s) (.txt, .xml, .csv, etc.) under 'Choose files' at the top of this tab before processing.")
             st.stop()
             
+        is_cloud = False
+        try:
+            from core.utils.profiler import get_environment
+            is_cloud = (get_environment() == "STREAMLIT_CLOUD")
+        except:
+            pass
+            
         for uf in uploaded_files:
-            if uf.name.lower().endswith('.wav') and (uf.size / (1024 * 1024)) > 50:
+            if is_cloud and uf.name.lower().endswith('.wav') and (uf.size / (1024 * 1024)) > 50:
                 st.warning(f"⚠️ **Warning**: {uf.name} is larger than 50 MB ({uf.size / (1024 * 1024):.1f} MB). When CORTEX tries to extract the pitch and formants from the audio, it will see that the file is > 50MB, print a warning, and intentionally skip the acoustic extraction to prevent the server from running out of RAM and crashing. TextGrid alignment will still work normally!")
 
         if not is_db_upload and tagger_tool == "Custom Tagger":

@@ -31,10 +31,15 @@ def transcribe_audio_to_words(audio_path: str, model_size="base") -> list:
     # SAFETY CHECK: Prevent OOM on Streamlit Cloud
     # Whisper loads the model into RAM and the uncompressed audio array.
     # If the file is >50MB, we refuse to load it to protect the server.
-    file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
-    if file_size_mb > 50:
-        logger.error(f"Skipping Whisper ASR for {audio_path}: File too large ({file_size_mb:.1f} MB > 50 MB limit)")
-        return []
+    try:
+        from core.utils.profiler import get_environment
+        if get_environment() == "STREAMLIT_CLOUD":
+            file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+            if file_size_mb > 50:
+                logger.error(f"Skipping Whisper ASR for {audio_path}: File too large ({file_size_mb:.1f} MB > 50 MB limit)")
+                return []
+    except:
+        pass
         
     logger.info(f"Loading Whisper model '{model_size}'...")
     # Load model (this downloads the weights on first run)

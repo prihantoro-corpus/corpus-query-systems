@@ -38,10 +38,15 @@ class AcousticExtractor:
         # Parselmouth loads the entire file uncompressed into RAM. 
         # A 50MB wav file can easily consume 500MB+ of RAM during pitch/formant extraction.
         # If the file is >50MB, we refuse to load it to protect the server.
-        file_size_mb = os.path.getsize(self.audio_path) / (1024 * 1024)
-        if file_size_mb > 50:
-            print(f"Skipping acoustic extraction for {self.audio_path}: File too large ({file_size_mb:.1f} MB > 50 MB limit)")
-            return False
+        try:
+            from core.utils.profiler import get_environment
+            if get_environment() == "STREAMLIT_CLOUD":
+                file_size_mb = os.path.getsize(self.audio_path) / (1024 * 1024)
+                if file_size_mb > 50:
+                    print(f"Skipping acoustic extraction for {self.audio_path}: File too large ({file_size_mb:.1f} MB > 50 MB limit)")
+                    return False
+        except:
+            pass
             
         try:
             # Load audio using parselmouth
