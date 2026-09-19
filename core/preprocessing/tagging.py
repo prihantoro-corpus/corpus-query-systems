@@ -142,8 +142,39 @@ import platform
 # Map stanza lang codes to treetagger parameter files
 TREETAGGER_LANG_MAP = {
     'id': 'indonesian/indonesian_v311225.par',
-    'mg': 'malagasy/malagasy.par', # Replace with actual if name is different
-    'en': 'english/english.par'
+    'mg': 'malagasy/malagasy.par',
+    'en': 'english/english.par',
+    'zh': 'chinese/zh.par',
+    'ko': 'korean/korean.par',
+    'es': 'spanish/spanish.par',
+    'de': 'german/german.par',
+    'fr': 'french/french.par',
+    'pt': 'portuguese/portuguese.par',
+    'it': 'italian/italian.par',
+    'nl': 'dutch/dutch.par',
+    'el': 'greek/greek.par',
+    'ru': 'russian/russian.par',
+    'pl': 'polish/polish.par',
+    'uk': 'ukrainian/ukrainian.par',
+    'ro': 'romanian/romanian.par',
+    'sv': 'swedish/swedish.par',
+    'da': 'danish/danish.par',
+    'nb': 'norwegian/norwegian.par',
+    'fi': 'finnish/finnish.par',
+    'ca': 'catalan/catalan.par',
+    'sl': 'slovenian/slovenian.par',
+    'sq': 'albanian/albanian.par',
+    'be': 'belarusian/belarusian.par',
+    'bg': 'bulgarian/bulgarian.par',
+    'cs': 'czech/czech.par',
+    'et': 'estonian/estonian.par',
+    'gl': 'galician/galician.par',
+    'hu': 'hungarian/hungarian.par',
+    'la': 'latin/latin.par',
+    'mn': 'mongolian/mongolian.par',
+    'fa': 'persian/persian.par',
+    'sk': 'slovak/slovak.par',
+    'sw': 'swahili/swahili.par'
 }
 
 _TT_TEXT_CACHE = {}
@@ -484,6 +515,12 @@ def tokenize_text_only(text, lang_code=None, fast=False):
     If fast=True or lang_code=="OTHER", uses high-speed regex tokenization (<0.001s).
     Returns: list of list of str (list of sentences, where each sentence is a list of tokens)
     """
+    if lang_code in ('zh', 'CH'):
+        from core.preprocessing.chinese_tokenizer import tokenize_chinese_text
+        zh_tokens = tokenize_chinese_text(text)
+        if zh_tokens is not None:
+            return zh_tokens
+
     if fast or not lang_code or lang_code == "OTHER":
         import re
         sentences = split_sentences_custom(text)
