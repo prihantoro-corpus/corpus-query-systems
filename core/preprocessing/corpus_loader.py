@@ -347,12 +347,76 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                         tmp_tg_path = tf.name
                         
                     tg_records = textgrid_to_dataframe(tmp_tg_path, audio_path=audio_path)
+                    
+                    if stanza_lang_code and stanza_lang_code != "OTHER":
+                        stanza_proc = None
+                        if custom_tagger:
+                            stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
+                        else:
+                            stanza_proc = tagging.tag_text_with_stanza
+                            
+                        # Group by sent_id
+                        sents = {}
+                        for r in tg_records:
+                            s = r['sent_id']
+                            if s not in sents: sents[s] = []
+                            sents[s].append(r)
+                            
+                        for s_id, records in sents.items():
+                            sentence_text = " ".join([r['token'] for r in records])
+                            res, err = stanza_proc(sentence_text, stanza_lang_code)
+                            
+                            if res and len(res) == len(records):
+                                # Perfect token alignment
+                                for i, r in enumerate(records):
+                                    r['pos'] = res[i]['pos']
+                                    r['lemma'] = res[i]['lemma']
+                            else:
+                                # Tokenization mismatch, fallback to word-by-word
+                                for r in records:
+                                    single_res, _ = stanza_proc(r['token'], stanza_lang_code)
+                                    if single_res and len(single_res) > 0:
+                                        r['pos'] = single_res[0]['pos']
+                                        r['lemma'] = single_res[0]['lemma']
+                                        
                     for r in tg_records:
                         r['filename'] = filename
                     all_df_data.extend(tg_records)
                     os.remove(tmp_tg_path)
                 else:
                     tg_records = textgrid_to_dataframe(file_source.name, audio_path=audio_path)
+                    
+                    if stanza_lang_code and stanza_lang_code != "OTHER":
+                        stanza_proc = None
+                        if custom_tagger:
+                            stanza_proc = make_custom_tagger_wrapper(custom_tagger, stanza_lang_code)
+                        else:
+                            stanza_proc = tagging.tag_text_with_stanza
+                            
+                        # Group by sent_id
+                        sents = {}
+                        for r in tg_records:
+                            s = r['sent_id']
+                            if s not in sents: sents[s] = []
+                            sents[s].append(r)
+                            
+                        for s_id, records in sents.items():
+                            sentence_text = " ".join([r['token'] for r in records])
+                            res, err = stanza_proc(sentence_text, stanza_lang_code)
+                            
+                            if res and len(res) == len(records):
+                                # Perfect token alignment
+                                for i, r in enumerate(records):
+                                    r['pos'] = res[i]['pos']
+                                    r['lemma'] = res[i]['lemma']
+                            else:
+                                # Tokenization mismatch, fallback to word-by-word
+                                for r in records:
+                                    single_res, _ = stanza_proc(r['token'], stanza_lang_code)
+                                    if single_res and len(single_res) > 0:
+                                        r['pos'] = single_res[0]['pos']
+                                        r['lemma'] = single_res[0]['lemma']
+                                        
                     for r in tg_records:
                         r['filename'] = filename
                     all_df_data.extend(tg_records)
