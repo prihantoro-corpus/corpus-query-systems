@@ -135,7 +135,6 @@ echo Checking and installing/updating dependencies...
 
 :: Run the streamlit app
 echo Launching CORTEX...
-cd ui_streamlit
-!PYTHON_CMD! -m streamlit run cortex.py
+!PYTHON_CMD! -m streamlit run ui_streamlit\cortex.py
 
 pause
