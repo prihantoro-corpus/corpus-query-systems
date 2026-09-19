@@ -135,6 +135,6 @@ echo Checking and installing/updating dependencies...
 
 :: Run the streamlit app
 echo Launching CORTEX...
-!PYTHON_CMD! -m streamlit run ui_streamlit\cortex.py
+!PYTHON_CMD! -m streamlit run ui_streamlit\cortex.py --server.maxUploadSize=1000
 
 pause
