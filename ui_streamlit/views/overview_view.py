@@ -1355,23 +1355,72 @@ def render_upload_ui():
     upload_tabs = st.tabs(["📄 Written Text Corpus", "🎙️ Spoken Audio Corpus"])
     
     with upload_tabs[0]:
-        st.write("Select XML, TXT, CSV, XLSX, or DB/DUCKDB database files from your device:")
-        written_files = st.file_uploader(
-            "Choose written files", 
-            accept_multiple_files=True,
-            type=['xml', 'eaf', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf', 'zip'],
-            key="written_corpus_file_uploader"
-        )
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.write("Select XML, TXT, CSV, XLSX, or DB/DUCKDB database files from your device:")
+            written_files = st.file_uploader(
+                "Choose written files", 
+                accept_multiple_files=True,
+                type=['xml', 'eaf', 'txt', 'csv', 'xlsx', 'db', 'duckdb', 'docx', 'pdf', 'zip'],
+                key="written_corpus_file_uploader"
+            )
+        with c2:
+            st.write("Or paste your text directly:")
+            pasted_text = st.text_area("Paste text (Max 10,000 words)", height=150, key="written_corpus_pasted_text")
+            if pasted_text:
+                import io
+                word_count = len(pasted_text.split())
+                if word_count > 10000:
+                    st.error(f"Text exceeds 10,000 words limit (Current: {word_count}). Please upload a file instead.")
+                    pasted_text = None
+                else:
+                    text_bytes = pasted_text.encode('utf-8')
+                    simulated_file = io.BytesIO(text_bytes)
+                    simulated_file.name = "pasted_text.txt"
+                    simulated_file.size = len(text_bytes)
+                    if written_files is None:
+                        written_files = []
+                    written_files.append(simulated_file)
         
     with upload_tabs[1]:
-        st.write("Upload raw audio files (.wav) and optional transcriptions (.TextGrid, .eaf):")
-        st.caption("*(Note: If uploading both, the audio and its transcription file must share the exact same base name to be matched correctly, e.g. `recording1.wav` and `recording1.TextGrid`)*")
-        spoken_files = st.file_uploader(
-            "Choose spoken files",
-            accept_multiple_files=True,
-            type=['wav', 'textgrid', 'eaf', 'xml'],
-            key="spoken_corpus_file_uploader"
-        )
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.write("Upload raw audio files (.wav) and optional transcriptions (.TextGrid, .eaf):")
+            st.caption("*(Note: If uploading both, the audio and its transcription file must share the exact same base name to be matched correctly, e.g. `recording1.wav` and `recording1.TextGrid`)*")
+            spoken_files = st.file_uploader(
+                "Choose spoken files",
+                accept_multiple_files=True,
+                type=['wav', 'textgrid', 'eaf', 'xml'],
+                key="spoken_corpus_file_uploader"
+            )
+        with c2:
+            st.write("Or record your voice directly (Max 5 mins):")
+            recorded_audio = None
+            if hasattr(st, 'audio_input'):
+                recorded_audio = st.audio_input("Record Voice", key="spoken_corpus_audio_input")
+            elif hasattr(st, 'experimental_audio_input'):
+                recorded_audio = st.experimental_audio_input("Record Voice", key="spoken_corpus_audio_input")
+            else:
+                st.info("Please upgrade Streamlit to version >= 1.36.0 to enable audio recording.")
+                
+            whisper_lang_label = None
+            if recorded_audio:
+                simulated_audio = recorded_audio
+                simulated_audio.name = "recorded_audio.wav"
+                if spoken_files is None:
+                    spoken_files = []
+                spoken_files.append(simulated_audio)
+                
+            st.markdown("**Transcription Language (for Whisper ASR)**")
+            lang_options_full = ["Auto-detect"] + list(STANZA_LANG_MAP.keys())
+            whisper_lang_label = st.selectbox(
+                "Transcription Language", 
+                lang_options_full, 
+                index=0,
+                key="upload_whisper_lang_select",
+                label_visibility="collapsed"
+            )
+            whisper_lang_val = None if whisper_lang_label == "Auto-detect" else STANZA_LANG_MAP.get(whisper_lang_label, "en")
         
     uploaded_files = (written_files or []) + (spoken_files or [])
     
@@ -2120,7 +2169,8 @@ def render_upload_ui():
                     custom_tagger_config=custom_config,
                     eaf_main_tier=eaf_main_tier,
                     eaf_gloss_tier=eaf_gloss_tier,
-                    eaf_trans_tier=eaf_trans_tier
+                    eaf_trans_tier=eaf_trans_tier,
+                    whisper_lang=whisper_lang_val if 'whisper_lang_val' in locals() else None
                 )
                 
                 if result.get('error'):

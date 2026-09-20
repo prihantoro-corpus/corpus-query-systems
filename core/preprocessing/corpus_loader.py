@@ -16,9 +16,9 @@ import time
 from core.utils.profiler import profile_func
 
 @profile_func
-def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_format, progress_callback=None, custom_tagger_config=None, eaf_main_tier=None, eaf_gloss_tier=None, eaf_trans_tier=None):
+def load_monolingual_corpus_files(file_sources, explicit_lang_code=None, selected_format="Raw", progress_callback=None, custom_tagger_config=None, eaf_main_tier=None, eaf_gloss_tier=None, eaf_trans_tier=None, whisper_lang=None):
     """
-    Loads one or more monolingual files into a DuckDB database.
+    Load and index a monolingual corpus from given file-like objects.
     Returns: dict { 'db_path': str, 'stats': dict, 'structure': dict, 'lang_code': str, 'error': str }
     """
     if progress_callback:
@@ -553,7 +553,7 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     audio_path = file_source.name
                     
                 # 1. Run ASR
-                asr_records = transcribe_audio_to_words(audio_path, model_size="base")
+                asr_records = transcribe_audio_to_words(audio_path, model_size="base", language=whisper_lang)
                 
                 # 2. Run Acoustic Extraction on the generated boundaries
                 if asr_records:
@@ -1167,13 +1167,6 @@ def load_built_in_corpus(name, url, progress_callback=None):
                         'lang_code': lang,
                         'error': None
                     }
-                
-                # Standard parsing path for XML/text/CSV
-                with open(local_path, 'rb') as f:
-                    file_bytes = f.read()
-                    fs = io.BytesIO(file_bytes)
-                    fs.name = local_path
-                    file_sources.append(fs)
             else:
                 if filename.startswith("http"):
                     if progress_callback:
@@ -1185,7 +1178,25 @@ def load_built_in_corpus(name, url, progress_callback=None):
                     fs.name = filename.split('/')[-1]
                     file_sources.append(fs)
                 else:
-                    return {'error': f"File not found locally in {CORPORA_DIR} and is not a URL: {filename}"}
+                    # Try fetching from Hugging Face Dataset (prihantoro-corpus/cortex-data)
+                    hf_raw_url = f"https://huggingface.co/datasets/prihantoro-corpus/cortex-data/raw/main/corpora/{filename}"
+                    if progress_callback:
+                        progress_callback(0.05 + (idx/len(names))*0.2, f"Downloading {corpus_name} from dataset repository...")
+                    try:
+                        response = requests.get(hf_raw_url, timeout=60)
+                        response.raise_for_status()
+                        file_bytes = response.content
+                        
+                        # Save locally to CORPORA_DIR so future loads are instant
+                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                        with open(local_path, 'wb') as out_f:
+                            out_f.write(file_bytes)
+                            
+                        fs = io.BytesIO(file_bytes)
+                        fs.name = local_path
+                        file_sources.append(fs)
+                    except Exception as download_err:
+                        return {'error': f"File not found locally in {CORPORA_DIR} and failed to download from dataset repository: {download_err}"}
 
         if not file_sources:
             return {'error': "No corpora files could be loaded."}

@@ -19,7 +19,7 @@ def load_audio_librosa(file_path: str, sr: int = 16000) -> np.ndarray:
         logger.error(f"Error loading audio via librosa: {e}")
         return np.array([], dtype=np.float32)
 
-def transcribe_audio_to_words(audio_path: str, model_size="base") -> list:
+def transcribe_audio_to_words(audio_path: str, model_size="base", language: str = None) -> list:
     """
     Transcribes audio using Whisper and returns a list of dictionaries containing
     word-level boundaries, simulating the output of textgrid_parser.py
@@ -52,7 +52,10 @@ def transcribe_audio_to_words(audio_path: str, model_size="base") -> list:
         return []
         
     logger.info("Running Whisper transcription with word timestamps...")
-    result = model.transcribe(audio_data, word_timestamps=True)
+    transcribe_kwargs = {"word_timestamps": True}
+    if language and language != "auto":
+        transcribe_kwargs["language"] = language
+    result = model.transcribe(audio_data, **transcribe_kwargs)
     
     words_data = []
     
