@@ -183,10 +183,12 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     for attr_key, attr_val in attrs.items():
                         attr_col = f"{tag_name}_{attr_key}"
                         if attr_col in cols:
-                            if '*' in attr_val:
-                                regex_pat = '(?i)^' + re.escape(attr_val).replace(r'\*', '.*') + '$'
+                            if '|' in attr_val or '*' in attr_val:
+                                parts = [p.strip() for p in attr_val.split('|') if p.strip()]
+                                regex_parts = [re.escape(p).replace(r'\*', '.*') for p in parts]
+                                regex_pat = '(?i)^(' + '|'.join(regex_parts) + ')$'
                             else:
-                                regex_pat = '(?i)' + re.escape(attr_val)
+                                regex_pat = '(?i)^' + re.escape(attr_val) + '$'
                             query_where.append(f"regexp_matches(CAST({alias}.{attr_col} AS VARCHAR), ?)")
                             query_params.append(regex_pat)
                         else:

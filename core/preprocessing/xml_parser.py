@@ -90,8 +90,19 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combin
         current_context[f"{tag_name}_id"] = tag_counters[tag_name]
         
         # Add attributes prefixed by tag name
-        for k, v in element.attrib.items():
-            current_context[f"{tag_name}_{k.lower()}"] = v
+        attribs = dict(element.attrib)
+        if tag_name == 'segment' and 'features' in attribs:
+            feat_raw = str(attribs['features'])
+            parts = feat_raw.split(';')
+            attribs['domain'] = parts[0].replace('-', '_') if len(parts) >= 1 and parts[0].strip() else "none"
+            attribs['category'] = parts[1].replace('-', '_') if len(parts) >= 2 and parts[1].strip() else "none"
+            attribs['subcategory'] = parts[2].replace('-', '_') if len(parts) >= 3 and parts[2].strip() else "none"
+            attribs['tag'] = parts[3].replace('-', '_') if len(parts) >= 4 and parts[3].strip() else "none"
+            attribs['features'] = feat_raw.replace(';', '_').replace('-', '_')
+
+        for k, v in attribs.items():
+            clean_v = str(v).replace(';', '_').strip()
+            current_context[f"{tag_name}_{k.lower()}"] = clean_v
     
     # Helper to tokenize and add text with current context
     def tokenize_and_add(text, context):
