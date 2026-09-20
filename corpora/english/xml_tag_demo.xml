@@ -1,0 +1,180 @@
+<text filename="english/xml_tag_demo.xml">
+<s id="1" doc_id="demo_001" name="XMLTagDemo" pn_type="person" pn_role="CEO">
+<PN>
+Sarah	PROPN	Sarah
+Johnson	PROPN	Johnson
+</PN>
+,	PUNCT	,
+the	DET	the
+CEO	NOUN	ceo
+of	ADP	of
+<ORG>
+TechCorp	PROPN	TechCorp
+Inc	PROPN	Inc
+</ORG>
+,	PUNCT	,
+announced	VERB	announce
+the	DET	the
+release	NOUN	release
+of	ADP	of
+their	PRON	their
+new	ADJ	new
+<TECH>
+quantum	PROPN	quantum
+scanner	NOUN	scanner
+</TECH>
+in	ADP	in
+<PN>
+Silicon	PROPN	Silicon
+Valley	PROPN	Valley
+</PN>
+.	PUNCT	.
+</s>
+<s id="2" doc_id="demo_001" name="XMLTagDemo">
+The	DET	the
+device	NOUN	device
+has	VERB	have
+<EVAL>
+outstanding	ADJ	outstanding
+</EVAL>
+performance	NOUN	performance
+and	CCONJ	and
+can	AUX	can
+process	VERB	process
+data	NOUN	datum
+at	ADP	at
+<EVAL>
+amazing	ADJ	amazing
+</EVAL>
+speeds	NOUN	speed
+.	PUNCT	.
+</s>
+<s id="3" doc_id="demo_001" name="XMLTagDemo">
+She	PRON	she
+noted	VERB	note
+that	SCONJ	that
+<ORG>
+Global	PROPN	Global
+Bank	PROPN	Bank
+</ORG>
+invested	VERB	invest
+<NUM>
+5000000	NUM	5000000
+</NUM>
+in	ADP	in
+this	DET	this
+project	NOUN	project
+,	PUNCT	,
+which	PRON	which
+created	VERB	create
+<NUM>
+200	NUM	200
+</NUM>
+new	ADJ	new
+jobs	NOUN	job
+.	PUNCT	.
+</s>
+<s id="4" doc_id="demo_001" name="XMLTagDemo" pn_type="person" pn_role="researcher">
+<PN>
+Michael	PROPN	Michael
+Chen	PROPN	Chen
+</PN>
+,	PUNCT	,
+a	DET	a
+leading	VERB	lead
+scientist	NOUN	scientist
+at	ADP	at
+<ORG>
+MIT	PROPN	MIT
+</ORG>
+,	PUNCT	,
+confirmed	VERB	confirm
+the	DET	the
+technological	ADJ	technological
+breakthrough	NOUN	breakthrough
+.	PUNCT	.
+</s>
+<s id="5" doc_id="demo_001" name="XMLTagDemo">
+He	PRON	he
+explained	VERB	explain
+that	SCONJ	that
+the	DET	the
+device	NOUN	device
+works	VERB	work
+by	ADP	by
+scanning	VERB	scan
+the	PRON	the
+<PN>
+Andromeda	PROPN	Andromeda
+Nebula	PROPN	Nebula
+</PN>
+with	ADP	with
+a	DET	a
+high	ADJ	high
+-	PUNCT	-
+intensity	NOUN	intensity
+<TECH>
+laser	NOUN	laser
+beam	NOUN	beam
+</TECH>
+.	PUNCT	.
+</s>
+<s id="6" doc_id="demo_001" name="XMLTagDemo">
+However	ADV	however
+,	PUNCT	,
+some	DET	some
+critics	NOUN	critic
+expressed	VERB	express
+<EVAL>
+slight	ADJ	slight
+</EVAL>
+concern	NOUN	concern
+about	ADP	about
+the	DET	the
+energy	NOUN	energy
+consumption	NOUN	consumption
+.	PUNCT	.
+</s>
+<s id="7" doc_id="demo_001" name="XMLTagDemo">
+Meanwhile	ADV	meanwhile
+,	PUNCT	,
+<PN>
+David	PROPN	David
+Martinez	PROPN	Martinez
+</PN>
+scored	VERB	score
+a	DET	a
+goal	NOUN	goal
+for	ADP	for
+his	PRON	his
+<ORG>
+Red	ADJ	red
+Stars	PROPN	Stars
+FC	PROPN	FC
+</ORG>
+team	NOUN	team
+.	PUNCT	.
+</s>
+<s id="8" doc_id="demo_001" name="XMLTagDemo">
+Their	PRON	their
+victory	NOUN	victory
+was	AUX	be
+<EVAL>
+incredible	ADJ	incredible
+</EVAL>
+and	CCONJ	and
+ended	VERB	end
+the	DET	the
+championship	NOUN	championship
+match	NOUN	match
+with	ADP	with
+a	PRON	a
+<NUM>
+3	NUM	3
+-	SYM	-
+1	NUM	1
+</NUM>
+win	NOUN	win
+.	PUNCT	.
+</s>
+</text>
