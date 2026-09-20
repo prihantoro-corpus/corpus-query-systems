@@ -110,11 +110,10 @@ def get_available_corpora():
                     count += 1
         f.write(f"Total corpora found: {count}\n")
 
-        # Also add downloadable corpora that are not present locally
+        # Ensure ALL known corpora are listed so they can be loaded/downloaded on-demand
         for display_name, rel_path in KNOWN_CORPORA_MAP.items():
             if display_name not in available:
-                if rel_path in DOWNLOADABLE_ASSETS_MAP:
-                    available[display_name] = rel_path
+                available[display_name] = rel_path
 
     return available
 

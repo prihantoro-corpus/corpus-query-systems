@@ -1,49 +1,55 @@
 import os
-import getpass
+import sys
 from huggingface_hub import HfApi
 
-def main():
-    print("=== Hugging Face Space Direct Uploader ===")
-    print("This will bypass GitHub completely and upload directly to your Space.")
-    token = getpass.getpass("Right-click to paste your Hugging Face WRITE Token and press Enter: ").strip()
+def upload_space():
+    print("=" * 60)
+    print(" HUGGING FACE SPACE DIRECT UPLOADER ")
+    print("=" * 60)
     
-    if not token.startswith("hf_"):
-        print("\n❌ Error: The token must start with 'hf_'. It seems you pasted something else or left it blank!")
-        return
-    
+    # Minta token jika belum ada
+    token = input("Masukkan Hugging Face User Access Token (write token): ").strip()
+    if not token:
+        print("❌ Token tidak boleh kosong!")
+        sys.exit(1)
+        
     repo_id = "prihantoro-corpus/cortex"
-    api = HfApi(token=token)
+    print(f"\n[INFO] Mengunggah seluruh folder proyek ke HF Space: {repo_id}...")
     
-    print(f"\nUploading local files to Space {repo_id}...")
+    # Pola file yang diabaikan (agar upload cepat & tidak melebihi limit)
+    ignore_patterns = [
+        ".git/*",
+        ".github/*",
+        "__pycache__/*",
+        "*.pyc",
+        "*.db",
+        "*.duckdb",
+        "*.wav",
+        "*.whl",
+        "*.docx",
+        "*.pptx",
+        "*.pdf",
+        ".gemini/*",
+        ".idea/*",
+        ".vscode/*",
+        "test_*.py",
+        "scratch/*"
+    ]
+    
+    api = HfApi(token=token)
     
     try:
         api.upload_folder(
             folder_path=".",
             repo_id=repo_id,
             repo_type="space",
-            # We ignore things we don't want uploaded to the space
-            ignore_patterns=[
-                ".git*", 
-                ".venv*", 
-                "__pycache__*", 
-                "**/*.db", 
-                "**/*.duckdb",
-                "**/*.wav",
-                "**/*.XML",
-                "**/*.par",
-                "**/*.dll",
-                "**/*.lib",
-                "**/*.docx",
-                "**/*.pptx",
-                "**/*.whl",
-                "**/*.pdf",
-                "**/*.xlsx",
-                ".github*"
-            ]
+            ignore_patterns=ignore_patterns
         )
-        print("\n🎉 Upload complete! Your Space is now building.")
+        print("\n🚀 BERHASIL! Perubahan terbaru telah ter-push secara langsung ke Hugging Face Space!")
+        print(f"Buka HF Space Anda di: https://huggingface.co/spaces/{repo_id}")
+        print("Space akan otomatis melakukan rebuild dan merestart server Streamlit.")
     except Exception as e:
-        print(f"\n❌ Upload failed: {e}")
+        print(f"\n❌ Upload gagal: {e}")
 
 if __name__ == "__main__":
-    main()
+    upload_space()
