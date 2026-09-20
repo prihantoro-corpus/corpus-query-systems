@@ -1180,7 +1180,7 @@ Processing the data revealed a **{strength.lower()} {direction.lower()} correlat
                     | `<TAG>` | XML tag search | `<PN>` (all person/place names) |
                     | `<TAG attr="val">` | XML tag with attributes | `<PN type="human">` (people only) |
                     | `(word1\\|word2)` | OR pattern (NEW) | `(small\\|big\\|little)` |
-                    | `_POS1\|POS2` | Multiple POS tags | `_NN*\|VB*` (nouns OR verbs) |
+                    | `_POS1\\|POS2` | Multiple POS tags | `_NN*\\|VB*` (nouns OR verbs) |
                     """)
 
                 # Query preview
