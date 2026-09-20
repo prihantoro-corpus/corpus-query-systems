@@ -21,6 +21,7 @@ KNOWN_CORPORA_MAP = {
     "sample of ELAN file (Indonesian)": "indonesian/tag_sample_elan_30_sentences.db",
     "sample of ELAN file (Korean)": "korean/korean_sample.db",
     "ITA3 Spoken Sample": "spoken/ITA3.TextGrid",
+    "TUFS2023KOMSHI314 (UAM XML)": "indonesian/uam_trial/TUFS2023KOMSHI314.xml",
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
@@ -161,6 +162,12 @@ BUILT_IN_CORPUS_DETAILS = {
         A **sample ELAN language documentation corpus** containing 3 annotated sentences in Korean.
         <br><br>
         **Includes 7 parallel annotation layers**: Hangul (`hangul`), Hangul Delineated (`hangul-delineated`), Transliteration Full (`transliteration-full`), Transliteration Delineated (`transliteration-delineated`), Word Translation (`word-translation`), Morphemic Gloss (`morpheme`), and Free Translation (`free-translation`).
+        """,
+    "TUFS2023KOMSHI314 (UAM XML)":
+        """
+        An **Indonesian learner corpus annotated with UAM Corpus Tool XML format**.
+        <br><br>
+        Showcases **UAM Stand-off phrase tag inheritance** across nested error annotations (`yg0`, `nom0`, `vrbs`, `prep0`).
         """,
 }
 
