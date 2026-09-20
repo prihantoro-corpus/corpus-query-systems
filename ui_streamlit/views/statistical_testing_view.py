@@ -1179,7 +1179,7 @@ Processing the data revealed a **{strength.lower()} {direction.lower()} correlat
                     | `token_POS` | Token + POS combined | `light_V*` ('light' as verb) |
                     | `<TAG>` | XML tag search | `<PN>` (all person/place names) |
                     | `<TAG attr="val">` | XML tag with attributes | `<PN type="human">` (people only) |
-                    | `(word1\|word2)` | OR pattern (NEW) | `(small\|big\|little)` |
+                    | `(word1\\|word2)` | OR pattern (NEW) | `(small\\|big\\|little)` |
                     | `_POS1\|POS2` | Multiple POS tags | `_NN*\|VB*` (nouns OR verbs) |
                     """)
 
@@ -1770,9 +1770,9 @@ A **Chi-square test of independence** was performed to compare the relative freq
                                         
                                         st.markdown("#### Interpretation")
                                         if r["is_equivalent"]:
-                                            st.success(f"**Equivalence Supported:** A Two One-Sided Tests (TOST) procedure was conducted to determine whether the frequency of `{r['query']}` between '{tost_groups[0]}' ($M = {r['mean1']:.2f}$) and '{tost_groups[1]}' ($M = {r['mean2']:.2f}$) is practically equivalent within bounds of $\pm {tost_bound}$. The maximum p-value across both one-sided tests was significant ($p = {r['p_overall']:.4f}$), and the {int((1 - 2*alpha_level)*100)}% confidence interval for the mean difference [${r['ci_lower']:.3f}$, ${r['ci_upper']:.3f}$] fell entirely within the equivalence bounds. Therefore, we can conclude that the groups are statistically equivalent regarding this linguistic feature.")
+                                            st.success(f"**Equivalence Supported:** A Two One-Sided Tests (TOST) procedure was conducted to determine whether the frequency of `{r['query']}` between '{tost_groups[0]}' ($M = {r['mean1']:.2f}$) and '{tost_groups[1]}' ($M = {r['mean2']:.2f}$) is practically equivalent within bounds of $\\pm {tost_bound}$. The maximum p-value across both one-sided tests was significant ($p = {r['p_overall']:.4f}$), and the {int((1 - 2*alpha_level)*100)}% confidence interval for the mean difference [${r['ci_lower']:.3f}$, ${r['ci_upper']:.3f}$] fell entirely within the equivalence bounds. Therefore, we can conclude that the groups are statistically equivalent regarding this linguistic feature.")
                                         else:
-                                            st.error(f"**Equivalence Not Supported:** A Two One-Sided Tests (TOST) procedure was conducted to determine whether the frequency of `{r['query']}` between '{tost_groups[0]}' ($M = {r['mean1']:.2f}$) and '{tost_groups[1]}' ($M = {r['mean2']:.2f}$) is practically equivalent within bounds of $\pm {tost_bound}$. The maximum p-value across both one-sided tests was $p = {r['p_overall']:.4f}$, and the {int((1 - 2*alpha_level)*100)}% confidence interval for the mean difference [${r['ci_lower']:.3f}$, ${r['ci_upper']:.3f}$] exceeded the equivalence bounds. Therefore, we cannot claim that the groups are practically equivalent for this linguistic feature; they may exhibit meaningful differences.")
+                                            st.error(f"**Equivalence Not Supported:** A Two One-Sided Tests (TOST) procedure was conducted to determine whether the frequency of `{r['query']}` between '{tost_groups[0]}' ($M = {r['mean1']:.2f}$) and '{tost_groups[1]}' ($M = {r['mean2']:.2f}$) is practically equivalent within bounds of $\\pm {tost_bound}$. The maximum p-value across both one-sided tests was $p = {r['p_overall']:.4f}$, and the {int((1 - 2*alpha_level)*100)}% confidence interval for the mean difference [${r['ci_lower']:.3f}$, ${r['ci_upper']:.3f}$] exceeded the equivalence bounds. Therefore, we cannot claim that the groups are practically equivalent for this linguistic feature; they may exhibit meaningful differences.")
                                         
                                         import plotly.graph_objects as go
                                         x = np.linspace(r["mean_diff"] - 4*r["se"], r["mean_diff"] + 4*r["se"], 100)
