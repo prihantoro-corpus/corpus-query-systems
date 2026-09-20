@@ -47,15 +47,17 @@ def get_available_corpora():
             f.write("ERROR: CORPORA_DIR does not exist.\n")
             return {}
             
-        # Reverse map for easy lookup: filename -> nice name
-        filename_to_name = {v: k for k, v in KNOWN_CORPORA_MAP.items()}
+        # Reverse map for easy lookup (lowercase relative path -> display name)
+        filename_to_name = {v.lower(): k for k, v in KNOWN_CORPORA_MAP.items()}
+        known_base_names = {os.path.splitext(v.lower())[0]: k for k, v in KNOWN_CORPORA_MAP.items()}
         
         # Recursive walk
         count = 0
         for root, dirs, files in os.walk(CORPORA_DIR):
-            # Skip the raw BROWN FILES folder from showing up as Built-In
-            if "BROWN FILES" in dirs:
-                dirs.remove("BROWN FILES")
+            # Skip unwanted or nested duplicate folders
+            for skip_dir in ["BROWN FILES", "corpora", "__pycache__", ".git"]:
+                if skip_dir in dirs:
+                    dirs.remove(skip_dir)
                 
             for file_name in files:
                 if file_name.lower().endswith(('.xml', '.txt', '.csv', '.xlsx', '.db', '.duckdb', '.textgrid')):
@@ -63,22 +65,28 @@ def get_available_corpora():
                     
                     # Get relative path from CORPORA_DIR
                     rel_path = os.path.relpath(full_path, CORPORA_DIR)
-                    # Normalize path separators for comparison
                     rel_path_normalized = rel_path.replace('\\', '/')
+                    rel_path_lower = rel_path_normalized.lower()
                     
                     f.write(f"Found: {rel_path_normalized}\n")
                     
-                    # Check if this relative path matches a known corpus
-                    if rel_path_normalized in filename_to_name:
-                        display_name = filename_to_name[rel_path_normalized]
+                    # Check if this relative path matches a known corpus (case-insensitive)
+                    if rel_path_lower in filename_to_name:
+                        display_name = filename_to_name[rel_path_lower]
                         available[display_name] = rel_path
                     else:
-                        # Use relative path as display name for unknown files
-                        if root == CORPORA_DIR:
-                             available[file_name] = file_name
+                        rel_base = os.path.splitext(rel_path_lower)[0]
+                        if rel_base in known_base_names:
+                            # Skip legacy .db file if .xml pair is already mapped in KNOWN_CORPORA_MAP
+                            display_name = known_base_names[rel_base]
+                            if display_name not in available:
+                                available[display_name] = rel_path
                         else:
-                             # e.g. "indonesian/sample.txt"
-                             available[rel_path_normalized] = rel_path
+                            # Use relative path as display name for unknown files
+                            if root == CORPORA_DIR:
+                                available[file_name] = file_name
+                            else:
+                                available[rel_path_normalized] = rel_path
                     count += 1
         f.write(f"Total corpora found: {count}\n")
 
