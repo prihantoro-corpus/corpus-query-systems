@@ -38,7 +38,7 @@ def ensure_corpora_downloaded():
             repo_id="prihantoro-corpus/cortex-data",
             repo_type="dataset",
             local_dir="corpora",
-            allow_patterns=["*.db", "*.duckdb", "*.xml", "*.txt"]
+            allow_patterns=["*.db", "*.duckdb", "*.xml", "*.txt", "*.eaf", "*.TextGrid", "*.vrt"]
         )
         print("Corpora sync complete.")
     except Exception as e:
