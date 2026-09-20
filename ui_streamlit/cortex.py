@@ -32,6 +32,13 @@ if "SPACE_ID" not in os.environ and os.name != "nt":
 @st.cache_resource
 def ensure_corpora_downloaded():
     try:
+        # Check if we are local (Windows) and the corpora folder already has files
+        if os.name == "nt" and os.path.exists("corpora"):
+            # Check if there are any files in the corpora directory
+            if any(os.path.isfile(os.path.join(dp, f)) for dp, dn, filenames in os.walk("corpora") for f in filenames):
+                print("Local environment detected and corpora folder is not empty. Skipping Hugging Face download.")
+                return
+
         from huggingface_hub import snapshot_download
         print("Checking for required corpora from Hugging Face Datasets...")
         snapshot_download(
