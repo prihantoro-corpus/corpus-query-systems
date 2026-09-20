@@ -24,9 +24,7 @@ KNOWN_CORPORA_MAP = {
 }
 
 # Map of built-in files that should be downloaded if missing (e.g. from GitHub Releases)
-DOWNLOADABLE_ASSETS_MAP = {
-    "english/BAWE.db": "https://github.com/prihantoro-corpus/cortex/releases/download/v.1.1.1-data/BAWE.db"
-}
+DOWNLOADABLE_ASSETS_MAP = {}
 
 # Alias for backward compatibility
 BUILT_IN_CORPORA = KNOWN_CORPORA_MAP
