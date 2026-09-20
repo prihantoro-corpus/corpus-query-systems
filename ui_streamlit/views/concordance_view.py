@@ -1526,7 +1526,7 @@ def render_concordance_column(results, search_term, key_suffix=""):
              available_extra_cols = [k for k in all_keys if k not in standard_keys]
              
              fname = display_meta.get('filename', '').lower()
-             is_eaf_corpus = fname.endswith('.eaf') or fname.endswith('.textgrid')
+             is_eaf_corpus = fname.endswith(('.eaf', '.textgrid', '.wav'))
 
              if is_eaf_corpus:
                  active_extra_cols = []
