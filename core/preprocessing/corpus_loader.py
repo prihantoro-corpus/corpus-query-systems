@@ -27,6 +27,58 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     if not file_sources:
         return {'error': "No files provided"}
 
+    # --- SMART DUCKDB CACHING SYSTEM ---
+    import hashlib
+    try:
+        cache_components = [str(selected_format), str(explicit_lang_code)]
+        for fs in file_sources:
+            fname = getattr(fs, 'name', 'file')
+            fsize = 0
+            if hasattr(fs, 'size'):
+                fsize = fs.size
+            elif hasattr(fs, 'seek') and hasattr(fs, 'tell'):
+                try:
+                    curr_pos = fs.tell()
+                    fs.seek(0, 2)
+                    fsize = fs.tell()
+                    fs.seek(curr_pos)
+                except Exception:
+                    fsize = 0
+            cache_components.append(f"{fname}_{fsize}")
+            
+        cache_key = hashlib.md5("_".join(cache_components).encode('utf-8')).hexdigest()
+        cache_dir = os.path.join(tempfile.gettempdir(), "cortex_db_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        cached_db_path = os.path.join(cache_dir, f"corpus_cached_{cache_key}.db")
+        
+        if os.path.exists(cached_db_path):
+            if progress_callback:
+                progress_callback(1.0, "⚡ Fast loading from cached database...")
+            try:
+                with duckdb.connect(cached_db_path, read_only=True) as con:
+                    total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
+                    token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
+                    token_counts = {row[0]: row[1] for row in token_freqs}
+                    corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
+                    
+                from core.modules.overview import get_corpus_language, get_xml_structure
+                stored_lang = get_corpus_language(cached_db_path) or explicit_lang_code
+                stored_struct = get_xml_structure(cached_db_path) or {}
+                
+                print(f"⚡ CACHE HIT! Instantly loaded {cached_db_path}")
+                return {
+                    'db_path': cached_db_path,
+                    'stats': corpus_stats,
+                    'structure': stored_struct,
+                    'lang_code': stored_lang,
+                    'error': None,
+                    'warning': None
+                }
+            except Exception as ce:
+                print(f"Cache check warning: {ce}")
+    except Exception as e:
+        print(f"Cache init warning: {e}")
+
     all_df_data = []
     
     # Defaults
@@ -773,9 +825,18 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
     # Auto-load local tagset definitions if available
     # Iterate through input files to find a matching tagset (taking the first match)
     for fs in file_sources:
-        fname = fs.name
-        _load_local_tagset(db_path, fname)
-        # break # Maybe load all? Just one is probably safer to avoid mixing definitions blindly
+        fname = getattr(fs, 'name', '')
+        if fname:
+            _load_local_tagset(db_path, fname)
+
+    # Save a copy to cache for instant future loading
+    if 'cached_db_path' in locals() and cached_db_path:
+        try:
+            import shutil
+            shutil.copyfile(db_path, cached_db_path)
+            print(f"⚡ Saved compiled corpus to fast DB cache: {cached_db_path}")
+        except Exception as e:
+            print(f"Cache save warning: {e}")
     
     # Generate universal annotated corpus text for download
     annotated_lines = []
