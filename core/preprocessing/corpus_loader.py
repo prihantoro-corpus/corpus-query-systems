@@ -225,11 +225,13 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code, selected_for
                     elif stanza_lang_code and stanza_lang_code != "OTHER":
                         stanza_proc = tagging.tag_text_with_stanza
                     
+                    is_uam_format = 'uam' in str(selected_format).lower()
                     result = parse_xml_content_to_df(
                         cleaned_xml, 
                         stanza_processor=stanza_proc, 
                         lang_code=stanza_lang_code,
-                        preserve_inline_tags=True
+                        preserve_inline_tags=True,
+                        is_uam_xml=is_uam_format
                     )
                     if 'df_data' in result:
                         if explicit_lang_code == 'OTHER' and result.get('lang_code') not in ('XML', 'OTHER'):

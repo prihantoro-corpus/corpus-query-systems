@@ -1407,7 +1407,7 @@ def render_upload_ui():
             st.markdown("**Format**")
             fmt = st.radio(
                 "Format Select", 
-                ["Raw (Natural text)", "Tagged (Vertical)", ".eaf (ELAN Annotation)", ".wav", ".wav and .TextGrid"], 
+                ["Raw (Natural text)", "Tagged (Vertical)", "XML (Standard)", "XML (UAM Corpus Tool)", ".eaf (ELAN Annotation)", ".wav", ".wav and .TextGrid"], 
                 index=0,
                 horizontal=True,
                 key="upload_format_select",

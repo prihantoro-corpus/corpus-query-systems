@@ -60,22 +60,26 @@ def extract_xml_structure(xml_input, max_values=20):
     process_element(root)
     return structure, None
 
-def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combined_attrs, tag_counters, stanza_processor=None, lang_code='en'):
+def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combined_attrs, tag_counters, stanza_processor=None, lang_code='en', is_uam_xml=False, uam_active_phrase_tags=None, uam_id_map=None):
     """
     Recursively parse XML element, preserving inline tag context.
+    Supports UAM Corpus Tool XML mode with stand-off phrase tag inheritance.
     
     Args:
         element: XML element to parse
-        context_tags: Dict of current tag context (e.g., {'in_PN': True, 'PN_type': 'human'})
+        context_tags: Dict of current tag context
         tokens_data: List to append token records to
-        sent_id: Current sentence ID
-        combined_attrs: Segment-level attributes (from parent <text>, <s>, etc.)
-        tag_counters: Global dict tracking instance IDs {tag: count}
+        state: State dictionary tracking sentence ID
+        combined_attrs: Segment-level attributes
+        tag_counters: Global dict tracking instance IDs
         stanza_processor: Optional Stanza tagging function
-        lang_code: Language code for tagging
+        lang_code: Language code
+        is_uam_xml: Whether to apply UAM Corpus Tool stand-off phrase propagation
+        uam_active_phrase_tags: Active phrase-level tags inherited across sibling tokens
+        uam_id_map: Pre-indexed UAM segment attributes by ID
     """
-    # Create context for this element
     current_context = context_tags.copy()
+    current_uam_phrase = (uam_active_phrase_tags or {}).copy()
     tag_name = element.tag.lower()
     
     # Skip structural tags that shouldn't be tracked as inline context
@@ -100,9 +104,41 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combin
             attribs['tag'] = parts[3].replace('-', '_') if len(parts) >= 4 and parts[3].strip() else "none"
             attribs['features'] = feat_raw.replace(';', '_').replace('-', '_')
 
+            # In UAM XML mode, resolve parent segment attributes if referenced via parent='ID'
+            if is_uam_xml:
+                parent_id = attribs.get('parent')
+                if parent_id and uam_id_map and parent_id in uam_id_map:
+                    p_attribs = uam_id_map[parent_id]
+                    if 'features' in p_attribs:
+                        p_feat_raw = str(p_attribs['features'])
+                        p_parts = p_feat_raw.split(';')
+                        p_cat = p_parts[1].replace('-', '_') if len(p_parts) >= 2 and p_parts[1].strip() else "none"
+                        p_tag = p_parts[3].replace('-', '_') if len(p_parts) >= 4 and p_parts[3].strip() else "none"
+                        
+                        attribs['parent_tag'] = p_tag
+                        attribs['parent_category'] = p_cat
+                        current_context['segment_tag'] = p_tag
+                        current_context['segment_category'] = p_cat
+                        current_uam_phrase['segment_tag'] = p_tag
+                        current_uam_phrase['segment_category'] = p_cat
+
+                cat = attribs['category'].lower()
+                tag = attribs['tag'].lower()
+                if 'frasa' in cat or tag in ['nom0', 'vrbx', 'prep0', 'yg0', 'nom', 'vrb', 'prep']:
+                    for k, v in attribs.items():
+                        clean_v = str(v).replace(';', '_').strip()
+                        current_uam_phrase[f"{tag_name}_{k.lower()}"] = clean_v
+                    current_uam_phrase[f"in_{tag_name}"] = True
+
         for k, v in attribs.items():
             clean_v = str(v).replace(';', '_').strip()
             current_context[f"{tag_name}_{k.lower()}"] = clean_v
+
+    # Merge active UAM phrase tags into context if UAM XML mode is enabled
+    if is_uam_xml and current_uam_phrase:
+        for k, v in current_uam_phrase.items():
+            if k not in current_context:
+                current_context[k] = v
     
     # Helper to tokenize and add text with current context
     def tokenize_and_add(text, context):
@@ -226,7 +262,7 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combin
     
     # Process children recursively
     for child in element:
-        parse_xml_with_inline_tags(child, current_context, tokens_data, state, combined_attrs, tag_counters, stanza_processor, lang_code)
+        parse_xml_with_inline_tags(child, current_context, tokens_data, state, combined_attrs, tag_counters, stanza_processor, lang_code, is_uam_xml, current_uam_phrase, uam_id_map)
         
         # Process tail text (text AFTER child tag but inside parent)
         if child.tail:
@@ -242,7 +278,7 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combin
         first_token_row[f"in_{tag_name}_start"] = True
         first_token_row[f"{tag_name}_len"] = tag_inner_len
 
-def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processor=None, lang_code='en', preserve_inline_tags=True):
+def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processor=None, lang_code='en', preserve_inline_tags=True, is_uam_xml=False):
     """
     Parses XML content, extracts sentences and IDs, and tokenizes/verticalizes.
     Returns dict with keys: lang_code, df_data, sent_map, attributes, error
@@ -300,6 +336,13 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
     if preserve_inline_tags:
         tag_counters = {}
         state = {'global_sent_id': 1}
+        uam_id_map = {}
+        if is_uam_xml:
+            for elem in root.findall('.//segment'):
+                sid = elem.attrib.get('id')
+                if sid:
+                    uam_id_map[sid] = elem.attrib
+
         parse_xml_with_inline_tags(
             root, 
             {}, 
@@ -308,7 +351,10 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
             base_root_attrs,
             tag_counters,
             stanza_processor,
-            final_lang
+            final_lang,
+            is_uam_xml,
+            None,
+            uam_id_map
         )
         temp_sent_parts = {}
         for r in df_data:
