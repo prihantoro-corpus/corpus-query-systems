@@ -13,30 +13,7 @@ import sys
 
 # Redirect block removed to prevent infinite reload loops
 
-# Ensure corpora are downloaded from Hugging Face Dataset if running in Spaces or missing locally
-@st.cache_resource
-def ensure_corpora_downloaded():
-    try:
-        # Check if we are local (Windows) and the corpora folder already has files
-        if os.name == "nt" and os.path.exists("corpora"):
-            # Check if there are any files in the corpora directory
-            if any(os.path.isfile(os.path.join(dp, f)) for dp, dn, filenames in os.walk("corpora") for f in filenames):
-                print("Local environment detected and corpora folder is not empty. Skipping Hugging Face download.")
-                return
-
-        from huggingface_hub import snapshot_download
-        print("Checking for required corpora from Hugging Face Datasets...")
-        snapshot_download(
-            repo_id="prihantoro-corpus/cortex-data",
-            repo_type="dataset",
-            local_dir="corpora",
-            allow_patterns=["*.db", "*.duckdb", "*.xml", "*.txt", "*.eaf", "*.TextGrid", "*.vrt"]
-        )
-        print("Corpora sync complete.")
-    except Exception as e:
-        print(f"Warning: Failed to sync corpora from Hugging Face: {e}")
-
-ensure_corpora_downloaded()
+# Corpora sync has been disabled to prevent Streamlit WebSocket ping timeouts on Hugging Face Spaces.
 
 # Add project root to path so we can import from core/ui_streamlit
 # Add project root to path so we can import from core/ui_streamlit
