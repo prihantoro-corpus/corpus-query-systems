@@ -677,7 +677,7 @@ def render_keyword_results(res, key_suffix=""):
                         st.pyplot(fig)
                     st.dataframe(neg[['token', 'LL', 'LogRatio', 'Significance']], use_container_width=True, height=250, hide_index=True)
             with tab_s:
-                st.caption("ℹ️ **Comparable (Stable)**: Words with similar frequencies that fail to reach statistical significance (Log-Likelihood < 3.84, corresponding to $p \ge 0.05$).")
+                st.caption(r"ℹ️ **Comparable (Stable)**: Words with similar frequencies that fail to reach statistical significance (Log-Likelihood < 3.84, corresponding to $p \ge 0.05$).")
                 if not stable.empty:
                     fd = dict(zip(stable['token'], stable['freq_t']))
                     fig = generate_wordcloud(fd, title=f"Stable: {title_prefix}", width=400, height=200)
