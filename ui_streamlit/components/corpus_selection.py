@@ -68,7 +68,7 @@ def render_corpus_selection_main():
                 st.session_state['sidebar_source_selectbox'] = "Upload Files"
             source_type = st.radio(
                 "Source", 
-                ["Upload Files", "Built-in Corpora", "Online Corpus"],
+                ["Upload Files", "Online Corpus"],
                 key="sidebar_source_selectbox",
                 horizontal=True
             )
