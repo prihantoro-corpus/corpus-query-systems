@@ -65,6 +65,14 @@ def init_session_state():
         st.session_state['ollama_url'] = "http://127.0.0.1:11434/api/generate"
     if 'ai_model' not in st.session_state:
         st.session_state['ai_model'] = "phi3:latest" 
+    if 'sidebar_ai_model' not in st.session_state:
+        st.session_state['sidebar_ai_model'] = "phi3:latest"
+    if 'sidebar_ai_model_select' not in st.session_state:
+        st.session_state['sidebar_ai_model_select'] = "phi3:latest"
+    if 'main_corpus_type' not in st.session_state:
+        st.session_state['main_corpus_type'] = "Monolingual"
+    if 'main_comparison_mode' not in st.session_state:
+        st.session_state['main_comparison_mode'] = False
         
     # 8. XML Structure
     if 'xml_structure_data' not in st.session_state:
