@@ -29,6 +29,9 @@ spacy>=3.8.0
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz
 https://huggingface.co/spaces/prihantoro-corpus/cortex/resolve/main/libs/id_core_news_sm-1.0.0-py3-none-any.whl
 jieba
+mecab-python3
+unidic-lite
+
 youtube-transcript-api
 youtube-comment-downloader
 beautifulsoup4
