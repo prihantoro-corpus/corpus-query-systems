@@ -127,33 +127,34 @@ def render_concordance_view():
                             coll_filter_input = st.text_input("Filter by Collocate (NL/Regex)", help="e.g. 'noun' or 'very'", key="kwic_coll_rule")
                         with c_adv2:
                             sort_order = st.radio("Sort By", ["Random (Default)", "Node", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_rule")
-                            # Display Control Row 1
-                            c_r1_1, c_r1_2, c_r1_3 = st.columns(3)
-                            with c_r1_1:
-                                show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
-                            with c_r1_2:
-                                show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_rule")
-                            with c_r1_3:
-                                show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', False), key="kwic_show_meta_rule")
 
-                            # Display Control Row 2
-                            c_r2_1, c_r2_2, c_r2_3 = st.columns(3)
-                            with c_r2_1:
-                                hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_rule")
-                            with c_r2_2:
-                                focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_rule", help="Only preserve the exact sentence containing the keyword in context")
-                            with c_r2_3:
-                                show_duplicates = st.checkbox("Show duplicate concordance lines", value=get_state('kwic_show_duplicates', False), key="kwic_show_duplicates_rule", help="Show all occurrences even if they are identical sentences")
+                        # Display Control Row 1 (outside nested columns)
+                        c_r1_1, c_r1_2, c_r1_3 = st.columns(3)
+                        with c_r1_1:
+                            show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_rule")
+                        with c_r1_2:
+                            show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_rule")
+                        with c_r1_3:
+                            show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', False), key="kwic_show_meta_rule")
 
-                            set_state('kwic_show_pos', show_pos)
-                            set_state('kwic_show_lemma', show_lemma)
-                            set_state('kwic_show_meta', show_meta)
-                            set_state('kwic_hide_symbols', hide_symbols)
-                            set_state('kwic_focus_sentence', focus_sentence)
-                            set_state('kwic_show_duplicates', show_duplicates)
+                        # Display Control Row 2
+                        c_r2_1, c_r2_2, c_r2_3 = st.columns(3)
+                        with c_r2_1:
+                            hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_rule")
+                        with c_r2_2:
+                            focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_rule", help="Only preserve the exact sentence containing the keyword in context")
+                        with c_r2_3:
+                            show_duplicates = st.checkbox("Show duplicate concordance lines", value=get_state('kwic_show_duplicates', False), key="kwic_show_duplicates_rule", help="Show all occurrences even if they are identical sentences")
 
-                            wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
-                            set_state('kwic_wrap_mode', wrap_mode)
+                        set_state('kwic_show_pos', show_pos)
+                        set_state('kwic_show_lemma', show_lemma)
+                        set_state('kwic_show_meta', show_meta)
+                        set_state('kwic_hide_symbols', hide_symbols)
+                        set_state('kwic_focus_sentence', focus_sentence)
+                        set_state('kwic_show_duplicates', show_duplicates)
+
+                        wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_rule", help="Enable to prevent text overlap by wrapping content to multiple lines")
+                        set_state('kwic_wrap_mode', wrap_mode)
 
                     col_r1, col_r2 = st.columns([1, 4])
                     with col_r1:
@@ -307,39 +308,39 @@ def render_concordance_view():
                             coll_filter = st.text_input("Filter by Collocate (Regex)", help="Show only lines containing this pattern")
                         with c_adv2:
                             sort_order = st.radio("Sort By", ["Random (Default)", "Node", "Left Context", "Right Context"], horizontal=True, key="kwic_sort_standard")
-                            
-                            # Display Control Row 1
-                            c_st1, c_st2, c_st3 = st.columns(3)
-                            with c_st1:
-                                show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
-                            with c_st2:
-                                show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_cb")
-                            with c_st3:
-                                show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', False), key="kwic_show_meta_cb")
 
-                            # Display Control Row 2
-                            c_st4, c_st5, c_st6 = st.columns(3)
-                            with c_st4:
-                                hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_cb")
-                            with c_st5:
-                                focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_cb", help="Only preserve the exact sentence containing the keyword in context")
-                            with c_st6:
-                                show_duplicates = st.checkbox("Show duplicate concordance lines", value=get_state('kwic_show_duplicates', False), key="kwic_show_duplicates_cb", help="Show all occurrences even if they are identical sentences")
+                        # Display Control Row 1 (outside nested columns)
+                        c_st1, c_st2, c_st3 = st.columns(3)
+                        with c_st1:
+                            show_pos = st.checkbox("Show POS", value=get_state('kwic_show_pos', False), key="kwic_show_pos_cb")
+                        with c_st2:
+                            show_lemma = st.checkbox("Show Lemma", value=get_state('kwic_show_lemma', False), key="kwic_show_lemma_cb")
+                        with c_st3:
+                            show_meta = st.checkbox("Show Metadata", value=get_state('kwic_show_meta', False), key="kwic_show_meta_cb")
 
-                            set_state('kwic_show_pos', show_pos)
-                            set_state('kwic_show_lemma', show_lemma)
-                            set_state('kwic_show_meta', show_meta)
-                            set_state('kwic_hide_symbols', hide_symbols)
-                            set_state('kwic_focus_sentence', focus_sentence)
-                            set_state('kwic_show_duplicates', show_duplicates)
+                        # Display Control Row 2
+                        c_st4, c_st5, c_st6 = st.columns(3)
+                        with c_st4:
+                            hide_symbols = st.checkbox("Hide symbol token match", value=get_state('kwic_hide_symbols', False), key="kwic_hide_symbols_cb")
+                        with c_st5:
+                            focus_sentence = st.checkbox("Focus sentence", value=get_state('kwic_focus_sentence', False), key="kwic_focus_sentence_cb", help="Only preserve the exact sentence containing the keyword in context")
+                        with c_st6:
+                            show_duplicates = st.checkbox("Show duplicate concordance lines", value=get_state('kwic_show_duplicates', False), key="kwic_show_duplicates_cb", help="Show all occurrences even if they are identical sentences")
 
-                            c_wrap1, c_wrap2 = st.columns(2)
-                            with c_wrap1:
-                                wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
-                                set_state('kwic_wrap_mode', wrap_mode)
-                            with c_wrap2:
-                                sentence_display = st.checkbox("Sentence Display", value=get_state('kwic_sentence_display', False), key="kwic_sentence_display_cb", help="Display full sentence with aligned interlinear glossing block")
-                                set_state('kwic_sentence_display', sentence_display)
+                        set_state('kwic_show_pos', show_pos)
+                        set_state('kwic_show_lemma', show_lemma)
+                        set_state('kwic_show_meta', show_meta)
+                        set_state('kwic_hide_symbols', hide_symbols)
+                        set_state('kwic_focus_sentence', focus_sentence)
+                        set_state('kwic_show_duplicates', show_duplicates)
+
+                        c_wrap1, c_wrap2 = st.columns(2)
+                        with c_wrap1:
+                            wrap_mode = st.checkbox("Wrap Text", value=get_state('kwic_wrap_mode', True), key="kwic_wrap_mode_cb", help="Enable to prevent text overlap by wrapping content to multiple lines")
+                            set_state('kwic_wrap_mode', wrap_mode)
+                        with c_wrap2:
+                            sentence_display = st.checkbox("Sentence Display", value=get_state('kwic_sentence_display', False), key="kwic_sentence_display_cb", help="Display full sentence with aligned interlinear glossing block")
+                            set_state('kwic_sentence_display', sentence_display)
 
                         # ELAN Annotation Tiers Builder / Checkboxes
                         extra_cols = []
