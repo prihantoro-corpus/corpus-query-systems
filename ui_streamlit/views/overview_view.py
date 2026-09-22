@@ -268,25 +268,14 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
     if path and os.path.exists(path):
         st.write("") # spacing
         
-        col_db, col_txt, col_zip = st.columns(3)
+        st.info("Direct downloads of corpus databases are temporarily disabled for system stability. You can download databases by running CORTEX locally.")
+        
+        col_txt, col_zip = st.columns(2)
         xml_cache_key = f"xml_export_{key_suffix}"
         cached_xml = get_state(xml_cache_key)
 
         file_size_mb = os.path.getsize(path) / (1024 * 1024)
-        if file_size_mb > 45:
-            st.info(f"💾 Corpus database is large ({file_size_mb:.1f} MB). Direct download via the UI is disabled to ensure server stability. If you need to download this corpus, please deploy CORTEX locally.")
-        else:
-            with col_db:
-                with open(path, "rb") as db_file:
-                    st.download_button(
-                        label="📥 Download Database (.db)",
-                        data=db_file,
-                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_compiled.db",
-                        mime="application/octet-stream",
-                        help="Download this corpus as a pre-compiled DuckDB database.",
-                        use_container_width=True,
-                        key=f"dl_btn_{key_suffix}"
-                    )
+        
         with col_txt:
             if cached_xml:
                 dl_c1, dl_c2 = st.columns([4, 1])

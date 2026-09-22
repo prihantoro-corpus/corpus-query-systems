@@ -11,22 +11,7 @@ st.set_page_config(
 )
 import sys
 
-# Auto-redirect Streamlit Cloud traffic to Hugging Face Spaces
-if "SPACE_ID" not in os.environ and os.name != "nt":
-    st.warning("🚀 **CORTEX has moved!** For better performance and higher memory limits, this app is now hosted on Hugging Face Spaces.")
-    st.info("Redirecting you to the new home in 3 seconds... If nothing happens, [**click here**](https://huggingface.co/spaces/prihantoro-corpus/cortex)!")
-    import streamlit.components.v1 as components
-    components.html(
-        '''
-        <script>
-            setTimeout(function() {
-                window.parent.location.href = "https://huggingface.co/spaces/prihantoro-corpus/cortex";
-            }, 3000);
-        </script>
-        ''',
-        height=0
-    )
-    st.stop()
+# Redirect block removed to prevent infinite reload loops
 
 # Ensure corpora are downloaded from Hugging Face Dataset if running in Spaces or missing locally
 @st.cache_resource
@@ -104,16 +89,20 @@ init_session_state()
 
 # Handle Query Params for URL-based Routing (e.g. from Word Trend or N-Gram)
 if 'word' in st.query_params and 'time' in st.query_params and 'attr' in st.query_params:
-    ui_streamlit.state_manager.set_state('kwic_search_term', st.query_params['word'])
-    ui_streamlit.state_manager.set_state('concordance_forced_xml_where', f" AND CAST({st.query_params['attr']} AS VARCHAR) = '{st.query_params['time']}'")
-    ui_streamlit.state_manager.set_state('current_module', 'Concordance')
-    st.query_params.clear()
-    st.rerun()
+    if not st.session_state.get('query_routed_word'):
+        ui_streamlit.state_manager.set_state('kwic_search_term', st.query_params['word'])
+        ui_streamlit.state_manager.set_state('concordance_forced_xml_where', f" AND CAST({st.query_params['attr']} AS VARCHAR) = '{st.query_params['time']}'")
+        ui_streamlit.state_manager.set_state('current_module', 'Concordance')
+        st.session_state['query_routed_word'] = True
+        st.query_params.clear()
+        st.rerun()
 elif 'kwic_query' in st.query_params:
-    ui_streamlit.state_manager.set_state('kwic_search_term', st.query_params['kwic_query'])
-    ui_streamlit.state_manager.set_state('current_module', 'Concordance')
-    st.query_params.clear()
-    st.rerun()
+    if not st.session_state.get('query_routed_kwic'):
+        ui_streamlit.state_manager.set_state('kwic_search_term', st.query_params['kwic_query'])
+        ui_streamlit.state_manager.set_state('current_module', 'Concordance')
+        st.session_state['query_routed_kwic'] = True
+        st.query_params.clear()
+        st.rerun()
 
 # CSS Styling for Premium Dark Blue Theme (Matching Online Configuration)
 PRIMARY_COLOR = "#00ADB5"
