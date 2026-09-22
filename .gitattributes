@@ -14,3 +14,4 @@ config_output.txt filter=lfs diff=lfs merge=lfs -text
 *.exe filter=lfs diff=lfs merge=lfs -text
 *.tgz filter=lfs diff=lfs merge=lfs -text
 *tree-tagger filter=lfs diff=lfs merge=lfs -text
+corpora/english/BAWE.XML filter=lfs diff=lfs merge=lfs -text
