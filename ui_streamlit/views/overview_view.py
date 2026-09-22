@@ -1184,7 +1184,7 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                 SELECT 
                     filename, 
                     COUNT(*) as Tokens,
-                    CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
+                    CAST(approx_count_distinct(_token_low) AS FLOAT) / COUNT(*) as TTR
                 FROM corpus 
                 GROUP BY filename 
                 ORDER BY Tokens DESC
@@ -1266,7 +1266,7 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                             SELECT 
                                 tag_val as Value,
                                 COUNT(*) as Tokens,
-                                CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
+                                CAST(approx_count_distinct(_token_low) AS FLOAT) / COUNT(*) as TTR
                             FROM (
                                 SELECT 
                                     _token_low,
@@ -1318,7 +1318,7 @@ def _render_subcorpus_stats(db_path, key_suffix=""):
                         SELECT 
                             "{attr}" as Value, 
                             COUNT(*) as Tokens,
-                            CAST(COUNT(DISTINCT _token_low) AS FLOAT) / COUNT(*) as TTR
+                            CAST(approx_count_distinct(_token_low) AS FLOAT) / COUNT(*) as TTR
                         FROM corpus 
                         WHERE "{attr}" IS NOT NULL 
                         GROUP BY "{attr}" 

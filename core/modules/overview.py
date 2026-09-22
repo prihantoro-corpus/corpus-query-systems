@@ -28,7 +28,7 @@ def get_restricted_stats(db_path, xml_where_clause="", xml_params=[]):
         total_tokens = con.execute(sql_total, xml_params).fetchone()[0]
         
         # unique_types
-        sql_types = f"SELECT count(DISTINCT _token_low) FROM corpus WHERE 1=1 {xml_where_clause}"
+        sql_types = f"SELECT approx_count_distinct(_token_low) FROM corpus WHERE 1=1 {xml_where_clause}"
         unique_types = con.execute(sql_types, xml_params).fetchone()[0]
         
         ttr = (unique_types / total_tokens) if total_tokens > 0 else 0
@@ -62,7 +62,8 @@ def calculate_corpus_statistics(corpus_stats, db_path=None):
         try:
             con = duckdb.connect(db_path, read_only=True)
             try:
-                res = con.execute("SELECT count(*), count(DISTINCT _token_low) FROM corpus").fetchone()
+                con.execute("PRAGMA memory_limit='2GB'") # Prevent OOM on HF
+                res = con.execute("SELECT count(*), approx_count_distinct(_token_low) FROM corpus").fetchone()
                 total_tokens = res[0]
                 type_count = res[1]
             finally:

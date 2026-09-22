@@ -628,7 +628,7 @@ def get_document_metric_vector(
         
         if metric == 'ttr':
             sql = f"""
-                SELECT {group_by} as group_id, CAST(COUNT(DISTINCT _token_low) AS FLOAT) / NULLIF(COUNT(*), 0) as val
+                SELECT {group_by} as group_id, CAST(approx_count_distinct(_token_low) AS FLOAT) / NULLIF(COUNT(*), 0) as val
                 FROM corpus
                 WHERE {where_clause}
                 GROUP BY {group_by}
@@ -642,7 +642,7 @@ def get_document_metric_vector(
             """
         elif metric == 'type_count':
              sql = f"""
-                SELECT {group_by} as group_id, COUNT(DISTINCT _token_low) as val
+                SELECT {group_by} as group_id, approx_count_distinct(_token_low) as val
                 FROM corpus
                 WHERE {where_clause}
                 GROUP BY {group_by}
