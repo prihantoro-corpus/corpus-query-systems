@@ -85,6 +85,18 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combin
     # Skip structural tags that shouldn't be tracked as inline context
     structural_tags = {'corpus', 'text', 's', 'sent', 'u', 'utterance', 'p', 'para', 'ab', 'div', 'w', 'document', 'body', 'header', 'article', 'essay'}
     
+    # For structural tags WITH attributes (e.g. <s id="1" title="...">),
+    # propagate their attributes as segment-level metadata into combined_attrs
+    # so they appear as columns in DuckDB and enable Restricted Search.
+    excluded_meta_attrs = {'n', 'num', 'lang'}
+    if tag_name in structural_tags and element.attrib:
+        for k, v in element.attrib.items():
+            clean_k = k.lower()
+            if clean_k in excluded_meta_attrs:
+                continue
+            col_name = 's_id' if clean_k == 'id' and tag_name == 's' else clean_k
+            combined_attrs[col_name] = str(v).strip()
+
     if tag_name not in structural_tags:
         # Add boolean flag for tag presence (normalize tag name)
         current_context[f"in_{tag_name}"] = True
@@ -140,6 +152,7 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combin
             if k not in current_context:
                 current_context[k] = v
     
+
     # Helper to tokenize and add text with current context
     def tokenize_and_add(text, context):
         if not text or not text.strip():
