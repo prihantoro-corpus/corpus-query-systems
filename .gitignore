@@ -28,7 +28,13 @@ corpora/**/*.zip
 !corpora/indonesian/ID-BPPT-tagged.duckdb
 !corpora/indonesian/KOSLAT-full.duckdb
 
-# Exclude giant corpora explicitly
+# Misplaced / Junk files
+corpora/ai_service.py
+test_extract/
+dummy.duckdb
+ui_streamlit/corpora/
+convert_corpora.py
+check_bawe.py
 corpora/english/bnc.duckdb
 corpora/english/BNC\ Spoken.duckdb
 

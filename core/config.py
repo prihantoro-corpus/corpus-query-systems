@@ -8,10 +8,10 @@ TAGSET_DIR = os.path.join(_ROOT_DIR, 'tagset')
 # Metadata mapping for known corpora (Display Name -> Relative Path from CORPORA_DIR)
 KNOWN_CORPORA_MAP = {
     "XML Tag Demo (EN)": "english/xml_tag_demo.xml",
-    "ID-BPPT (XML Tagged)": "indonesian/ID-BPPT-tagged.xml",
-    "EN-BPPT (XML Tagged)": "english/EN-BPPT-tagged.xml",
-    "BROWN": "english/BrownCorpus.xml",
-    "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.xml",
+    "ID-BPPT (XML Tagged)": "indonesian/ID-BPPT-tagged.duckdb",
+    "EN-BPPT (XML Tagged)": "english/EN-BPPT-tagged.duckdb",
+    "BROWN": "english/BrownCorpus.duckdb",
+    "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.duckdb",
     "BAWE sample (English)": "english/BAWE.duckdb",
     "JP-DICO-JALF": "japanese/JP-DICO-JALF.xml",
     "ICNALE Written English": "english/ICNALE_WE.xml",
