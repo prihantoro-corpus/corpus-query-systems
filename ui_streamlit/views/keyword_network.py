@@ -267,7 +267,7 @@ def _build_and_render_network(res, data_dict, kw_type, top_n, include_overall, s
             bgcolor="#0f172a", 
             font_color="#ffffff", 
             notebook=False,
-            cdn_resources="in_line"
+            cdn_resources="remote"
         )
         net.from_nx(G)
         

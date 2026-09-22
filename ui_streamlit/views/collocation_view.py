@@ -1762,7 +1762,7 @@ def render_collocation_network(nodes, shared_df, key_suffix=""):
             bgcolor="#0f172a", 
             font_color="#ffffff", 
             notebook=False,
-            cdn_resources="in_line"
+            cdn_resources="remote"
         )
         net.from_nx(G)
         

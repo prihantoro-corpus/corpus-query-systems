@@ -94,7 +94,7 @@ def create_pyvis_graph(target_word, coll_df, measure_col="LL", measure_name="LL"
     except ImportError:
         return ""
 
-    net = Network(height="550px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='in_line')
+    net = Network(height="550px", width="100%", bgcolor="#222222", font_color="white", cdn_resources='remote')
     if coll_df.empty: return ""
     max_score = coll_df[measure_col].max()
     min_score = coll_df[measure_col].min()

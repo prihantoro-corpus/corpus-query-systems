@@ -248,7 +248,7 @@ def render_concordance_network(cluster_results, has_coll_filter=False, key_suffi
             bgcolor="#0f172a", 
             font_color="#ffffff", 
             notebook=False,
-            cdn_resources="in_line"
+            cdn_resources="remote"
         )
         net.from_nx(G)
         
