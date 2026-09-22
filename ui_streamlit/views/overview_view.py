@@ -315,26 +315,29 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
                         st.rerun()
 
         with col_zip:
-            import zipfile
-            import io
-            clean_name = name.replace(' ', '_').replace('.', '_')
-            zip_buf = io.BytesIO()
-            with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                if os.path.exists(path):
-                    with open(path, 'rb') as f:
-                        zf.writestr(f"{clean_name}.db", f.read())
-                if cached_xml:
-                    zf.writestr(f"{clean_name}_annotated.txt", cached_xml.encode('utf-8'))
-            
-            st.download_button(
-                label="📦 Download Package (.zip)",
-                data=zip_buf.getvalue(),
-                file_name=f"{clean_name}_corpus_package.zip",
-                mime="application/zip",
-                help="Download a ZIP file containing the database (.db) and annotated text file (.txt).",
-                use_container_width=True,
-                key=f"dl_zip_btn_{key_suffix}"
-            )
+            if file_size_mb <= 45:
+                import zipfile
+                import io
+                clean_name = name.replace(' ', '_').replace('.', '_')
+                zip_buf = io.BytesIO()
+                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    if os.path.exists(path):
+                        with open(path, 'rb') as f:
+                            zf.writestr(f"{clean_name}.db", f.read())
+                    if cached_xml:
+                        zf.writestr(f"{clean_name}_annotated.txt", cached_xml.encode('utf-8'))
+                
+                st.download_button(
+                    label="📦 Download Package (.zip)",
+                    data=zip_buf.getvalue(),
+                    file_name=f"{clean_name}_corpus_package.zip",
+                    mime="application/zip",
+                    help="Download a ZIP file containing the database (.db) and annotated text file (.txt).",
+                    use_container_width=True,
+                    key=f"dl_zip_btn_{key_suffix}"
+                )
+            else:
+                st.info("ZIP download disabled (size limit).")
             
     # --- Corpus Narration ---
     _render_corpus_narration(name, path, display_stats, structure, condensed=True)
