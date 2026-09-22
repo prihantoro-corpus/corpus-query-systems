@@ -145,17 +145,17 @@ BUILT_IN_CORPUS_DETAILS = {
         """
         The Brown Corpus, the first million-word electronic corpus of English. It is provided in a **TreeTagger-style XML format** containing token, POS, and lemma.
         <br><br>
-        **Source/Citation:** Francis, W. N., & Kučera, H. (1979). **Brown Corpus Manual: Standard Corpus of Present-Day Edited American English for Use with Digital Computers.** Brown University.
+        **Source/Citation:** Francis, W. N., & Kucera, H. (1979). **Brown Corpus Manual: Standard Corpus of Present-Day Edited American English for Use with Digital Computers.** Brown University.
         """,
     "KOSLAT-ID (XML Tagged)":
         """
         KOSLAT-ID v.1.0 is the first narrative-annotated corpus of reviews of healthcare facilities in Indonesia. It is provided in a **tagged XML format** (token, POS, lemma).
         <br><br>
-        **Source/Citation:** Prihantoro., Yuliawati, S., Ekawati, D., & Rachmat, A. (2026-in press). **KOSLAT-ID v.1.0: The first narrative-annotated corpus of reviews of healthcare facilities in Indonesia.** [Corpora, 21(1), xx–xx.](https://www.prihantoro.com)
+        **Source/Citation:** Prihantoro., Yuliawati, S., Ekawati, D., & Rachmat, A. (2026-in press). **KOSLAT-ID v.1.0: The first narrative-annotated corpus of reviews of healthcare facilities in Indonesia.** [Corpora, 21(1), xx-xx.](https://www.prihantoro.com)
         """,
     "BAWE sample (English)":
         """
-        The **British Academic Written English (BAWE)** corpus contains proficient undergraduate and master’s level writing in various disciplines. This sample includes academic essays and reports.
+        The **British Academic Written English (BAWE)** corpus contains proficient undergraduate and master's level writing in various disciplines. This sample includes academic essays and reports.
         <br><br>
         **Source:** Nesi, H., Gardner, S., Thompson, P. & Wickens, P. (2008). **British Academic Written English corpus.** Coventry University.
         """,
