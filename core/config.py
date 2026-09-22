@@ -12,7 +12,7 @@ KNOWN_CORPORA_MAP = {
     "EN-BPPT (XML Tagged)": "english/EN-BPPT-tagged.xml",
     "BROWN": "english/BrownCorpus.xml",
     "KOSLAT-ID (XML Tagged)": "indonesian/KOSLAT-full.xml",
-    "BAWE sample (English)": "english/BAWE.xml",
+    "BAWE sample (English)": "english/BAWE.duckdb",
     "JP-DICO-JALF": "japanese/JP-DICO-JALF.xml",
     "ICNALE Written English": "english/ICNALE_WE.xml",
     "ICNALE Spoken Monologue": "english/sm_icnale.xml",
