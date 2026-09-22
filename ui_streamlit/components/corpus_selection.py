@@ -77,6 +77,3 @@ def render_corpus_selection_main():
         if source_type == "Online Corpus":
             online_mode = st.radio("Builder Mode", ["YouTube", "Mastodon", "BlueSky", "Link Collection", "Keyword Search", "Detik.com"], horizontal=True, key="main_online_builder_mode")
             set_state('online_builder_mode', online_mode)
-        elif source_type == "Built-in Corpora":
-            from ui_streamlit.views.overview_view import render_built_in_corpora_selection_ui
-            render_built_in_corpora_selection_ui()
