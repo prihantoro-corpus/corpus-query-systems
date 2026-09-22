@@ -137,6 +137,87 @@ import tempfile
 import os
 import platform
 
+# ── MeCab (Japanese) ──────────────────────────────────────────────────────────
+_MECAB_TAGGER = None
+
+def _get_mecab():
+    """Lazy-load MeCab tagger, returns None if not installed."""
+    global _MECAB_TAGGER
+    if _MECAB_TAGGER is not None:
+        return _MECAB_TAGGER
+    try:
+        import MeCab
+        import unidic_lite
+        dicdir = unidic_lite.DICDIR
+        _MECAB_TAGGER = MeCab.Tagger(f'-d {dicdir}')
+    except Exception:
+        try:
+            import MeCab
+            _MECAB_TAGGER = MeCab.Tagger('')
+        except Exception:
+            _MECAB_TAGGER = None
+    return _MECAB_TAGGER
+
+def tag_text_with_mecab(text):
+    """
+    Tokenize and POS-tag Japanese text with MeCab + UniDic.
+    Returns (list of dicts, error_msg).
+    Each dict: {token, pos, lemma, sent_id, ent_type}
+    """
+    tagger = _get_mecab()
+    if tagger is None:
+        return None, "MeCab not available"
+    try:
+        import re
+        parsed = tagger.parse(text)
+        results = []
+        sent_id = 1
+        sentence_enders = {'。', '！', '？', '!', '?', '.'}
+        for line in parsed.split('\n'):
+            if line == 'EOS' or not line:
+                continue
+            if '\t' in line:
+                surface, features = line.split('\t', 1)
+            elif ',' in line and line.count('\t') == 0:
+                # fallback: mecab may use different delimiter
+                continue
+            else:
+                continue
+            if not surface or surface in ('EOS',):
+                continue
+            parts = features.split(',')
+            pos = parts[0] if parts else 'TAG'
+            # UniDic lemma is at index 10, IPA dict at index 6
+            lemma = parts[10] if len(parts) > 10 and parts[10] not in ('*', '') \
+                    else parts[6] if len(parts) > 6 and parts[6] not in ('*', '') \
+                    else surface
+            results.append({
+                'token': surface,
+                'pos': pos,
+                'lemma': lemma,
+                'sent_id': sent_id,
+                'ent_type': ''
+            })
+            if surface in sentence_enders:
+                sent_id += 1
+        return results, None
+    except Exception as e:
+        return None, str(e)
+
+def tokenize_japanese_with_mecab(text):
+    """
+    Tokenize Japanese text into sentences of tokens using MeCab.
+    Returns list of list of str, or None on failure.
+    """
+    results, err = tag_text_with_mecab(text)
+    if results is None:
+        return None
+    sentences = {}
+    for r in results:
+        sid = r['sent_id']
+        sentences.setdefault(sid, []).append(r['token'])
+    return list(sentences.values()) if sentences else None
+
 # Map stanza lang codes to treetagger parameter files
 TREETAGGER_LANG_MAP = {
     'id': 'indonesian/indonesian_v311225.par',
@@ -357,7 +438,17 @@ def tag_text_with_stanza(text, lang_code, progress_callback=None, base_progress=
             if progress_callback: progress_callback(base_progress, f"Tagging with Custom Tagger failed.")
             print(f"Failed to tag with custom model: {e}", flush=True)
 
-    # 1. Try TreeTagger (Prioritized as requested)
+    # 1a. MeCab — used exclusively for Japanese
+    if lang_code == 'ja':
+        if progress_callback: progress_callback(base_progress, "Tagging Japanese with MeCab...")
+        mecab_results, mecab_err = tag_text_with_mecab(text)
+        if mecab_results is not None:
+            if progress_callback: progress_callback(base_progress, "Tagged with MeCab successfully!")
+            return mecab_results, None
+        if progress_callback: progress_callback(base_progress, f"MeCab failed: {mecab_err}. Trying SpaCy...")
+        print(f"MeCab Warning: {mecab_err}", flush=True)
+
+    # 1b. Try TreeTagger (Prioritized as requested)
     if progress_callback: progress_callback(base_progress, f"Tagging with TreeTagger...")
     tt_results, tt_err = tag_text_with_treetagger(text, lang_code)
     if tt_err:
@@ -518,6 +609,11 @@ def tokenize_text_only(text, lang_code=None, fast=False):
         zh_tokens = tokenize_chinese_text(text)
         if zh_tokens is not None:
             return zh_tokens
+
+    if lang_code == 'ja':
+        ja_tokens = tokenize_japanese_with_mecab(text)
+        if ja_tokens is not None:
+            return ja_tokens
 
     if fast or not lang_code or lang_code == "OTHER":
         import re
