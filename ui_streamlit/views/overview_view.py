@@ -272,7 +272,11 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
         xml_cache_key = f"xml_export_{key_suffix}"
         cached_xml = get_state(xml_cache_key)
 
-        with col_db:
+        file_size_mb = os.path.getsize(path) / (1024 * 1024)
+        if file_size_mb > 45:
+            st.info(f"💾 Corpus database is large ({file_size_mb:.1f} MB). Direct download via the UI is disabled to ensure server stability. If you need to download this corpus, please deploy CORTEX locally.")
+        else:
+            with col_db:
             with open(path, "rb") as db_file:
                 st.download_button(
                     label="📥 Download Database (.db)",
