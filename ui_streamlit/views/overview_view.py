@@ -270,63 +270,36 @@ def render_overview_stats(name, path, stats, structure, error, key_suffix=""):
         
         st.info("Direct downloads of corpus databases are temporarily disabled for system stability. You can download databases by running CORTEX locally.")
         
-        col_txt, col_zip = st.columns(2)
         xml_cache_key = f"xml_export_{key_suffix}"
         cached_xml = get_state(xml_cache_key)
 
         file_size_mb = os.path.getsize(path) / (1024 * 1024)
         
-        with col_txt:
-            if cached_xml:
-                dl_c1, dl_c2 = st.columns([4, 1])
-                with dl_c1:
-                    st.download_button(
-                        label="📥 Download Annotated (.txt)",
-                        data=cached_xml,
-                        file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
-                        mime="text/plain",
-                        help="Download the raw tagged corpus text including all annotations (POS, Lemma, etc.).",
-                        use_container_width=True,
-                        key=f"dl_txt_btn_{key_suffix}"
-                    )
-                with dl_c2:
-                    if st.button("🔄", key=f"regen_xml_btn_{key_suffix}", help="Regenerate annotated corpus from updated database"):
-                        set_state(xml_cache_key, None)
-                        st.rerun()
-            else:
-                if st.button("⚙️ Generate Annotated (.txt)", key=f"gen_xml_btn_{key_suffix}", use_container_width=True, help="Compiles the current database into a downloadable vertical XML text file."):
-                    with st.spinner("Compiling database into vertical text format..."):
-                        import sys
-                        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-                        from core.preprocessing.export_service import export_db_to_vertical_xml
-                        xml_data = export_db_to_vertical_xml(path)
-                        set_state(xml_cache_key, xml_data)
-                        st.rerun()
-
-        with col_zip:
-            if file_size_mb <= 45:
-                import zipfile
-                import io
-                clean_name = name.replace(' ', '_').replace('.', '_')
-                zip_buf = io.BytesIO()
-                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    if os.path.exists(path):
-                        with open(path, 'rb') as f:
-                            zf.writestr(f"{clean_name}.db", f.read())
-                    if cached_xml:
-                        zf.writestr(f"{clean_name}_annotated.txt", cached_xml.encode('utf-8'))
-                
+        if cached_xml:
+            dl_c1, dl_c2 = st.columns([4, 1])
+            with dl_c1:
                 st.download_button(
-                    label="📦 Download Package (.zip)",
-                    data=zip_buf.getvalue(),
-                    file_name=f"{clean_name}_corpus_package.zip",
-                    mime="application/zip",
-                    help="Download a ZIP file containing the database (.db) and annotated text file (.txt).",
+                    label="📥 Download Annotated (.txt)",
+                    data=cached_xml,
+                    file_name=f"{name.replace(' ', '_').replace('.', '_')}_annotated.txt",
+                    mime="text/plain",
+                    help="Download the raw tagged corpus text including all annotations (POS, Lemma, etc.).",
                     use_container_width=True,
-                    key=f"dl_zip_btn_{key_suffix}"
+                    key=f"dl_txt_btn_{key_suffix}"
                 )
-            else:
-                st.info("ZIP download disabled (size limit).")
+            with dl_c2:
+                if st.button("🔄", key=f"regen_xml_btn_{key_suffix}", help="Regenerate annotated corpus from updated database"):
+                    set_state(xml_cache_key, None)
+                    st.rerun()
+        else:
+            if st.button("⚙️ Generate Annotated (.txt)", key=f"gen_xml_btn_{key_suffix}", use_container_width=True, help="Compiles the current database into a downloadable vertical XML text file."):
+                with st.spinner("Compiling database into vertical text format..."):
+                    import sys
+                    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+                    from core.preprocessing.export_service import export_db_to_vertical_xml
+                    xml_data = export_db_to_vertical_xml(path)
+                    set_state(xml_cache_key, xml_data)
+                    st.rerun()
             
     # --- Corpus Narration ---
     _render_corpus_narration(name, path, display_stats, structure, condensed=True)
