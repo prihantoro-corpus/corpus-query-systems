@@ -110,10 +110,13 @@ def get_available_corpora():
                     count += 1
         f.write(f"Total corpora found: {count}\n")
 
-        # Ensure ALL known corpora are listed so they can be loaded/downloaded on-demand
+        # Ensure ONLY available local files are listed
         for display_name, rel_path in KNOWN_CORPORA_MAP.items():
             if display_name not in available:
-                available[display_name] = rel_path
+                local_fpath = os.path.join(CORPORA_DIR, rel_path)
+                zip_fpath = local_fpath.rsplit('.', 1)[0] + '.zip'
+                if os.path.exists(local_fpath) or os.path.exists(zip_fpath):
+                    available[display_name] = rel_path
 
     return available
 

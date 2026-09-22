@@ -1087,6 +1087,15 @@ def load_built_in_corpus(name, url, progress_callback=None):
                     progress_callback(0.05, f"Downloading database for {corpus_name}...")
                 download_file(download_url, local_path, progress_callback)
                 
+            # Check if there is a .zip file counterpart if local_path doesn't exist directly
+            if not os.path.exists(local_path) and os.path.exists(local_path.rsplit('.', 1)[0] + '.zip'):
+                zip_path = local_path.rsplit('.', 1)[0] + '.zip'
+                import zipfile
+                if progress_callback:
+                    progress_callback(0.05 + (idx/len(names))*0.1, f"Extracting {corpus_name} archive...")
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(os.path.dirname(local_path))
+                    
             use_local = os.path.exists(local_path)
             
             # Detect language from folder name in the path

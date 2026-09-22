@@ -1,0 +1,207 @@
+<text filename="corpora\indonesian\sample_elan_30_sentences.eaf">
+<s id="1" ort_d="di-sayang" phn_f="di.sa.jaŋ" phn_d="di-sa.jaŋ" gloss="PSV-love" trans="loved by him/her." sex="male" location="city" first_language="indonesian" word_tokens="dia">
+disayang	TAG	disayang	
+dia	TAG	dia	
+</s>
+<s id="2" ort_d="Saya" phn_f="sa.ja" phn_d="sa.ja" gloss="1SG" trans="I went to the market yesterday." sex="female" location="city" first_language="indonesian" word_tokens="kemarin">
+Saya	TAG	saya	
+pergi	TAG	pergi	
+ke	TAG	ke	
+pasar	TAG	pasar	
+kemarin	TAG	kemarin	
+</s>
+<s id="3" ort_d="Dia" phn_f="di.a" phn_d="di.a" gloss="3SG" trans="He bought fresh fish." sex="male" location="city" first_language="indonesian" word_tokens="segar">
+Dia	TAG	dia	
+membeli	TAG	membeli	
+ikan	TAG	ikan	
+segar	TAG	segar	
+</s>
+<s id="4" ort_d="Mereka" phn_f="mə.re.ka" phn_d="mə.re.ka" gloss="3PL" trans="They live in a small village." sex="female" location="city" first_language="indonesian" word_tokens="kecil">
+Mereka	TAG	mereka	
+tinggal	TAG	tinggal	
+di	TAG	di	
+desa	TAG	desa	
+kecil	TAG	kecil	
+</s>
+<s id="5" ort_d="Anak-anak" phn_f="a.nak.a.nak" phn_d="a.nak.a.nak" gloss="child-PL" trans="The children are playing soccer." sex="male" location="city" first_language="indonesian" word_tokens="bola">
+Anak-anak	TAG	anak-anak	
+sedang	TAG	sedang	
+bermain	TAG	bermain	
+bola	TAG	bola	
+</s>
+<s id="6" ort_d="Ibu" phn_f="i.bu" phn_d="i.bu" gloss="mother" trans="Mother is cooking fried rice." sex="female" location="city" first_language="indonesian" word_tokens="goreng">
+Ibu	TAG	ibu	
+memasak	TAG	memasak	
+nasi	TAG	nasi	
+goreng	TAG	goreng	
+</s>
+<s id="7" ort_d="Bapak" phn_f="ba.pak" phn_d="ba.pak" gloss="father" trans="Father is reading the morning newspaper." sex="male" location="city" first_language="indonesian" word_tokens="pagi">
+Bapak	TAG	bapak	
+membaca	TAG	membaca	
+koran	TAG	koran	
+pagi	TAG	pagi	
+</s>
+<s id="8" ort_d="Pohon" phn_f="po.hon" phn_d="po.hon" gloss="tree" trans="That big tree collapsed." sex="female" location="city" first_language="indonesian" word_tokens="roboh">
+Pohon	TAG	pohon	
+besar	TAG	besar	
+itu	TAG	itu	
+roboh	TAG	roboh	
+</s>
+<s id="9" ort_d="Burung" phn_f="bu.ruŋ" phn_d="bu.ruŋ" gloss="bird" trans="Birds are chirping on the branch." sex="male" location="city" first_language="indonesian" word_tokens="dahan">
+Burung	TAG	burung	
+berkicau	TAG	berkicau	
+di	TAG	di	
+atas	TAG	atas	
+dahan	TAG	dahan	
+</s>
+<s id="10" ort_d="Kami" phn_f="ka.mi" phn_d="ka.mi" gloss="1PL.EXCL" trans="We drank hot tea." sex="female" location="city" first_language="indonesian" word_tokens="panas">
+Kami	TAG	kami	
+minum	TAG	minum	
+teh	TAG	teh	
+panas	TAG	panas	
+</s>
+<s id="11" ort_d="Hujan" phn_f="hu.dʒan" phn_d="hu.dʒan" gloss="rain" trans="Heavy rain fell last night." sex="male" location="city" first_language="indonesian" word_tokens="malam">
+Hujan	TAG	hujan	
+deras	TAG	deras	
+turun	TAG	turun	
+tadi	TAG	tadi	
+malam	TAG	malam	
+</s>
+<s id="12" ort_d="Kakak" phn_f="ka.kak" phn_d="ka.kak" gloss="sibling" trans="Older sibling is learning a foreign language." sex="female" location="city" first_language="indonesian" word_tokens="asing">
+Kakak	TAG	kakak	
+belajar	TAG	belajar	
+bahasa	TAG	bahasa	
+asing	TAG	asing	
+</s>
+<s id="13" ort_d="Kucing" phn_f="ku.tʃiŋ" phn_d="ku.tʃiŋ" gloss="cat" trans="That cat is sleeping on the chair." sex="male" location="city" first_language="indonesian" word_tokens="kursi">
+Kucing	TAG	kucing	
+itu	TAG	itu	
+tidur	TAG	tidur	
+di	TAG	di	
+kursi	TAG	kursi	
+</s>
+<s id="14" ort_d="Anjing" phn_f="an.dʒiŋ" phn_d="an.dʒiŋ" gloss="dog" trans="The dog barked at the stranger." sex="female" location="city" first_language="indonesian" word_tokens="asing">
+Anjing	TAG	anjing	
+menggonggong	TAG	menggonggong	
+pada	TAG	pada	
+orang	TAG	orang	
+asing	TAG	asing	
+</s>
+<s id="15" ort_d="Matahari" phn_f="ma.ta.ha.ri" phn_d="ma.ta.ha.ri" gloss="sun" trans="The sun rises in the east." sex="male" location="city" first_language="indonesian" word_tokens="timur">
+Matahari	TAG	matahari	
+terbit	TAG	terbit	
+di	TAG	di	
+sebelah	TAG	sebelah	
+timur	TAG	timur	
+</s>
+<s id="16" ort_d="Angin" phn_f="a.ŋin" phn_d="a.ŋin" gloss="wind" trans="The wind is blowing very hard." sex="female" location="rural" first_language="indonesian" word_tokens="kencang">
+Angin	TAG	angin	
+bertiup	TAG	bertiup	
+sangat	TAG	sangat	
+kencang	TAG	kencang	
+</s>
+<s id="17" ort_d="Nelayan" phn_f="nə.la.jan" phn_d="nə.la.jan" gloss="fisherman" trans="Fishermen go to sea at night." sex="male" location="rural" first_language="indonesian" word_tokens="hari">
+Nelayan	TAG	nelayan	
+melaut	TAG	melaut	
+pada	TAG	pada	
+malam	TAG	malam	
+hari	TAG	hari	
+</s>
+<s id="18" ort_d="Petani" phn_f="pə.ta.ni" phn_d="pə.ta.ni" gloss="farmer" trans="Farmers plant rice in the paddy fields." sex="female" location="rural" first_language="indonesian" word_tokens="sawah">
+Petani	TAG	petani	
+menanam	TAG	menanam	
+padi	TAG	padi	
+di	TAG	di	
+sawah	TAG	sawah	
+</s>
+<s id="19" ort_d="Gadis" phn_f="ga.dis" phn_d="ga.dis" gloss="girl" trans="That girl is singing a sweet song." sex="male" location="rural" first_language="indonesian" word_tokens="merdu">
+Gadis	TAG	gadis	
+itu	TAG	itu	
+menyanyi	TAG	menyanyi	
+lagu	TAG	lagu	
+merdu	TAG	merdu	
+</s>
+<s id="20" ort_d="Pemuda" phn_f="pə.mu.da" phn_d="pə.mu.da" gloss="youth" trans="The young man rode a motorcycle." sex="female" location="rural" first_language="indonesian" word_tokens="motor">
+Pemuda	TAG	pemuda	
+itu	TAG	itu	
+mengendarai	TAG	mengendarai	
+sepeda	TAG	sepeda	
+motor	TAG	motor	
+</s>
+<s id="21" ort_d="Sungai" phn_f="su.ŋa.i" phn_d="su.ŋa.i" gloss="river" trans="This river&#x27;s water is very clear." sex="male" location="rural" first_language="other" word_tokens="jernih">
+Sungai	TAG	sungai	
+ini	TAG	ini	
+airnya	TAG	airnya	
+sangat	TAG	sangat	
+jernih	TAG	jernih	
+</s>
+<s id="22" ort_d="Gunung" phn_f="gu.nuŋ" phn_d="gu.nuŋ" gloss="mountain" trans="That high mountain is covered in clouds." sex="female" location="rural" first_language="other" word_tokens="awan">
+Gunung	TAG	gunung	
+tinggi	TAG	tinggi	
+itu	TAG	itu	
+diselimuti	TAG	diselimuti	
+awan	TAG	awan	
+</s>
+<s id="23" ort_d="Mereka" phn_f="mə.re.ka" phn_d="mə.re.ka" gloss="3PL" trans="They held a discussion at the village hall." sex="male" location="rural" first_language="other" word_tokens="desa">
+Mereka	TAG	mereka	
+bermusyawarah	TAG	bermusyawarah	
+di	TAG	di	
+balai	TAG	balai	
+desa	TAG	desa	
+</s>
+<s id="24" ort_d="Adik" phn_f="a.dik" phn_d="a.dik" gloss="younger.sibling" trans="Little sibling laughed happily watching cartoons." sex="female" location="rural" first_language="other" word_tokens="kartun">
+Adik	TAG	adik	
+tertawa	TAG	tertawa	
+senang	TAG	senang	
+melihat	TAG	melihat	
+kartun	TAG	kartun	
+</s>
+<s id="25" ort_d="Kakek" phn_f="ka.kek" phn_d="ka.kek" gloss="grandfather" trans="Grandfather told an old tale." sex="male" location="rural" first_language="other" word_tokens="lama">
+Kakek	TAG	kakek	
+menceritakan	TAG	menceritakan	
+kisah	TAG	kisah	
+lama	TAG	lama	
+</s>
+<s id="26" ort_d="Nenek" phn_f="ne.nek" phn_d="ne.nek" gloss="grandmother" trans="Grandmother is knitting wool cloth." sex="female" location="rural" first_language="other" word_tokens="wol">
+Nenek	TAG	nenek	
+merajut	TAG	merajut	
+kain	TAG	kain	
+wol	TAG	wol	
+</s>
+<s id="27" ort_d="Siswa-siswi" phn_f="sis.wa.sis.wi" phn_d="sis.wa.sis.wi" gloss="student-PL" trans="The students sang the national anthem." sex="male" location="rural" first_language="other" word_tokens="nasional">
+Siswa-siswi	TAG	siswa-siswi	
+menyanyikan	TAG	menyanyikan	
+lagu	TAG	lagu	
+nasional	TAG	nasional	
+</s>
+<s id="28" ort_d="Polisi" phn_f="po.li.si" phn_d="po.li.si" gloss="police" trans="Police directed traffic at the intersection." sex="female" location="rural" first_language="other" word_tokens="persimpangan">
+Polisi	TAG	polisi	
+mengatur	TAG	mengatur	
+lalu	TAG	lalu	
+lintas	TAG	lintas	
+di	TAG	di	
+persimpangan	TAG	persimpangan	
+</s>
+<s id="29" ort_d="Dokter" phn_f="dok.tər" phn_d="dok.tər" gloss="doctor" trans="The doctor examined the patient at the hospital." sex="male" location="rural" first_language="other" word_tokens="sakit">
+Dokter	TAG	dokter	
+memeriksa	TAG	memeriksa	
+pasien	TAG	pasien	
+di	TAG	di	
+rumah	TAG	rumah	
+sakit	TAG	sakit	
+</s>
+<s id="30" ort_d="Pasar" phn_f="pa.sar" phn_d="pa.sar" gloss="market" trans="The traditional market is open since dawn." sex="female" location="rural" first_language="other" word_tokens="subuh">
+Pasar	TAG	pasar	
+tradisional	TAG	tradisional	
+buka	TAG	buka	
+sejak	TAG	sejak	
+subuh	TAG	subuh	
+</s>
+<s id="31" ort_d="Kita" phn_f="ki.ta" phn_d="ki.ta" gloss="1PL.INCL" trans="We must preserve nature." sex="male" location="rural" first_language="other" word_tokens="alam">
+Kita	TAG	kita	
+harus	TAG	harus	
+menjaga	TAG	menjaga	
+kelestarian	TAG	kelestarian	
+alam	TAG	alam	
+</s>
+</text>

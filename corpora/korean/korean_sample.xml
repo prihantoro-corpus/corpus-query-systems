@@ -1,0 +1,155 @@
+<text filename="corpora/korean/sample_korean_30_sentences.eaf">
+<s id="1" ort_d="나는" gloss="1SG-TOP" trans="I eat an apple." hangul_word="먹는다" hangul_delineated="나-는" transliteration_full="naneun" transliteration_delineated="na-neun" morpheme="1SG-TOP" word_translation="I-TOP" free_translation="I eat an apple.">
+나는	TAG	나는	
+사과를	TAG	사과를	
+먹는다	TAG	먹는다	
+</s>
+<s id="2" ort_d="그는" gloss="3SG.M-TOP" trans="He goes to school." hangul_word="간다" hangul_delineated="그-는" transliteration_full="geuneun" transliteration_delineated="geu-neun" morpheme="3SG.M-TOP" word_translation="He-TOP" free_translation="He goes to school.">
+그는	TAG	그는	
+학교에	TAG	학교에	
+간다	TAG	간다	
+</s>
+<s id="3" ort_d="우리는" gloss="1PL-TOP" trans="We read a book." hangul_word="읽는다" hangul_delineated="우리-는" transliteration_full="urineun" transliteration_delineated="uri-neun" morpheme="1PL-TOP" word_translation="We-TOP" free_translation="We read a book.">
+우리는	TAG	우리는	
+책을	TAG	책을	
+읽는다	TAG	읽는다	
+</s>
+<s id="4" ort_d="고양이가" gloss="cat-NOM" trans="The cat caught the mouse." hangul_word="잡았다" hangul_delineated="고양이-가" transliteration_full="goyangiga" transliteration_delineated="goyangi-ga" morpheme="cat-NOM" word_translation="cat-NOM" free_translation="The cat caught the mouse.">
+고양이가	TAG	고양이가	
+쥐를	TAG	쥐를	
+잡았다	TAG	잡았다	
+</s>
+<s id="5" ort_d="비가" gloss="rain-NOM" trans="It rains a lot." hangul_word="온다" hangul_delineated="비-가" transliteration_full="biga" transliteration_delineated="bi-ga" morpheme="rain-NOM" word_translation="rain-NOM" free_translation="It rains a lot.">
+비가	TAG	비가	
+많이	TAG	많이	
+온다	TAG	온다	
+</s>
+<s id="6" ort_d="그녀는" gloss="3SG.F-TOP" trans="She sings a song." hangul_word="부른다" hangul_delineated="그녀-는" transliteration_full="geunyeoneun" transliteration_delineated="geunyeo-neun" morpheme="3SG.F-TOP" word_translation="She-TOP" free_translation="She sings a song.">
+그녀는	TAG	그녀는	
+노래를	TAG	노래를	
+부른다	TAG	부른다	
+</s>
+<s id="7" ort_d="학생들이" gloss="student-PL-NOM" trans="Students study." hangul_word="한다" hangul_delineated="학생-들-이" transliteration_full="haksaengdeuri" transliteration_delineated="haksaeng-deul-i" morpheme="student-PL-NOM" word_translation="student-PL-NOM" free_translation="Students study.">
+학생들이	TAG	학생들이	
+공부를	TAG	공부를	
+한다	TAG	한다	
+</s>
+<s id="8" ort_d="차가" gloss="car-NOM" trans="The car is too fast." hangul_word="빠르다" hangul_delineated="차-가" transliteration_full="chaga" transliteration_delineated="cha-ga" morpheme="car-NOM" word_translation="car-NOM" free_translation="The car is too fast.">
+차가	TAG	차가	
+너무	TAG	너무	
+빠르다	TAG	빠르다	
+</s>
+<s id="9" ort_d="선생님이" gloss="teacher-NOM" trans="The teacher asked a question." hangul_word="하셨다" hangul_delineated="선생님-이" transliteration_full="seonsaengnimi" transliteration_delineated="seonsaengnim-i" morpheme="teacher-NOM" word_translation="teacher-NOM" free_translation="The teacher asked a question.">
+선생님이	TAG	선생님이	
+질문을	TAG	질문을	
+하셨다	TAG	하셨다	
+</s>
+<s id="10" ort_d="아이가" gloss="child-NOM" trans="The child smiles." hangul_word="웃는다" hangul_delineated="아이-가" transliteration_full="aiga" transliteration_delineated="ai-ga" morpheme="child-NOM" word_translation="child-NOM" free_translation="The child smiles.">
+아이가	TAG	아이가	
+웃는다	TAG	웃는다	
+</s>
+<s id="11" ort_d="친구가" gloss="friend-NOM" trans="My friend wrote a letter." hangul_word="썼다" hangul_delineated="친구-가" transliteration_full="chinguga" transliteration_delineated="chingu-ga" morpheme="friend-NOM" word_translation="friend-NOM" free_translation="My friend wrote a letter.">
+친구가	TAG	친구가	
+편지를	TAG	편지를	
+썼다	TAG	썼다	
+</s>
+<s id="12" ort_d="하늘이" gloss="sky-NOM" trans="The sky is blue." hangul_word="파랗다" hangul_delineated="하늘-이" transliteration_full="haneuri" transliteration_delineated="haneul-i" morpheme="sky-NOM" word_translation="sky-NOM" free_translation="The sky is blue.">
+하늘이	TAG	하늘이	
+파랗다	TAG	파랗다	
+</s>
+<s id="13" ort_d="바람이" gloss="wind-NOM" trans="The wind blows coolly." hangul_word="분다" hangul_delineated="바람-이" transliteration_full="barami" transliteration_delineated="baram-i" morpheme="wind-NOM" word_translation="wind-NOM" free_translation="The wind blows coolly.">
+바람이	TAG	바람이	
+시원하게	TAG	시원하게	
+분다	TAG	분다	
+</s>
+<s id="14" ort_d="물이" gloss="water-NOM" trans="The water is very clear." hangul_word="맑다" hangul_delineated="물-이" transliteration_full="muri" transliteration_delineated="mul-i" morpheme="water-NOM" word_translation="water-NOM" free_translation="The water is very clear.">
+물이	TAG	물이	
+아주	TAG	아주	
+맑다	TAG	맑다	
+</s>
+<s id="15" ort_d="그들은" gloss="3PL-TOP" trans="They like soccer." hangul_word="좋아한다" hangul_delineated="그들-은" transliteration_full="geudeureun" transliteration_delineated="geudeul-eun" morpheme="3PL-TOP" word_translation="They-TOP" free_translation="They like soccer.">
+그들은	TAG	그들은	
+축구를	TAG	축구를	
+좋아한다	TAG	좋아한다	
+</s>
+<s id="16" ort_d="새가" gloss="bird-NOM" trans="The bird flies in the sky." hangul_word="난다" hangul_delineated="새-가" transliteration_full="saega" transliteration_delineated="sae-ga" morpheme="bird-NOM" word_translation="bird-NOM" free_translation="The bird flies in the sky.">
+새가	TAG	새가	
+하늘을	TAG	하늘을	
+난다	TAG	난다	
+</s>
+<s id="17" ort_d="꽃이" gloss="flower-NOM" trans="The flower bloomed beautifully." hangul_word="피었다" hangul_delineated="꽃-이" transliteration_full="kkochi" transliteration_delineated="kkot-i" morpheme="flower-NOM" word_translation="flower-NOM" free_translation="The flower bloomed beautifully.">
+꽃이	TAG	꽃이	
+예쁘게	TAG	예쁘게	
+피었다	TAG	피었다	
+</s>
+<s id="18" ort_d="엄마가" gloss="mom-NOM" trans="Mom is cooking." hangul_word="하신다" hangul_delineated="엄마-가" transliteration_full="eommaga" transliteration_delineated="eomma-ga" morpheme="mom-NOM" word_translation="mom-NOM" free_translation="Mom is cooking.">
+엄마가	TAG	엄마가	
+요리를	TAG	요리를	
+하신다	TAG	하신다	
+</s>
+<s id="19" ort_d="아빠가" gloss="dad-NOM" trans="Dad is reading the newspaper." hangul_word="보신다" hangul_delineated="아빠-가" transliteration_full="appaga" transliteration_delineated="appa-ga" morpheme="dad-NOM" word_translation="dad-NOM" free_translation="Dad is reading the newspaper.">
+아빠가	TAG	아빠가	
+신문을	TAG	신문을	
+보신다	TAG	보신다	
+</s>
+<s id="20" ort_d="동생이" gloss="younger_sibling-NOM" trans="My younger sibling watches television." hangul_word="본다" hangul_delineated="동생-이" transliteration_full="dongsaengi" transliteration_delineated="dongsaeng-i" morpheme="younger_sibling-NOM" word_translation="younger_sibling-NOM" free_translation="My younger sibling watches television.">
+동생이	TAG	동생이	
+텔레비전을	TAG	텔레비전을	
+본다	TAG	본다	
+</s>
+<s id="21" ort_d="나는" gloss="1SG-TOP" trans="I exercise every day." hangul_word="한다" hangul_delineated="나-는" transliteration_full="naneun" transliteration_delineated="na-neun" morpheme="1SG-TOP" word_translation="I-TOP" free_translation="I exercise every day.">
+나는	TAG	나는	
+매일	TAG	매일	
+운동을	TAG	운동을	
+한다	TAG	한다	
+</s>
+<s id="22" ort_d="그녀는" gloss="3SG.F-TOP" trans="She always wakes up early." hangul_word="일어난다" hangul_delineated="그녀-는" transliteration_full="geunyeoneun" transliteration_delineated="geunyeo-neun" morpheme="3SG.F-TOP" word_translation="She-TOP" free_translation="She always wakes up early.">
+그녀는	TAG	그녀는	
+항상	TAG	항상	
+일찍	TAG	일찍	
+일어난다	TAG	일어난다	
+</s>
+<s id="23" ort_d="우리는" gloss="1PL-TOP" trans="We watched a movie on the weekend." hangul_word="봤다" hangul_delineated="우리-는" transliteration_full="urineun" transliteration_delineated="uri-neun" morpheme="1PL-TOP" word_translation="We-TOP" free_translation="We watched a movie on the weekend.">
+우리는	TAG	우리는	
+주말에	TAG	주말에	
+영화를	TAG	영화를	
+봤다	TAG	봤다	
+</s>
+<s id="24" ort_d="그가" gloss="3SG.M-NOM" trans="He closed the door." hangul_word="닫았다" hangul_delineated="그-가" transliteration_full="geuga" transliteration_delineated="geu-ga" morpheme="3SG.M-NOM" word_translation="He-NOM" free_translation="He closed the door.">
+그가	TAG	그가	
+문을	TAG	문을	
+닫았다	TAG	닫았다	
+</s>
+<s id="25" ort_d="개구리가" gloss="frog-NOM" trans="The frog jumps up from the pond." hangul_word="뛰어오른다" hangul_delineated="개구리-가" transliteration_full="gaeguriga" transliteration_delineated="gaeguri-ga" morpheme="frog-NOM" word_translation="frog-NOM" free_translation="The frog jumps up from the pond.">
+개구리가	TAG	개구리가	
+연못에서	TAG	연못에서	
+뛰어오른다	TAG	뛰어오른다	
+</s>
+<s id="26" ort_d="겨울에는" gloss="winter-LOC-TOP" trans="It snows in winter." hangul_word="내린다" hangul_delineated="겨울-에-는" transliteration_full="gyeoureneun" transliteration_delineated="gyeoul-e-neun" morpheme="winter-LOC-TOP" word_translation="winter-LOC-TOP" free_translation="It snows in winter.">
+겨울에는	TAG	겨울에는	
+눈이	TAG	눈이	
+내린다	TAG	내린다	
+</s>
+<s id="27" ort_d="여름에는" gloss="summer-LOC-TOP" trans="The weather is hot in summer." hangul_word="덥다" hangul_delineated="여름-에-는" transliteration_full="yeoreumeneun" transliteration_delineated="yeoreum-e-neun" morpheme="summer-LOC-TOP" word_translation="summer-LOC-TOP" free_translation="The weather is hot in summer.">
+여름에는	TAG	여름에는	
+날씨가	TAG	날씨가	
+덥다	TAG	덥다	
+</s>
+<s id="28" ort_d="봄에는" gloss="spring-LOC-TOP" trans="Sprouts spring up in spring." hangul_word="돋아난다" hangul_delineated="봄-에-는" transliteration_full="bomeneun" transliteration_delineated="bom-e-neun" morpheme="spring-LOC-TOP" word_translation="spring-LOC-TOP" free_translation="Sprouts spring up in spring.">
+봄에는	TAG	봄에는	
+새싹이	TAG	새싹이	
+돋아난다	TAG	돋아난다	
+</s>
+<s id="29" ort_d="가을에는" gloss="autumn-LOC-TOP" trans="Autumn leaves are beautiful in autumn." hangul_word="아름답다" hangul_delineated="가을-에-는" transliteration_full="gaeureneun" transliteration_delineated="gaeul-e-neun" morpheme="autumn-LOC-TOP" word_translation="autumn-LOC-TOP" free_translation="Autumn leaves are beautiful in autumn.">
+가을에는	TAG	가을에는	
+단풍이	TAG	단풍이	
+아름답다	TAG	아름답다	
+</s>
+<s id="30" ort_d="우리는" gloss="1PL-TOP" trans="We ate dinner together with our family." hangul_word="먹었다" hangul_delineated="우리-는" transliteration_full="urineun" transliteration_delineated="uri-neun" morpheme="1PL-TOP" word_translation="We-TOP" free_translation="We ate dinner together with our family.">
+우리는	TAG	우리는	
+가족과	TAG	가족과	
+함께	TAG	함께	
+저녁을	TAG	저녁을	
+먹었다	TAG	먹었다	
+</s>
+</text>
