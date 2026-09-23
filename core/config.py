@@ -17,7 +17,6 @@ KNOWN_CORPORA_MAP = {
     "ICNALE Written English": "english/ICNALE_WE.xml",
     "ICNALE Spoken Monologue": "english/sm_icnale.duckdb",
     "BNC Spoken": "english/BNC Spoken.duckdb",
-    "BNC Full (100M)": "english/bnc.duckdb",
     "Arabic PUD UD Sample": "arabic/ar_pud-ud-test.xml",
     "Chinese GSD UD Sample": "chinese/zh_gsd-ud-train.xml",
     "Japanese GSD UD Sample": "japanese/ja_gsd-ud-dev.db",
