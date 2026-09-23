@@ -223,116 +223,76 @@ def render_keyword_view():
                 st.caption("You can change the comparison corpus in the Sidebar.")
 
             elif not ref_path:
-                st.info("Select a reference corpus to compare against.")
-                tabs = st.tabs(["🏛️ Pre-built Corpora", "📋 Pre-built Wordlists", "📤 Upload"])
-
-                with tabs[0]:
-                    available_corpora = get_available_corpora()
-                    sel_name = st.radio("Built-in Corpora", list(available_corpora.keys()), horizontal=True)
-                    if st.button("Load as Reference", key="load_builtin_ref"):
-                        with st.spinner("Downloading and processing..."):
-                            result = load_built_in_corpus(sel_name, available_corpora[sel_name])
-                            if result.get('error'):
-                                st.error(result['error'])
-                            else:
-                                set_state('comp_corpus_path', result['db_path'])
-                                set_state('comp_corpus_stats', result['stats'])
-                                set_state('comp_corpus_name', sel_name)
-                                set_state('comp_xml_structure_data', result.get('structure'))
-                                st.success(f"Loaded {sel_name} as reference.")
-                                st.rerun()
-
-                with tabs[1]:
-                    st.markdown("##### Select a pre-built frequency list from the local repository:")
-                    from core.modules.overview import get_corpus_language
-                    import os
-                    
-                    corpus_lang = get_corpus_language(current_path)
-                    
-                    base_wl_dir = "wordlist"
-                    if not os.path.exists(base_wl_dir) and os.path.exists(os.path.join("..", "wordlist")):
-                        base_wl_dir = os.path.join("..", "wordlist")
-                    
-                    lang_map = {
-                        "en": "english", "id": "indonesian", "ar": "arabic", 
-                        "jp": "japanese", "ch": "chinese", "ko": "korean", 
-                        "lo": "limola", "hi": "hindi", "jv": "javanese"
-                    }
-                    mapped_lang = lang_map.get(corpus_lang.lower(), corpus_lang.lower())
-                    
-                    # Discover all language directories in wordlist
-                    available_langs = []
-                    if os.path.exists(base_wl_dir):
-                        available_langs = [d for d in os.listdir(base_wl_dir) if os.path.isdir(os.path.join(base_wl_dir, d)) and not d.startswith('.')]
-                    
-                    if available_langs:
+                st.info("Select a reference wordlist to compare against.")
+                st.markdown("##### Pre-built Wordlists")
+                from core.modules.overview import get_corpus_language
+                import os
+                
+                corpus_lang = get_corpus_language(current_path)
+                
+                base_wl_dir = "wordlist"
+                if not os.path.exists(base_wl_dir) and os.path.exists(os.path.join("..", "wordlist")):
+                    base_wl_dir = os.path.join("..", "wordlist")
+                
+                lang_map = {
+                    "en": "english", "id": "indonesian", "ar": "arabic", 
+                    "jp": "japanese", "ch": "chinese", "ko": "korean", 
+                    "lo": "limola", "hi": "hindi", "jv": "javanese"
+                }
+                mapped_lang = lang_map.get(corpus_lang.lower(), corpus_lang.lower())
+                
+                # Discover all language directories in wordlist
+                available_langs = []
+                if os.path.exists(base_wl_dir):
+                    available_langs = [d for d in os.listdir(base_wl_dir) if os.path.isdir(os.path.join(base_wl_dir, d)) and not d.startswith('.')]
+                
+                if available_langs:
+                    try:
+                        default_idx = sorted(available_langs).index(mapped_lang)
+                    except ValueError:
                         try:
-                            default_idx = sorted(available_langs).index(mapped_lang)
+                            default_idx = sorted(available_langs).index("english")
                         except ValueError:
-                            try:
-                                default_idx = sorted(available_langs).index("english")
-                            except ValueError:
-                                default_idx = 0
-                                
-                        sel_lang = st.selectbox("Language Category", sorted(available_langs), index=default_idx, key="sel_local_wl_lang")
-                        wl_dir = os.path.join(base_wl_dir, sel_lang)
-                        
-                        available_wls = []
-                        if os.path.exists(wl_dir):
-                            for file in os.listdir(wl_dir):
-                                full_path = os.path.join(wl_dir, file)
-                                if os.path.isfile(full_path) and file.endswith((".txt", ".csv", ".xlsx", ".xls")):
-                                    if file.endswith("_stats.csv"):
-                                        continue
-                                    available_wls.append(file)
-                        
-                        if available_wls:
-                            sel_wl = st.selectbox("Available Frequency Lists", sorted(available_wls), key="sel_local_wl")
-                            if st.button("Load as Reference", key="load_local_wl_ref"):
-                                wl_full_path = os.path.join(wl_dir, sel_wl)
-                                with st.spinner(f"Loading '{sel_wl}'..."):
-                                    df_freq, total = load_local_frequency_list(wl_full_path)
-                                    if df_freq is not None and not df_freq.empty:
-                                        set_state('comp_freq_df', df_freq)
-                                        set_state('comp_total_tokens', total)
-                                        set_state('comp_corpus_name', sel_wl)
-                                        set_state('comp_corpus_path', 'frequency_list') 
-                                        set_state('comp_ref_type', 'freq_list')
-                                        st.success(f"Loaded {len(df_freq)} entries from {sel_wl}.")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Failed to load or parse '{sel_wl}'.")
-                        else:
-                            st.info(f"No pre-built frequency lists found in the `wordlist/{sel_lang}/` directory.")
-                    else:
-                        st.info("No pre-built wordlist directories found.")
-
-                with tabs[2]:
-                    uploaded_ref = st.file_uploader("Upload XML or Frequency List", type=['xml', 'eaf', 'txt', 'csv', 'tsv'], key="upload_ref_kw")
-                    if uploaded_ref:
-                        if st.button("Process Reference", key="btn_process_ref"):
-                            with st.spinner("Processing reference..."):
-                                if uploaded_ref.name.endswith('.xml'):
-                                    result = load_monolingual_corpus_files([uploaded_ref], explicit_lang_code=get_state('target_lang', 'en'), selected_format='.xml / auto')
-                                    if result.get('error'):
-                                        st.error(result['error'])
-                                    else:
-                                        set_state('comp_corpus_path', result['db_path'])
-                                        set_state('comp_corpus_stats', result['stats'])
-                                        set_state('comp_corpus_name', uploaded_ref.name)
-                                        set_state('comp_ref_type', 'db')
-                                        st.success("Reference corpus loaded.")
-                                        st.rerun()
+                            default_idx = 0
+                            
+                    sel_lang = st.selectbox("Language Category", sorted(available_langs), index=default_idx, key="sel_local_wl_lang")
+                    wl_dir = os.path.join(base_wl_dir, sel_lang)
+                    
+                    available_wls = []
+                    if os.path.exists(wl_dir):
+                        for file in os.listdir(wl_dir):
+                            full_path = os.path.join(wl_dir, file)
+                            if os.path.isfile(full_path) and file.endswith((".txt", ".csv", ".xlsx", ".xls")):
+                                if file.endswith("_stats.csv"):
+                                    continue
+                                available_wls.append(file)
+                    
+                    if available_wls:
+                        sel_wl = st.selectbox("Available Frequency Lists", sorted(available_wls), key="sel_local_wl")
+                        if st.button("Load as Reference", key="load_local_wl_ref", type="primary"):
+                            wl_full_path = os.path.join(wl_dir, sel_wl)
+                            with st.spinner(f"Loading '{sel_wl}'..."):
+                                df_freq, total = load_local_frequency_list(wl_full_path)
+                                if df_freq is not None and not df_freq.empty:
+                                    set_state('comp_freq_df', df_freq)
+                                    set_state('comp_total_tokens', total)
+                                    set_state('comp_corpus_name', sel_wl)
+                                    set_state('comp_corpus_path', 'frequency_list') 
+                                    set_state('comp_ref_type', 'freq_list')
+                                    st.session_state.pop('last_kw_results_primary', None)
+                                    st.session_state.pop('last_kw_results_secondary', None)
+                                    st.session_state.pop('kw_ref_sel', None)
+                                    st.session_state.pop('kw_ref_sel_c1', None)
+                                    st.session_state.pop('kw_ref_sel_c2', None)
+                                    st.success(f"Loaded {len(df_freq)} entries from {sel_wl}.")
+                                    st.rerun()
                                 else:
-                                    df_freq, total = parse_frequency_list_file(uploaded_ref)
-                                    if df_freq is not None and not df_freq.empty:
-                                        set_state('comp_freq_df', df_freq)
-                                        set_state('comp_total_tokens', total)
-                                        set_state('comp_corpus_name', uploaded_ref.name)
-                                        set_state('comp_corpus_path', 'frequency_list') 
-                                        set_state('comp_ref_type', 'freq_list')
-                                        st.success(f"Loaded {len(df_freq)} entries.")
-                                        st.rerun()
+                                    st.error(f"Failed to load or parse '{sel_wl}'.")
+                    else:
+                        st.info(f"No pre-built frequency lists found in the `wordlist/{sel_lang}/` directory.")
+                else:
+                    st.info("No pre-built wordlist directories found.")
+
                 return 
             else:
                 c1, c2 = st.columns([3, 1])
@@ -344,6 +304,11 @@ def render_keyword_view():
                         set_state('comp_corpus_name', None)
                         set_state('comp_freq_df', None)
                         set_state('comp_total_tokens', 0)
+                        st.session_state.pop('last_kw_results_primary', None)
+                        st.session_state.pop('last_kw_results_secondary', None)
+                        st.session_state.pop('kw_ref_sel', None)
+                        st.session_state.pop('kw_ref_sel_c1', None)
+                        st.session_state.pop('kw_ref_sel_c2', None)
                         st.rerun()
 
         st.markdown("---")
@@ -387,22 +352,9 @@ def _render_kw_controls(target_path, target_name, default_ref_path, default_ref_
     params = {}
     st.markdown("##### Settings")
 
-    ref_options = []
-    if default_ref_path:
-        ref_options.append(f"Corpus: {default_ref_name}")
-
-    available = get_available_corpora()
-    ref_options.extend([f"Built-in: {k}" for k in available.keys()])
-    sel_ref_label = st.radio("Reference Corpus", ref_options, index=0, horizontal=True, key=f"kw_ref_sel{suffix}")
-
-    ref_path_selected = None
-    if sel_ref_label.startswith("Corpus: "):
-        ref_path_selected = default_ref_path
-        ref_name_selected = default_ref_name
-    else:
-        b_name = sel_ref_label.replace("Built-in: ", "")
-        ref_path_selected = f"BUILTIN:{b_name}"
-        ref_name_selected = b_name
+    # Reference is always the pre-loaded wordlist from session state
+    ref_path_selected = default_ref_path
+    ref_name_selected = default_ref_name
 
     c1, c2 = st.columns(2)
     with c1:
@@ -440,15 +392,44 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
     ref_name = params['ref_name']
     final_ref_path = ref_path
 
-    if ref_path and ref_path.startswith("BUILTIN:"):
+    ref_freq_df = None
+    ref_total_tokens = 0
+
+    if ref_path == 'frequency_list':
+        ref_freq_df = st.session_state.get('comp_freq_df')
+        ref_total_tokens = st.session_state.get('comp_total_tokens', 0)
+        final_ref_path = None # Ensure it doesn't try to connect to a DB
+
+    elif ref_path and ref_path.startswith("BUILTIN:"):
         b_name = ref_path.replace("BUILTIN:", "")
         with st.spinner(f"Loading '{b_name}'..."):
             res = load_built_in_corpus(b_name, BUILT_IN_CORPORA[b_name])
-            if not res.get('error'):
+            if not res.get('error') and res.get('db_path') and os.path.exists(res['db_path']):
                 final_ref_path = res['db_path']
             else:
-                st.error(res['error'])
-                return
+                import os
+                found_wl = False
+                # Search for matching pre-built wordlist CSV in wordlist/
+                clean_b_name = b_name.replace(" ", "_").replace("-", "_")
+                for lang_sub in ['english', 'indonesian', 'japanese', 'chinese', 'korean', 'arabic']:
+                    for cand_name in [f"{clean_b_name}_freq.csv", f"{b_name}_freq.csv", f"{b_name}.csv", f"{clean_b_name}.csv"]:
+                        wl_cand = os.path.join("wordlist", lang_sub, cand_name)
+                        if not os.path.exists(wl_cand) and os.path.exists(os.path.join("..", wl_cand)):
+                            wl_cand = os.path.join("..", wl_cand)
+                        if os.path.exists(wl_cand):
+                            df_freq, total = load_local_frequency_list(wl_cand)
+                            if df_freq is not None and not df_freq.empty:
+                                ref_freq_df = df_freq
+                                ref_total_tokens = total
+                                final_ref_path = None
+                                found_wl = True
+                                st.info(f"⚡ Loaded pre-built frequency wordlist for '{b_name}' ({len(df_freq):,} entries).")
+                                break
+                    if found_wl:
+                        break
+                if not found_wl and res.get('error'):
+                    st.error(res['error'])
+                    return
 
     with st.spinner(f"Calculating Keywords: {target_name} vs {ref_name}..."):
         def apply_p_val_filter(df, p_cutoff):
@@ -464,14 +445,6 @@ def _run_keyword_analysis(identifier, target_path, target_name, params, state_ge
             else:
                 is_sig = pd.Series(True, index=df.index)
             return df[is_stable | is_sig]
-
-        # Custom handling for frequency list reference
-        ref_freq_df = None
-        ref_total_tokens = 0
-        if ref_path == 'frequency_list':
-            ref_freq_df = st.session_state.get('comp_freq_df')
-            ref_total_tokens = st.session_state.get('comp_total_tokens', 0)
-            final_ref_path = None # Ensure it doesn't try to connect to a DB
 
         df_overall = notify_timing("Keyword analysis completed")(generate_keyword_list)(
             target_path, 
