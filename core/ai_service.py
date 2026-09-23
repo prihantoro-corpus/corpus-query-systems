@@ -718,7 +718,7 @@ def parse_nl_query_rules_only(user_query, module_selection="concordance", revers
     processed = user_query.replace('"', '').replace("'", '')
     
     # Step 1: Strip common command phrases early
-    processed = re.sub(r'\b(find|search for|search|concordance of|query|look up|examples of|the word|the)\b', '', processed, flags=re.IGNORECASE)
+    processed = re.sub(r'\b(find|search for|search|concordance of|distribution of|distribution|n-gram of|n-gram|collocates of|collocations of|query|look up|examples of|the word|the)\b', '', processed, flags=re.IGNORECASE)
     
     # Step 2: Apply wildcard heuristics BEFORE word order preprocessing
     # Pattern: "words beginning with X" or "word starting with X" -> "X*"

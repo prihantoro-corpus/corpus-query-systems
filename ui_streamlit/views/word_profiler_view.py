@@ -351,17 +351,17 @@ def render_word_profiler_chart(df, wl_name):
         # Whole Corpus - Simple Bar Chart (Horizontal)
         chart = alt.Chart(plot_df).mark_bar(color='#00ADB5').encode(
             x=alt.X('Percentage:Q', title='Percentage (%)', scale=alt.Scale(domain=[0, 100])),
-            y=alt.Y('Category:N', title='Category', sort=cats_plotted),
+            y=alt.Y('Category:N', title='Category', sort=cats_plotted, axis=alt.Axis(labelLimit=0, labelOverlap=False)),
             tooltip=['Category', 'Percentage', 'Frequency']
         ).properties(height=max(200, len(cats_plotted) * 35))
     else:
         # Multiple Segments - Stacked Bar Chart (Horizontal Stacked)
         num_segments = len(df)
-        dynamic_height = max(150, num_segments * 30)
+        dynamic_height = max(200, num_segments * 35)
 
         chart = alt.Chart(plot_df).mark_bar().encode(
             x=alt.X('Percentage:Q', title='Percentage (%)', stack="normalize" if rescale_selected else None),
-            y=alt.Y('Segment:N', title='Segment', sort=None),
+            y=alt.Y('Segment:N', title='Segment', sort=None, axis=alt.Axis(labelLimit=0, labelOverlap=False)),
             color=alt.Color('Category:N', sort=cats_plotted, scale=alt.Scale(scheme='category20')),
             tooltip=['Segment', 'Category', 'Percentage', 'Frequency']
         ).properties(height=dynamic_height)

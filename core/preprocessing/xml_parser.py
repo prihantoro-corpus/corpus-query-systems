@@ -94,7 +94,7 @@ def parse_xml_with_inline_tags(element, context_tags, tokens_data, state, combin
             clean_k = k.lower()
             if clean_k in excluded_meta_attrs:
                 continue
-            col_name = 's_id' if clean_k == 'id' and tag_name == 's' else clean_k
+            col_name = f"{tag_name}_id" if clean_k == 'id' else clean_k
             combined_attrs[col_name] = str(v).strip()
 
     if tag_name not in structural_tags:
@@ -298,7 +298,7 @@ def parse_xml_content_to_df(xml_input, force_vertical_xml=False, stanza_processo
     """
     cleaned_xml_content = None
     if isinstance(xml_input, str):
-        cleaned_xml_content = xml_input
+        cleaned_xml_content = sanitize_xml_content(xml_input)
     else:
         try:
             xml_input.seek(0)
