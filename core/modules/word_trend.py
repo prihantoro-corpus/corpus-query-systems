@@ -11,7 +11,15 @@ def get_available_metadata_attributes(db_path):
     con = duckdb.connect(db_path, read_only=True)
     try:
         cols_info = con.execute("PRAGMA table_info(corpus)").fetch_df()
-        standard = {'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename', 'topic', 'sentiment'}
+        # Exclude standard token-level and internal structural columns
+        standard = {
+            'id', 'token', 'pos', 'lemma', 'sent_id', '_token_low', 'filename',
+            'topic', 'sentiment', 'doc_id',
+            # Internal XML parser columns
+            'ent_type', 'in_root', 'in_root_start', 'in_structure',
+            'in_structure_start', 'root_id', 'root_len', 'structure_id',
+            'structure_len', 'name'
+        }
         meta_cols = [c for c in cols_info['name'].tolist() if c.lower() not in standard]
         return sorted(meta_cols)
     except Exception as e:
