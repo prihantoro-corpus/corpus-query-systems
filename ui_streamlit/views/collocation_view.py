@@ -76,7 +76,10 @@ def render_collocation_view():
         tab_simple, tab_advanced, tab_multi_compare = st.tabs(["Simple", "Advanced", "Multi-Node Comparison"])
 
         with tab_simple:
+            from ui_streamlit.components.query_autocomplete import render_tag_quick_insert, apply_pending_tag_inserts
+            apply_pending_tag_inserts("coll_node_simple")
             node_word_simple = st.text_input("Node Word", value="", key="coll_node_simple", help="Search word or phrase")
+            render_tag_quick_insert("coll_node_simple", corpus_path=corpus_path)
             if st.button("Calculate Collocations", type="primary", key="btn_calculate_collocation_simple", use_container_width=True):
                  if node_word_simple:
                      run_collocation_query(
@@ -221,7 +224,10 @@ def render_collocation_view():
                     with col1:
                          from ui_streamlit.components.pos_help import render_annotation_help_button
                          if not comp_mode:
+                             from ui_streamlit.components.query_autocomplete import render_tag_quick_insert, apply_pending_tag_inserts
+                             apply_pending_tag_inserts("coll_node")
                              node_word = st.text_input("Node Word", value="", placeholder="e.g. beautiful, [lemma]*, _VB*, *kan", key="coll_node", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma (e.g. [run]), token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN>)")
+                             render_tag_quick_insert("coll_node", corpus_path=corpus_path)
                              render_annotation_help_button(corpus_path, "collocation_node")
                          else:
                              st.markdown("**Node Words**")

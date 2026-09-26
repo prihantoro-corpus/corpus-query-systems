@@ -57,7 +57,10 @@ def render_concordance_view():
             with tab_simple:
                 c_s1, c_s2, c_s3 = st.columns([2, 1, 1])
                 with c_s1:
+                    from ui_streamlit.components.query_autocomplete import render_tag_quick_insert, apply_pending_tag_inserts
+                    apply_pending_tag_inserts("kwic_input_simple")
                     search_term_simple = st.text_input("Node Word(s)", value=get_state('kwic_search_term', ''), key="kwic_input_simple", help="Search word or phrase")
+                    render_tag_quick_insert("kwic_input_simple", corpus_path=corpus_path)
                 with c_s2:
                     limit_simple_input = st.number_input("Max Lines", 10, 50000, 500, step=50, key="kwic_limit_simple")
                 with c_s3:
@@ -287,7 +290,10 @@ def render_concordance_view():
                     with st.expander("Search Controls", expanded=True):
                         col1, col2, col3, col4 = st.columns([2.5, 1.5, 1.2, 1.2])
                         with col1:
+                             from ui_streamlit.components.query_autocomplete import render_tag_quick_insert, apply_pending_tag_inserts
+                             apply_pending_tag_inserts("kwic_input")
                              search_term = st.text_input("Node Word(s)", value=get_state('kwic_search_term'), key="kwic_input", help="Use * for wildcards (e.g. run*), _TAG for POS (e.g. _NN), [lemma] for lemma, token_POS (e.g. light_V*), or <TAG> for XML tags (e.g. <PN type=\"human\">)")
+                             render_tag_quick_insert("kwic_input", corpus_path=corpus_path)
                         with col2:
                              window_size = st.slider("Context Window", 1, 20, 5, key="kwic_window")
                         with col3:

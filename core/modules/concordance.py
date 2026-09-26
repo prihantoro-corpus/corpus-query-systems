@@ -162,14 +162,22 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                  
                  # POS SQL
                  if not is_raw_mode: 
-                     if '|' in p_val or '*' in p_val:
+                     if '|' in p_val:
                         pats = [p.strip() for p in p_val.split('|') if p.strip()]
-                        regex = "^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
+                        regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
                         query_where.append(f"regexp_matches({alias}.pos, ?)")
                         query_params.append(regex)
+                     elif '*' in p_val:
+                        if p_val.endswith('*') and '*' not in p_val[:-1]:
+                            query_where.append(f"upper({alias}.pos) LIKE ?")
+                            query_params.append(p_val[:-1].upper() + '%')
+                        else:
+                            regex = "(?i)^" + re.escape(p_val).replace(r'\*', '.*') + "$"
+                            query_where.append(f"regexp_matches({alias}.pos, ?)")
+                            query_params.append(regex)
                      else:
-                        query_where.append(f"{alias}.pos = ?")
-                        query_params.append(p_val)
+                        query_where.append(f"upper({alias}.pos) = ?")
+                        query_params.append(p_val.upper())
 
             elif comp['type'] == 'xml_tag':
                 tag_name = comp['tag']
@@ -259,24 +267,41 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                          query_where.append(f"regexp_matches({alias}._token_low, ?)")
                          query_params.append(r'(?i)(^|\s)' + re.escape(l_val) + r'($|\s)')
                  if not is_raw_mode:
-                     if '|' in p_val or '*' in p_val:
+                     if '|' in p_val:
                          pats = [p.strip() for p in p_val.split('|') if p.strip()]
                          regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pats]) + ")$"
                          query_where.append(f"regexp_matches({alias}.pos, ?)")
                          query_params.append(regex)
+                     elif '*' in p_val:
+                         if p_val.endswith('*') and '*' not in p_val[:-1]:
+                             query_where.append(f"upper({alias}.pos) LIKE ?")
+                             query_params.append(p_val[:-1].upper() + '%')
+                         else:
+                             regex = "(?i)^" + re.escape(p_val).replace(r'\*', '.*') + "$"
+                             query_where.append(f"regexp_matches({alias}.pos, ?)")
+                             query_params.append(regex)
                      else:
-                         query_where.append(f"regexp_matches({alias}.pos, ?)")
-                         query_params.append('(?i)^' + re.escape(p_val) + '$')
+                         query_where.append(f"upper({alias}.pos) = ?")
+                         query_params.append(p_val.upper())
             elif comp['type'] == 'pos' and not is_raw_mode:
                 val = comp['val']
-                if '|' in val or '*' in val:
+                if '|' in val:
                     pos_patterns = [p.strip() for p in val.split('|') if p.strip()]
                     full_regex = "(?i)^(" + "|".join([re.escape(p).replace(r'\*', '.*') for p in pos_patterns]) + ")$"
                     query_where.append(f"regexp_matches({alias}.pos, ?)")
                     query_params.append(full_regex)
+                elif '*' in val:
+                    if val.endswith('*') and '*' not in val[:-1]:
+                        prefix = val[:-1]
+                        query_where.append(f"upper({alias}.pos) LIKE ?")
+                        query_params.append(prefix.upper() + '%')
+                    else:
+                        full_regex = "(?i)^" + re.escape(val).replace(r'\*', '.*') + "$"
+                        query_where.append(f"regexp_matches({alias}.pos, ?)")
+                        query_params.append(full_regex)
                 else:
-                    query_where.append(f"regexp_matches({alias}.pos, ?)")
-                    query_params.append('(?i)^' + re.escape(val) + '$')
+                    query_where.append(f"upper({alias}.pos) = ?")
+                    query_params.append(val.upper())
 
         # --- Primary Target Query Construction ---
         final_query = query_select + query_joins

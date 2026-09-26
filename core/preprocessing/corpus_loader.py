@@ -1176,6 +1176,12 @@ def load_built_in_corpus(name, url, progress_callback=None):
                         'lang_code': lang,
                         'error': None
                     }
+                else:
+                    with open(local_path, 'rb') as f:
+                        file_bytes = f.read()
+                    fs = io.BytesIO(file_bytes)
+                    fs.name = local_path
+                    file_sources.append(fs)
             else:
                 if filename.startswith("http"):
                     if progress_callback:

@@ -21,9 +21,10 @@ architecture_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'
 if architecture_root not in sys.path:
     sys.path.insert(0, architecture_root)
 
-# Force reload logic removed to improve performance. 
-# Streamlit handles module reloading natively in development mode.
+import importlib
 import core.config
+import core.preprocessing.corpus_loader
+importlib.reload(core.preprocessing.corpus_loader)
 import core.ai_service
 import core.modules.concordance
 import core.modules.collocation
