@@ -1,0 +1,56 @@
+{
+  "sessions": [
+    {
+      "id": "sess_1790393190",
+      "start_time": "2026-09-26 10:26:30",
+      "start_timestamp": 1790393190.8841934,
+      "city": "Semarang",
+      "region": "Java",
+      "country": "Indonesia",
+      "org": "PT. INDOSAT Tbk",
+      "last_heartbeat": 1790393190.9009993
+    },
+    {
+      "id": "sess_1790393117",
+      "start_time": "2026-09-26 10:25:17",
+      "start_timestamp": 1790393117.9448588,
+      "city": "Semarang",
+      "region": "Java",
+      "country": "Indonesia",
+      "org": "PT. INDOSAT Tbk",
+      "last_heartbeat": 1790393117.9624941
+    },
+    {
+      "id": "sess_1790393067",
+      "start_time": "2026-09-26 10:24:27",
+      "start_timestamp": 1790393067.3944252,
+      "city": "Semarang",
+      "region": "Java",
+      "country": "Indonesia",
+      "org": "PT. INDOSAT Tbk",
+      "last_heartbeat": 1790393067.4067626
+    },
+    {
+      "id": "sess_1790392902",
+      "start_time": "2026-09-26 10:21:42",
+      "start_timestamp": 1790392902.302294,
+      "city": "Semarang",
+      "region": "Java",
+      "country": "Indonesia",
+      "org": "PT. INDOSAT Tbk",
+      "last_heartbeat": 1790392902.318399
+    },
+    {
+      "id": "sess_1790392880",
+      "start_time": "2026-09-26 10:21:20",
+      "start_timestamp": 1790392880.8543768,
+      "city": "Semarang",
+      "region": "Java",
+      "country": "Indonesia",
+      "org": "PT. INDOSAT Tbk",
+      "last_heartbeat": 1790392886.8388574
+    }
+  ],
+  "total_access_count": 5,
+  "created_at": "2026-03-01 00:00:00"
+}
