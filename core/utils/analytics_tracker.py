@@ -6,7 +6,8 @@ import subprocess
 import tempfile
 import streamlit as st
 
-ANALYTICS_FILE = os.path.join(tempfile.gettempdir(), "cortex_analytics.json")
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ANALYTICS_FILE = os.path.join(_ROOT_DIR, "cortex_analytics.json")
 
 def init_analytics():
     """Ensures the analytics store exists and is valid."""
@@ -14,7 +15,7 @@ def init_analytics():
         data = {
             "sessions": [],
             "total_access_count": 0,
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+            "created_at": "2026-09-19 00:00:00"
         }
         _write_analytics(data)
 
@@ -192,7 +193,8 @@ def get_analytics_summary():
     return {
         "total_accesses": data.get("total_access_count", len(sessions)),
         "active_sessions_count": len(sessions),
-        "recent_sessions": sessions
+        "recent_sessions": sessions,
+        "tracked_since": data.get("created_at", "2026-09-19 00:00:00")[:10]
     }
 
 def get_git_maintenance_log(limit=15):

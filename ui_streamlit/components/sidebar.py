@@ -428,6 +428,7 @@ def render_sidebar():
         
         with tab_an:
             an_summary = get_analytics_summary()
+            st.caption(f"🗓️ Tracking since inception: **{an_summary.get('tracked_since', '2026-09-19')}**")
             st.metric("Total Accesses", f"{an_summary['total_accesses']:,}")
             st.metric("Sessions Logged", f"{an_summary['active_sessions_count']:,}")
             
