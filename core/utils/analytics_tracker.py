@@ -37,7 +37,7 @@ def _write_analytics(data):
 def get_client_ip_geo():
     """
     Attempts to retrieve geographic information for the active user session.
-    Uses privacy-friendly client IP lookup service.
+    Uses multi-provider fallback (ipwho.is, ip-api.com) for high reliability.
     """
     try:
         # Check Streamlit headers if available
@@ -53,29 +53,53 @@ def get_client_ip_geo():
         except Exception:
             pass
 
-        # Perform geo lookup (cached per session)
-        if "geo_info" in st.session_state:
+        # Perform geo lookup (cached per session if valid)
+        if "geo_info" in st.session_state and st.session_state["geo_info"].get("city") not in ("Unknown", "Unknown / Localhost"):
             return st.session_state["geo_info"]
 
         geo_data = {
             "ip": user_ip,
-            "city": "Unknown / Localhost",
-            "region": "Local",
-            "country": "Localhost / Internal",
-            "org": "Private Session"
+            "city": "Unknown",
+            "region": "Unknown",
+            "country": "Unknown",
+            "org": "Unknown ISP"
         }
 
+        # 1. Provider 1: ipwho.is (fast, JSON, works with IPv4/v6)
         try:
-            res = requests.get("https://ipapi.co/json/", timeout=3)
+            target_url = f"https://ipwho.is/{user_ip}" if user_ip not in ("Local/Private", "localhost", "127.0.0.1") else "https://ipwho.is/"
+            res = requests.get(target_url, timeout=3, headers={"User-Agent": "CortexCorpusApp/1.0"})
             if res.status_code == 200:
                 d = res.json()
-                geo_data = {
-                    "ip": d.get("ip", user_ip),
-                    "city": d.get("city", "Unknown City"),
-                    "region": d.get("region", "Unknown Region"),
-                    "country": d.get("country_name", "Unknown Country"),
-                    "org": d.get("org", "Unknown ISP")
-                }
+                if d.get("success", True):
+                    geo_data = {
+                        "ip": d.get("ip", user_ip),
+                        "city": d.get("city", "Unknown City"),
+                        "region": d.get("region", "Unknown Region"),
+                        "country": d.get("country", "Unknown Country"),
+                        "org": d.get("connection", {}).get("isp") or d.get("connection", {}).get("org") or "Unknown ISP"
+                    }
+                    st.session_state["geo_info"] = geo_data
+                    return geo_data
+        except Exception:
+            pass
+
+        # 2. Provider 2: ip-api.com (fallback)
+        try:
+            target_url = f"http://ip-api.com/json/{user_ip}" if user_ip not in ("Local/Private", "localhost", "127.0.0.1") else "http://ip-api.com/json/"
+            res = requests.get(target_url, timeout=3)
+            if res.status_code == 200:
+                d = res.json()
+                if d.get("status") == "success":
+                    geo_data = {
+                        "ip": d.get("query", user_ip),
+                        "city": d.get("city", "Unknown City"),
+                        "region": d.get("regionName", "Unknown Region"),
+                        "country": d.get("country", "Unknown Country"),
+                        "org": d.get("isp") or d.get("org") or "Unknown ISP"
+                    }
+                    st.session_state["geo_info"] = geo_data
+                    return geo_data
         except Exception:
             pass
 
