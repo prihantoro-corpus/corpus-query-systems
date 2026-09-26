@@ -418,7 +418,50 @@ def render_sidebar():
                 chat_hist.append({"role": "assistant", "content": response})
             else:
                 chat_hist.append({"role": "assistant", "content": f"Sorry, I encountered an error: {err}"})
-        set_state('sidebar_chat_history', chat_hist)
-        st.rerun()
+    st.sidebar.markdown("---")
+    
+    # 6. System Analytics & GitHub Maintenance History in Sidebar
+    with st.sidebar.expander("📊 System Analytics & Maintenance", expanded=False):
+        from core.utils.analytics_tracker import get_analytics_summary, get_git_maintenance_log
+        
+        tab_an, tab_git = st.tabs(["📊 Analytics", "🛠️ Git Logs"])
+        
+        with tab_an:
+            an_summary = get_analytics_summary()
+            st.metric("Total Accesses", f"{an_summary['total_accesses']:,}")
+            st.metric("Sessions Logged", f"{an_summary['active_sessions_count']:,}")
+            
+            st.caption("📍 Recent Sessions & Geo-Location:")
+            sessions = an_summary['recent_sessions']
+            if sessions:
+                import pandas as pd
+                df_sess = pd.DataFrame(sessions)
+                renames = {
+                    "start_time": "Time",
+                    "duration_formatted": "Dur",
+                    "city": "City",
+                    "country": "Country",
+                    "org": "ISP"
+                }
+                display_cols = [c for c in renames.keys() if c in df_sess.columns]
+                df_sess_display = df_sess[display_cols].rename(columns=renames)
+                st.dataframe(df_sess_display.head(15), use_container_width=True, hide_index=True)
+            else:
+                st.info("No session logs recorded yet.")
+                
+        with tab_git:
+            st.caption("🛠️ GitHub Commit Log:")
+            git_logs = get_git_maintenance_log(limit=15)
+            if git_logs:
+                import pandas as pd
+                df_git = pd.DataFrame(git_logs)
+                df_git = df_git.rename(columns={
+                    "commit": "Commit",
+                    "time": "Time",
+                    "message": "Message"
+                })
+                st.dataframe(df_git[['Commit', 'Time', 'Message']], use_container_width=True, hide_index=True)
+            else:
+                st.info("Git maintenance log unavailable.")
 
     return view
