@@ -15,7 +15,7 @@ def init_analytics():
         data = {
             "sessions": [],
             "total_access_count": 0,
-            "created_at": "2026-09-19 00:00:00"
+            "created_at": "2026-03-01 00:00:00"
         }
         _write_analytics(data)
 
@@ -194,7 +194,7 @@ def get_analytics_summary():
         "total_accesses": data.get("total_access_count", len(sessions)),
         "active_sessions_count": len(sessions),
         "recent_sessions": sessions,
-        "tracked_since": data.get("created_at", "2026-09-19 00:00:00")[:10]
+        "tracked_since": data.get("created_at", "2026-03-01 00:00:00")[:10]
     }
 
 def get_git_maintenance_log(limit=15):
