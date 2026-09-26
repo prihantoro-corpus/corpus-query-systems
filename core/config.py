@@ -19,7 +19,7 @@ KNOWN_CORPORA_MAP = {
     "BNC Spoken": "english/BNC Spoken.duckdb",
     "Arabic PUD UD Sample": "arabic/ar_pud-ud-test.xml",
     "Chinese GSD UD Sample": "chinese/zh_gsd-ud-train.xml",
-    "Japanese GSD UD Sample": "japanese/ja_gsd-ud-dev.db",
+    "Japanese GSD UD Sample": "japanese/JP-DICO-JALF.xml",
     "Korean GSD UD Sample": "korean/ko_gsd-ud-train.xml",
     "Korean Sample (XML)": "korean/korean_sample.xml",
     "ELAN Indonesian Sample (XML)": "indonesian/tag_sample_elan_30_sentences.xml",

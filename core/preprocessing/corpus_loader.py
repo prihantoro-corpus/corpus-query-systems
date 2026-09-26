@@ -1195,17 +1195,31 @@ def load_built_in_corpus(name, url, progress_callback=None):
                 else:
                     # Try fetching from Hugging Face Dataset (prihantoro-corpus/cortex-data)
                     hf_raw_url = f"https://huggingface.co/datasets/prihantoro-corpus/cortex-data/raw/main/corpora/{filename}"
+                    zip_filename = filename.rsplit('.', 1)[0] + '.zip'
+                    hf_zip_url = f"https://huggingface.co/datasets/prihantoro-corpus/cortex-data/raw/main/corpora/{zip_filename}"
+                    
                     if progress_callback:
                         progress_callback(0.05 + (idx/len(names))*0.2, f"Downloading {corpus_name} from dataset repository...")
                     try:
+                        # Try direct file first, then zip version
                         response = requests.get(hf_raw_url, timeout=60)
-                        response.raise_for_status()
-                        file_bytes = response.content
-                        
-                        # Save locally to CORPORA_DIR so future loads are instant
-                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                        with open(local_path, 'wb') as out_f:
-                            out_f.write(file_bytes)
+                        if response.status_code != 200:
+                            response = requests.get(hf_zip_url, timeout=120)
+                            response.raise_for_status()
+                            zip_target_path = os.path.join(CORPORA_DIR, zip_filename)
+                            os.makedirs(os.path.dirname(zip_target_path), exist_ok=True)
+                            with open(zip_target_path, 'wb') as out_f:
+                                out_f.write(response.content)
+                            import zipfile
+                            with zipfile.ZipFile(zip_target_path, 'r') as zip_ref:
+                                zip_ref.extractall(os.path.dirname(local_path))
+                            with open(local_path, 'rb') as extracted_f:
+                                file_bytes = extracted_f.read()
+                        else:
+                            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                            with open(local_path, 'wb') as out_f:
+                                out_f.write(response.content)
+                            file_bytes = response.content
                             
                         fs = io.BytesIO(file_bytes)
                         fs.name = local_path
