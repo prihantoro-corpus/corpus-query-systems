@@ -145,14 +145,34 @@ def track_session_access():
         data["sessions"] = data["sessions"][:100]
         st.session_state["session_id"] = session_entry["id"]
         _write_analytics(data)
+    else:
+        # If active session was stored with legacy 'Unknown' geo, try updating it
+        geo = get_client_ip_geo()
+        if geo.get("city") not in ("Unknown", "Unknown / Localhost"):
+            data = _read_analytics()
+            for sess in data.get("sessions", []):
+                if sess.get("id") == st.session_state.get("session_id"):
+                    if sess.get("city") in ("Unknown", "Unknown / Localhost"):
+                        sess["city"] = geo.get("city")
+                        sess["region"] = geo.get("region")
+                        sess["country"] = geo.get("country")
+                        sess["org"] = geo.get("org")
+                        _write_analytics(data)
+                    break
 
 def update_session_duration():
     """Updates the active session's duration/heartbeat."""
     if "session_id" in st.session_state:
         data = _read_analytics()
+        geo = get_client_ip_geo()
         for sess in data.get("sessions", []):
             if sess.get("id") == st.session_state["session_id"]:
                 sess["last_heartbeat"] = time.time()
+                if sess.get("city") in ("Unknown", "Unknown / Localhost") and geo.get("city") not in ("Unknown", "Unknown / Localhost"):
+                    sess["city"] = geo.get("city")
+                    sess["region"] = geo.get("region")
+                    sess["country"] = geo.get("country")
+                    sess["org"] = geo.get("org")
                 break
         _write_analytics(data)
 
