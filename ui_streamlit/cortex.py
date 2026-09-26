@@ -197,6 +197,9 @@ from core.visualiser.styles import POS_COLOR_MAP
 # Main Layout
 def main():
     import ui_streamlit.components.sidebar
+    from core.utils.analytics_tracker import track_session_access, update_session_duration
+    track_session_access()
+    update_session_duration()
 
     st.markdown(
         """
