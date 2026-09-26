@@ -588,54 +588,7 @@ def render_full_overview(name, path, stats, structure, error):
         
     st.markdown("---")
     
-    # --- System Analytics & GitHub Maintenance Log ---
-    with st.expander("📊 System Analytics & GitHub Maintenance History", expanded=False):
-        from core.utils.analytics_tracker import get_analytics_summary, get_git_maintenance_log
-        
-        tab_an, tab_git = st.tabs(["📊 Session Analytics", "🛠️ GitHub Maintenance Log"])
-        
-        with tab_an:
-            an_summary = get_analytics_summary()
-            col_a1, col_a2 = st.columns(2)
-            col_a1.metric("Total App Accesses", f"{an_summary['total_accesses']:,}")
-            col_a2.metric("Recorded Sessions", f"{an_summary['active_sessions_count']:,}")
-            
-            st.markdown("##### 📍 Recent Sessions & Geographic Access Log")
-            sessions = an_summary['recent_sessions']
-            if sessions:
-                import pandas as pd
-                df_sess = pd.DataFrame(sessions)
-                renames = {
-                    "start_time": "Start Time",
-                    "duration_formatted": "Duration",
-                    "city": "City",
-                    "region": "Region",
-                    "country": "Country",
-                    "org": "ISP / Organization"
-                }
-                display_cols = [c for c in renames.keys() if c in df_sess.columns]
-                df_sess_display = df_sess[display_cols].rename(columns=renames)
-                st.dataframe(df_sess_display, use_container_width=True, hide_index=True)
-            else:
-                st.info("No session logs recorded yet.")
-                
-        with tab_git:
-            st.markdown("##### 🛠️ Automated Git Maintenance Log")
-            git_logs = get_git_maintenance_log(limit=20)
-            if git_logs:
-                import pandas as pd
-                df_git = pd.DataFrame(git_logs)
-                df_git = df_git.rename(columns={
-                    "commit": "Commit Hash",
-                    "author": "Author",
-                    "time": "Date / Time",
-                    "message": "Maintenance Action / Message"
-                })
-                st.dataframe(df_git, use_container_width=True, hide_index=True)
-            else:
-                st.info("Git maintenance log unavailable.")
-                
-    st.markdown("---")
+
 
     current_lang = ov.get_corpus_language(path)
     show_classification = True
