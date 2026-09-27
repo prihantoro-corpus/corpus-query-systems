@@ -204,6 +204,10 @@ def main():
     st.markdown(
         """
         <div style="text-align: right; margin-bottom: 0.5rem;">
+            <a href="https://github.com/prihantoro-corpus/cortex/blob/main/README.txt" target="_blank"
+               style="color:#00FFF5; font-weight:700; text-decoration:none; margin-right: 15px;">
+                README
+            </a>
             <a href="https://docs.google.com/document/d/1HjF20hLgsPUORqLAXKmY-uqh_RKoQZNmb4uuaRiWyq0/edit?usp=sharing" target="_blank"
                style="color:#00FFF5; font-weight:700; text-decoration:none; margin-right: 15px;">
                 Citation
