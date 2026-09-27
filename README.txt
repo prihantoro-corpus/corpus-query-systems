@@ -5,6 +5,8 @@ TECHNOLOGICAL ARCHITECTURE OVERVIEW
 
 1. OVERVIEW & PURPOSE
 --------------------------------------------------------------------------------
+Official Website: https://www.cortex-app.org/
+
 Cortex is a comprehensive, high-performance corpus linguistics and text analytics platform.
 It combines ultra-fast SQL-based corpus querying with state-of-the-art Natural Language 
 Processing (NLP) pipelines, statistical association metrics, machine learning, and interactive 
