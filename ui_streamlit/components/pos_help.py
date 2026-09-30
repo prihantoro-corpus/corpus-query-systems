@@ -1,6 +1,7 @@
 import streamlit as st
 import duckdb
 import pandas as pd
+import os
 import core.modules.overview as ov
 
 UPOS_INFO = {
@@ -272,7 +273,7 @@ def render_pos_help_button(db_path, key_suffix=""):
     """
     Renders a help popover button that lists POS tags, definitions, and corpus examples.
     """
-    if not db_path:
+    if not db_path or not os.path.exists(db_path):
         return
         
     tagger, tagset = infer_tagger_and_tagset(db_path)
@@ -429,7 +430,7 @@ def check_available_annotations(db_path):
     return available
 
 def render_annotation_help_button(db_path, key_suffix=""):
-    if not db_path:
+    if not db_path or not os.path.exists(db_path):
         return
         
     layers = check_available_annotations(db_path)

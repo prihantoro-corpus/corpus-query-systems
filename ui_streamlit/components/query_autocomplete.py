@@ -261,7 +261,14 @@ def render_tag_quick_insert(target_key, corpus_path=None, label="🏷️ Insert 
                                         cols = st.columns(2)
                                         for idx, val in enumerate(matching_vals):
                                             col_idx = idx % 2
-                                            xml_token = f'<tag {attr}="{val}">'
+                                            if '_' not in attr and attr.lower() in {'semantic', 'sentiment', 'topic', 'pos', 'lemma', 'ent_type'}:
+                                                xml_token = f'<{attr}="{val}">'
+                                            elif '_' in attr:
+                                                tag_part, attr_part = attr.split('_', 1)
+                                                xml_token = f'<{tag_part} {attr_part}="{val}">'
+                                            else:
+                                                xml_token = f'<{attr}="{val}">'
+                                                
                                             with cols[col_idx]:
                                                 if st.button(xml_token, key=f"btn_xml_{attr}_{idx}_{target_key}", use_container_width=True):
                                                     _insert_tag_to_state(target_key, xml_token)

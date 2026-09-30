@@ -381,63 +381,63 @@ def render_concordance_view():
                         except Exception:
                             pass
 
-                        if len(extra_cols) > 0:
-                            if is_eaf_corpus:
-                                with st.container(border=True):
-                                    st.markdown("##### 🛠️ Annotation Tiers Builder")
-                                    st.markdown("<div style='font-size: 0.85em; color: #94a3b8; margin-bottom: 8px;'>Configure the custom tiers and alignment for the Interlinear Gloss display.</div>", unsafe_allow_html=True)
+                # Move extra_cols / Annotation Tiers outside of the Search Controls expander
+                if len(extra_cols) > 0:
+                    if is_eaf_corpus:
+                        with st.container(border=True):
+                            st.markdown("##### 🛠️ Annotation Tiers Builder")
+                            st.markdown("<div style='font-size: 0.85em; color: #94a3b8; margin-bottom: 8px;'>Configure the custom tiers and alignment for the Interlinear Gloss display.</div>", unsafe_allow_html=True)
+                            
+                            import uuid
+                            
+                            if 'kwic_custom_tiers' not in st.session_state:
+                                st.session_state['kwic_custom_tiers'] = []
+
+                            for i, tier in enumerate(st.session_state['kwic_custom_tiers']):
+                                if 'id' not in tier:
+                                    tier['id'] = str(uuid.uuid4())
+                                t_id = tier['id']
+                                
+                                col_key = f"tier_col_{t_id}"
+                                align_key = f"tier_align_{t_id}"
+                                
+                                current_col = tier.get('col', extra_cols[0])
+                                idx_col = extra_cols.index(current_col) if current_col in extra_cols else 0
+                                
+                                current_align = tier.get('align', 'word')
+                                idx_align = 0 if current_align == 'word' else 1
                                     
-                                    import uuid
-                                    
-                                    if 'kwic_custom_tiers' not in st.session_state:
-                                        st.session_state['kwic_custom_tiers'] = []
+                                c1, c2, c3, c4 = st.columns([1, 4, 3, 1])
+                                c1.markdown(f"<div style='margin-top:8px; font-size:0.9em;'><b>Tier {i+1}</b></div>", unsafe_allow_html=True)
+                                
+                                c2.radio("Column", options=extra_cols, index=idx_col, key=col_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id), horizontal=True)
+                                c3.radio("Alignment", options=["word", "sentence"], index=idx_align, key=align_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id), horizontal=True)
+                                
+                                if c4.button("❌", key=f"tier_del_{t_id}"):
+                                    st.session_state['kwic_custom_tiers'].pop(i)
+                                    # Clean up state
+                                    if col_key in st.session_state: del st.session_state[col_key]
+                                    if align_key in st.session_state: del st.session_state[align_key]
+                                    st.rerun()
 
-                                    for i, tier in enumerate(st.session_state['kwic_custom_tiers']):
-                                        if 'id' not in tier:
-                                            tier['id'] = str(uuid.uuid4())
-                                        t_id = tier['id']
-                                        
-                                        col_key = f"tier_col_{t_id}"
-                                        align_key = f"tier_align_{t_id}"
-                                        
-                                        current_col = tier.get('col', extra_cols[0])
-                                        idx_col = extra_cols.index(current_col) if current_col in extra_cols else 0
-                                        
-                                        current_align = tier.get('align', 'word')
-                                        idx_align = 0 if current_align == 'word' else 1
-                                            
-                                        c1, c2, c3, c4 = st.columns([1, 4, 3, 1])
-                                        c1.markdown(f"<div style='margin-top:8px; font-size:0.9em;'><b>Tier {i+1}</b></div>", unsafe_allow_html=True)
-                                        
-                                        c2.radio("Column", options=extra_cols, index=idx_col, key=col_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id), horizontal=True)
-                                        c3.radio("Alignment", options=["word", "sentence"], index=idx_align, key=align_key, label_visibility="collapsed", on_change=sync_tier, args=(i, t_id), horizontal=True)
-                                        
-                                        if c4.button("❌", key=f"tier_del_{t_id}"):
-                                            st.session_state['kwic_custom_tiers'].pop(i)
-                                            # Clean up state
-                                            if col_key in st.session_state: del st.session_state[col_key]
-                                            if align_key in st.session_state: del st.session_state[align_key]
-                                            st.rerun()
+                            if st.button("➕ Add Tier", key="btn_add_tier"):
+                                st.session_state['kwic_custom_tiers'].append({'id': str(uuid.uuid4()), 'col': extra_cols[0], 'align': 'word'})
+                                st.rerun()
+                    else:
+                        with st.expander("🏷️ Annotation Tiers Display", expanded=False):
+                            btn_all_col, _ = st.columns([1, 4])
+                            with btn_all_col:
+                                if st.button("Select All Tiers", key="btn_select_all_elan_tiers"):
+                                    for col in extra_cols:
+                                        set_state(f'kwic_show_{col}', True)
+                                    st.rerun()
 
-                                    if st.button("➕ Add Tier", key="btn_add_tier"):
-                                        st.session_state['kwic_custom_tiers'].append({'id': str(uuid.uuid4()), 'col': extra_cols[0], 'align': 'word'})
-                                        st.rerun()
-                            else:
-                                with st.container(border=True):
-                                    st.markdown("##### 🏷️ Annotation Tiers Display (Unchecked by Default)")
-                                    btn_all_col, _ = st.columns([1, 4])
-                                    with btn_all_col:
-                                        if st.button("Select All Tiers", key="btn_select_all_elan_tiers"):
-                                            for col in extra_cols:
-                                                set_state(f'kwic_show_{col}', True)
-                                            st.rerun()
-
-                                    # Dynamically generate checkboxes in groups of 4
-                                    cols_ui = st.columns(4)
-                                    for i, col in enumerate(extra_cols):
-                                        with cols_ui[i % 4]:
-                                            is_checked = st.checkbox(f"{col.replace('_', ' ').title()} ({col})", value=get_state(f'kwic_show_{col}', False), key=f"kwic_show_{col}_cb")
-                                            set_state(f'kwic_show_{col}', is_checked)
+                            # Dynamically generate checkboxes in groups of 4
+                            cols_ui = st.columns(4)
+                            for i, col in enumerate(extra_cols):
+                                with cols_ui[i % 4]:
+                                    is_checked = st.checkbox(f"{col.replace('_', ' ').title()} ({col})", value=get_state(f'kwic_show_{col}', False), key=f"kwic_show_{col}_cb")
+                                    set_state(f'kwic_show_{col}', is_checked)
 
                 # --- XML Restriction Filters ---
                 comp_mode = get_state('comparison_mode', False)
@@ -1141,6 +1141,7 @@ def render_visualisation_tab(cluster_results, has_coll_filter=False):
             fig_node = go.Figure()
             if node_forms:
                 if len(cluster_names) == 1:
+                    name = cluster_names[0]
                     # Single corpus / no restrictions case: plot variations on Y-axis
                     form_freqs = []
                     for form in node_forms:

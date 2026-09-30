@@ -1,6 +1,7 @@
 import duckdb
 import pandas as pd
 import json
+import os
 
 def get_corpus_files(db_path):
     """Fetches unique filenames from the corpus."""
@@ -111,6 +112,8 @@ def get_unique_pos_tags(db_path, xml_where_clause="", xml_params=[]):
     """
     Fetches unique POS tags from the corpus, excluding dummy or empty tags.
     """
+    if not db_path or not os.path.exists(db_path):
+        return []
     con = duckdb.connect(db_path, read_only=True)
     try:
         cols = [c[1] for c in con.execute("PRAGMA table_info(corpus)").fetchall()]
@@ -124,6 +127,9 @@ def get_unique_pos_tags(db_path, xml_where_clause="", xml_params=[]):
             
         tags = [r[0] for r in con.execute(query, xml_params).fetchall()]
         return sorted(tags)
+    except Exception as e:
+        print(f"Error fetching unique pos tags: {e}")
+        return []
     finally:
         con.close()
 
