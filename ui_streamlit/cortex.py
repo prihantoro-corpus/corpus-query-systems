@@ -1,4 +1,6 @@
 import os
+import warnings
+warnings.filterwarnings("ignore", message=".*Examining the path of torch.classes raised.*")
 os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1000"
 import streamlit as st
 
