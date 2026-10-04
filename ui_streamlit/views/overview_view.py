@@ -1497,8 +1497,44 @@ def render_upload_ui():
             )
             
             if custom_type == "Rule-Based":
-                st.markdown("### 📜 Rule-Based Custom Tagger")
-                st.caption("Upload lexicons, lemma mappings, word formation rules, and guessers. Synthesize dictionaries and reorder rule priorities.")
+                head_col1, head_col2 = st.columns([4, 1])
+                with head_col1:
+                    st.markdown("### 📜 Rule-Based Custom Tagger")
+                    st.caption("Upload lexicons, lemma mappings, word formation rules, and guessers. Synthesize dictionaries and reorder rule priorities.")
+                with head_col2:
+                    st.write("") # spacer
+                    with st.popover("📖 Tagger Guide", use_container_width=True):
+                        st.markdown("""
+                        ### 📖 Rule-Based Custom Tagger Guide
+                        
+                        The **Rule-Based Custom Tagger** uses a deterministic state machine to tokenize, inflect, and POS tag texts across languages.
+                        
+                        ---
+                        #### 1. File Structure & Requirements
+                        * **`Lemma.txt`** *(Lemma Mapping)*: Maps root lemmas to class codes (e.g. `V013 fly`, `N001 orang`).
+                        * **`Word-formation.txt`** *(Morphological Rules)*: Defines rules using operators (`<D1>`, `<L>`, `<N1>`, `<E1>-<E2>`).  
+                          🔗 [Read Full Word Formation Operators Guide (Google Doc)](https://docs.google.com/document/d/1UdR93HfItcoByQIQRrlDmcJWJqIxOHNy/edit?usp=drive_link&ouid=101822844091249125937&rtpof=true&sd=true)
+                        * **`Word-form.txt`** *(Inflected Dictionary)*: **Mandatory** active dictionary containing synthesized full forms (`Word \t POS \t Lemma`).
+                        * **`Lexicon.txt`** *(Master Lexicon)*: Closed-class words (`di`, `saya`), multi-word units (`rumah sakit`), and irregulars (`saw`).
+                        * **`Guesser-regex.txt`**: Fallback suffix patterns (e.g. `NOUN` for `.*tion$`).
+                        * **`Guesser1.txt`**: Default fallback tag for unknown words (e.g. `NOUN` or `NN`).
+                        
+                        ---
+                        #### 2. Synthesizing `Word-form.txt`
+                        1. Upload **`Lemma.txt`** and **`Word-formation.txt`**.
+                        2. Click **"⚙️ Synthesize / Generate Word Forms"**.
+                        3. CORTEX compiles `Word-form.txt` and automatically registers all compound/reduplicated forms (`orang-orang`, `buku-buku`) into the compound-aware tokenizer!
+                        
+                        ---
+                        #### 3. Priority Order & Matching
+                        Tagging evaluates active files in **top-to-bottom priority order**:
+                        1. **Compound Tokenizer**: Preserves multi-word and hyphenated entries as single tokens.
+                        2. **Priority 1**: `Lexicon.txt` / `Word-form.txt` (Direct lookup).
+                        3. **Priority 2**: `Guesser-regex.txt` (Regex suffix match).
+                        4. **Priority 3**: `Guesser1.txt` (Fallback tag).
+                        
+                        *Tip: Use ⬆️ / ⬇️ in the Priority Box to re-order precedence!*
+                        """)
 
                 from core.preprocessing.custom_tagger import CustomRuleBasedTagger
                 if 'rule_based_tagger' not in st.session_state:
@@ -1552,7 +1588,7 @@ def render_upload_ui():
                         )
                         process_uploads(lemma_files, 'lemma')
 
-                        st.markdown("**3) Word Formation File(s)**")
+                        st.markdown("**3) Word Formation File(s)** — [📘 View Word Formation Operators Guide](https://docs.google.com/document/d/1UdR93HfItcoByQIQRrlDmcJWJqIxOHNy/edit?usp=drive_link&ouid=101822844091249125937&rtpof=true&sd=true)")
                         wf_files = st.file_uploader(
                             "Upload Word Formation Files (.txt)",
                             type=["txt"],

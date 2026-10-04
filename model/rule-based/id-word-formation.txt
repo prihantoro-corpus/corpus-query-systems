@@ -1,0 +1,27 @@
+# Indonesian Word-Formation Rules
+# Code    POS     Operator Command                     # Description / Result Example
+
+# --- Base Form (Identity) ---
+N00     NOUN                                         # orang > orang, buku > buku
+V00     VERB                                         # makan > makan, tulis > tulis
+ADJ00   ADJ                                          # besar > besar
+
+# --- Reduplication ---
+N00     NOUN    <E1>-<E2>                            # Full reduplication: orang > orang-orang
+N00     NOUN    <E1>-[<E2><DL1>]                     # Partial reduplication with left deletion: orang > orang-rang
+V00     VERB    <E1>-<E2>                            # Action repetition: makan > makan-makan
+
+# --- Prefixation ---
+V00     VERB    <L>di                                # Passive prefix: makan > dimakan, tulis > ditulis
+V00     VERB    <L>ter                               # Accidental/state prefix: makan > termakan, tulis > tertulis
+V00     VERB    <L>ber                               # Intransitive prefix: main > bermain, ajar > belajar (stem specific)
+N00     NOUN    <L>pe                                # Agentive prefix: ajar > pengajar (or basic pe-), tulis > penulis
+
+# --- Suffixation ---
+V00     VERB    an                                   # Nominalizing suffix: makan > makanan, tulis > tulisan
+V00     VERB    kan                                  # Causative suffix: tulis > tuliskan, baca > bacakan
+V00     VERB    i                                    # Locative suffix: baca > bacai, tulis > tulisi
+
+# --- Circumfixation (Prefix + Suffix) ---
+V00     VERB    an<L>pe                              # Nominal circumfix pe-...-an: ajar > pelajaran / pengajaran
+V00     VERB    an<L>per                             # Circumfix per-...-an: main > permainan

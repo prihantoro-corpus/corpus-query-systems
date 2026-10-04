@@ -23,3 +23,8 @@ Sample Input & Output Files:
      Vertical TreeTagger-style output of tagged corpus tokens.
  10. sample_step_by_step_output.txt
      Detailed trace of how each rule file in priority order tags each token.
+
+
+explanation of grammar commands
+
+https://docs.google.com/document/d/1UdR93HfItcoByQIQRrlDmcJWJqIxOHNy/edit?usp=drive_link&ouid=101822844091249125937&rtpof=true&sd=true 

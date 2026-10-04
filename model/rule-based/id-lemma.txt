@@ -1,0 +1,14 @@
+# Indonesian Lemma Class Assignments
+# Code  Lemma
+N00    orang
+N00    anak
+N00    rumah
+N00    buku
+V00    makan
+V00    tidur
+V00    tulis
+V00    baca
+V00    ajar
+V00    main
+ADJ00  besar
+ADJ00  kecil

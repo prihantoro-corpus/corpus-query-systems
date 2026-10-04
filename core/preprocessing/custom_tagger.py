@@ -1026,14 +1026,36 @@ class CustomRuleBasedTagger:
             parsed = self._parse_file_content(content, ftype)
             self.parsed_data[filename] = parsed
 
-            # Extract MWUs from dictionary entries
+            # Extract MWUs / Hyphenated Compound units from dictionary entries
             if ftype in ('lexicon', 'word_form'):
                 dict_entries = parsed.get('dictionary', {})
                 for word in dict_entries:
-                    if ' ' in word:
+                    if ' ' in word or '-' in word:
                         w_lower = word.lower()
                         self.mwu_set.add(w_lower)
                         self.raw_mwu_map[w_lower] = word
+
+        # Dynamically synthesize word_form rules if lemma and word_formation files are loaded
+        lemma_files = [info['content'] for f, info in self.files.items() if info['type'] == 'lemma']
+        wf_files = [info['content'] for f, info in self.files.items() if info['type'] == 'word_formation']
+        if lemma_files and wf_files:
+            syn_content = CustomRuleBasedTagger.generate_word_form_dictionary(lemma_files, wf_files)
+            syn_parsed = self._parse_file_content(syn_content, 'word_form')
+            # Register synthesized entries into mwu_set and parsed data for word_form files if not already present
+            for fn, info in self.files.items():
+                if info['type'] == 'word_form':
+                    dict_entries = self.parsed_data[fn].get('dictionary', {})
+                    syn_entries = syn_parsed.get('dictionary', {})
+                    for w, pairs in syn_entries.items():
+                        if w not in dict_entries:
+                            dict_entries[w] = []
+                        for pair in pairs:
+                            if pair not in dict_entries[w]:
+                                dict_entries[w].append(pair)
+                        if ' ' in w or '-' in w:
+                            w_lower = w.lower()
+                            self.mwu_set.add(w_lower)
+                            self.raw_mwu_map[w_lower] = w
 
     def _parse_file_content(self, content, ftype):
         if not content:
@@ -1114,10 +1136,10 @@ class CustomRuleBasedTagger:
                 if not line_str:
                     continue
                 parts = [p.strip() for p in line_str.split('\t' if '\t' in line_str else None) if p.strip()]
-                if len(parts) >= 3:
+                if len(parts) >= 2:
                     code = parts[0]
                     output_tag = parts[1]
-                    rule = parts[2]
+                    rule = parts[2] if len(parts) >= 3 else ""
                     rules.append({'code': code, 'tag': output_tag, 'rule': rule})
             return {'rules': rules}
 
@@ -1154,9 +1176,96 @@ class CustomRuleBasedTagger:
         return {}
 
     @staticmethod
+    def process_word_formation_rule(lemma, rule_str):
+        """
+        Executes full morphological operators on a lemma string.
+        Operators supported:
+        - <L>: Leftmost position
+        - <R>: Rightmost position
+        - <Nk>: Move cursor right k steps
+        - <NBk>: Move cursor left/back k steps
+        - <Dk>: Delete k characters right of cursor
+        - <DLk>: Delete k characters left of cursor
+        - <DNk>: Delete k characters immediately after inserted text
+        - <E1>, <E2>: Copy buffers for Reduplication
+        - [...]: Grouping block for entry transformations
+        """
+        if not rule_str or rule_str.strip() == "":
+            return lemma
+
+        # Handle Reduplication (<E1>, <E2>)
+        if "<E1>" in rule_str and "<E2>" in rule_str:
+            parts = rule_str.split("-")
+            res_parts = []
+            for p in parts:
+                p_clean = p.replace("[", "").replace("]", "")
+                if p_clean == "<E1>":
+                    res_parts.append(lemma)
+                elif p_clean == "<E2>":
+                    res_parts.append(lemma)
+                elif p_clean.startswith("<E1>"):
+                    ops = p_clean[4:]
+                    res_parts.append(CustomRuleBasedTagger._apply_single_operator_chain(lemma, ops))
+                elif p_clean.startswith("<E2>"):
+                    ops = p_clean[4:]
+                    res_parts.append(CustomRuleBasedTagger._apply_single_operator_chain(lemma, ops))
+                else:
+                    res_parts.append(CustomRuleBasedTagger._apply_single_operator_chain(lemma, p_clean))
+            return "-".join(res_parts)
+        else:
+            return CustomRuleBasedTagger._apply_single_operator_chain(lemma, rule_str)
+
+    @staticmethod
+    def _apply_single_operator_chain(lemma, ops_str):
+        if not ops_str:
+            return lemma
+
+        cursor = len(lemma)
+        buf = list(lemma)
+
+        tokens = re.split(r'(<[^>]+>)', ops_str)
+
+        for token in tokens:
+            if not token:
+                continue
+            if token == "<L>":
+                cursor = 0
+            elif token == "<R>":
+                cursor = len(buf)
+            elif token.startswith("<N") and not token.startswith("<NB") and token[2:-1].isdigit():
+                k = int(token[2:-1])
+                cursor = min(len(buf), cursor + k)
+            elif token.startswith("<NB") and token[3:-1].isdigit():
+                k = int(token[3:-1])
+                cursor = max(0, cursor - k)
+            elif token.startswith("<DL") and token[3:-1].isdigit():
+                k = int(token[3:-1])
+                start = max(0, cursor - k)
+                buf = buf[:start] + buf[cursor:]
+                cursor = start
+            elif token.startswith("<DN") and token[3:-1].isdigit():
+                k = int(token[3:-1])
+                buf = buf[:cursor] + buf[cursor + k:]
+            elif token.startswith("<D") and token[2:-1].isdigit():
+                k = int(token[2:-1])
+                if cursor >= len(buf):
+                    # Standard suffix deletion from right end
+                    start = max(0, len(buf) - k)
+                    buf = buf[:start]
+                    cursor = len(buf)
+                else:
+                    buf = buf[:cursor] + buf[cursor + k:]
+            else:
+                insert_chars = list(token)
+                buf = buf[:cursor] + insert_chars + buf[cursor:]
+                cursor += len(insert_chars)
+
+        return "".join(buf)
+
+    @staticmethod
     def generate_word_form_dictionary(lemma_contents_list, word_formation_contents_list):
         """
-        Step 1: Combines Lemma and Word Formation contents to synthesize an inflected word form dictionary string.
+        Combines Lemma and Word Formation contents to synthesize an inflected word form dictionary string.
         Format: word_form tab tag tab lemma
         """
         temp_tagger = CustomRuleBasedTagger()
@@ -1183,18 +1292,7 @@ class CustomRuleBasedTagger:
 
             if code in lemma_map:
                 for opt_pos, lemma in lemma_map[code]:
-                    del_match = re.match(r'^<D(\d+)>(.*)$', rule_str)
-                    if del_match:
-                        del_count = int(del_match.group(1))
-                        suffix = del_match.group(2)
-                        if del_count == 1 and lemma.endswith('y') and suffix == 'ing':
-                            word_form = lemma + suffix
-                        else:
-                            stem = lemma[:-del_count] if del_count > 0 and len(lemma) >= del_count else lemma
-                            word_form = stem + suffix
-                    else:
-                        word_form = lemma + rule_str
-
+                    word_form = CustomRuleBasedTagger.process_word_formation_rule(lemma, rule_str)
                     key = (word_form, output_tag, lemma)
                     if key not in seen:
                         seen.add(key)
@@ -1226,9 +1324,9 @@ class CustomRuleBasedTagger:
         placeholders = {}
         processed_text = sentence_text
 
-        # Step 1: Match MWU entries first
+        # Step 1: Match MWU / Compound entries first
         for idx, mwu_lower in enumerate(mwu_list):
-            pattern = r'\b' + re.escape(mwu_lower) + r'\b'
+            pattern = r'(?<![\w\-])' + re.escape(mwu_lower) + r'(?![\w\-])'
             matches = list(re.finditer(pattern, processed_text, flags=re.IGNORECASE))
             if matches:
                 for match in reversed(matches):

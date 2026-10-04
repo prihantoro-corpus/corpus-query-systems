@@ -31,6 +31,11 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code=None, selecte
     import hashlib
     try:
         cache_components = [str(selected_format), str(explicit_lang_code)]
+        if custom_tagger_config:
+            if hasattr(custom_tagger_config.get('rule_based_tagger'), 'files'):
+                cache_components.append(str(custom_tagger_config['rule_based_tagger'].files))
+            else:
+                cache_components.append(str(custom_tagger_config))
         for fs in file_sources:
             fname = getattr(fs, 'name', 'file')
             fsize = 0

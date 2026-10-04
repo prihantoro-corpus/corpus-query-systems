@@ -81,6 +81,31 @@ GUIDELINES = {
             * **Lu's LCA:** Choose wordlist (for lexical sophistication e.g., NGSL, AWL etc.) > Choose analysis level.
                * Default is by file.
                * If by sub-corpus, choose sub-corpus then choose attribute (e.g., choosing sentiment will display 3 segments: positive, negative, and neutral complexity in the table).
+        """,
+        "Rule-Based Custom Tagger": """
+            ### 📜 Rule-Based Custom Tagger Guide
+            The **Rule-Based Custom Tagger** uses a deterministic state machine to tokenize, inflect, and POS tag texts across languages.
+
+            #### 1. File Structure & Requirements
+            * **`Lemma.txt`**: Maps root lemmas to class codes (`V013 fly`, `N001 orang`).
+            * **`Word-formation.txt`**: Defines morphological rules using operators (`<D1>`, `<L>`, `<N1>`, `<E1>-<E2>`).  
+              🔗 [Read Full Word Formation Operators Guide (Google Doc)](https://docs.google.com/document/d/1UdR93HfItcoByQIQRrlDmcJWJqIxOHNy/edit?usp=drive_link&ouid=101822844091249125937&rtpof=true&sd=true)
+            * **`Word-form.txt`**: Mandatory active dictionary containing synthesized full forms (`Word \t POS \t Lemma`).
+            * **`Lexicon.txt`**: Closed-class words (`di`, `saya`), multi-word units (`rumah sakit`), and irregulars (`saw`).
+            * **`Guesser-regex.txt`**: Fallback suffix patterns (e.g. `NOUN` for `.*tion$`).
+            * **`Guesser1.txt`**: Default fallback tag for unknown words (e.g. `NOUN` or `NN`).
+
+            #### 2. Synthesizing `Word-form.txt`
+            1. Upload **`Lemma.txt`** and **`Word-formation.txt`**.
+            2. Click **"⚙️ Synthesize / Generate Word Forms"**.
+            3. CORTEX compiles `Word-form.txt` and registers all compound/reduplicated forms (`orang-orang`, `buku-buku`) into the compound-aware tokenizer!
+
+            #### 3. Priority Order & Matching
+            Tagging evaluates active files in **top-to-bottom priority order**:
+            1. **Compound Tokenizer**: Preserves multi-word and hyphenated entries as single tokens.
+            2. **Priority 1**: `Lexicon.txt` / `Word-form.txt` (Direct lookup).
+            3. **Priority 2**: `Guesser-regex.txt` (Regex suffix match).
+            4. **Priority 3**: `Guesser1.txt` (Fallback tag).
         """
     },
     "Concordance": """
