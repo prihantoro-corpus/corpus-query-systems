@@ -37,152 +37,29 @@ def _write_analytics(data):
 
 def get_client_ip_geo():
     """
-    Attempts to retrieve geographic information for the active user session.
-    Uses multi-provider fallback (ipwho.is, ip-api.com) for high reliability.
+    Returns zero-cost local session info without network calls or IP geotracking.
     """
-    try:
-        # Check Streamlit headers if available
-        user_ip = "Local/Private"
-        try:
-            from streamlit import context
-            if hasattr(context, "headers"):
-                forwarded = context.headers.get("x-forwarded-for")
-                if forwarded:
-                    user_ip = forwarded.split(",")[0].strip()
-                elif context.headers.get("host"):
-                    user_ip = context.headers.get("host")
-        except Exception:
-            pass
-
-        # Perform geo lookup (cached per session if valid)
-        if "geo_info" in st.session_state and st.session_state["geo_info"].get("city") not in ("Unknown", "Unknown / Localhost"):
-            return st.session_state["geo_info"]
-
-        geo_data = {
-            "ip": user_ip,
-            "city": "Unknown",
-            "region": "Unknown",
-            "country": "Unknown",
-            "org": "Unknown ISP"
-        }
-
-        # 1. Provider 1: ipwho.is (fast, JSON, works with IPv4/v6)
-        try:
-            target_url = f"https://ipwho.is/{user_ip}" if user_ip not in ("Local/Private", "localhost", "127.0.0.1") else "https://ipwho.is/"
-            res = requests.get(target_url, timeout=3, headers={"User-Agent": "CortexCorpusApp/1.0"})
-            if res.status_code == 200:
-                d = res.json()
-                if d.get("success", True):
-                    geo_data = {
-                        "ip": d.get("ip", user_ip),
-                        "city": d.get("city", "Unknown City"),
-                        "region": d.get("region", "Unknown Region"),
-                        "country": d.get("country", "Unknown Country"),
-                        "org": d.get("connection", {}).get("isp") or d.get("connection", {}).get("org") or "Unknown ISP"
-                    }
-                    st.session_state["geo_info"] = geo_data
-                    return geo_data
-        except Exception:
-            pass
-
-        # 2. Provider 2: ip-api.com (fallback)
-        try:
-            target_url = f"http://ip-api.com/json/{user_ip}" if user_ip not in ("Local/Private", "localhost", "127.0.0.1") else "http://ip-api.com/json/"
-            res = requests.get(target_url, timeout=3)
-            if res.status_code == 200:
-                d = res.json()
-                if d.get("status") == "success":
-                    geo_data = {
-                        "ip": d.get("query", user_ip),
-                        "city": d.get("city", "Unknown City"),
-                        "region": d.get("regionName", "Unknown Region"),
-                        "country": d.get("country", "Unknown Country"),
-                        "org": d.get("isp") or d.get("org") or "Unknown ISP"
-                    }
-                    st.session_state["geo_info"] = geo_data
-                    return geo_data
-        except Exception:
-            pass
-
-        st.session_state["geo_info"] = geo_data
-        return geo_data
-    except Exception as e:
-        return {
-            "ip": "Unknown",
-            "city": "Unknown",
-            "region": "Unknown",
-            "country": "Unknown",
-            "org": str(e)
-        }
+    return {
+        "ip": "Local/Private",
+        "city": "Local",
+        "region": "Local",
+        "country": "Local",
+        "org": "Local Machine"
+    }
 
 def track_session_access():
-    """
-    Tracks session access, total access count, and session duration.
-    Should be called once per session start.
-    """
-    init_analytics()
-    
-    if "session_tracked" not in st.session_state:
-        st.session_state["session_tracked"] = True
-        st.session_state["session_start_time"] = time.time()
-
-        geo = get_client_ip_geo()
-        data = _read_analytics()
-        data["total_access_count"] = data.get("total_access_count", 0) + 1
-
-        session_entry = {
-            "id": f"sess_{int(time.time())}",
-            "start_time": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "start_timestamp": time.time(),
-            "city": geo.get("city", "Unknown"),
-            "region": geo.get("region", "Unknown"),
-            "country": geo.get("country", "Unknown"),
-            "org": geo.get("org", "Unknown"),
-            "last_heartbeat": time.time()
-        }
-        
-        # Keep last 100 sessions
-        data["sessions"].insert(0, session_entry)
-        data["sessions"] = data["sessions"][:100]
-        st.session_state["session_id"] = session_entry["id"]
-        _write_analytics(data)
-    else:
-        # If active session was stored with legacy 'Unknown' geo, try updating it
-        geo = get_client_ip_geo()
-        if geo.get("city") not in ("Unknown", "Unknown / Localhost"):
-            data = _read_analytics()
-            for sess in data.get("sessions", []):
-                if sess.get("id") == st.session_state.get("session_id"):
-                    if sess.get("city") in ("Unknown", "Unknown / Localhost"):
-                        sess["city"] = geo.get("city")
-                        sess["region"] = geo.get("region")
-                        sess["country"] = geo.get("country")
-                        sess["org"] = geo.get("org")
-                        _write_analytics(data)
-                    break
+    """Lightweight session access tracker."""
+    pass
 
 def update_session_duration():
-    """Updates the active session's duration/heartbeat."""
-    if "session_id" in st.session_state:
-        data = _read_analytics()
-        geo = get_client_ip_geo()
-        for sess in data.get("sessions", []):
-            if sess.get("id") == st.session_state["session_id"]:
-                sess["last_heartbeat"] = time.time()
-                if sess.get("city") in ("Unknown", "Unknown / Localhost") and geo.get("city") not in ("Unknown", "Unknown / Localhost"):
-                    sess["city"] = geo.get("city")
-                    sess["region"] = geo.get("region")
-                    sess["country"] = geo.get("country")
-                    sess["org"] = geo.get("org")
-                break
-        _write_analytics(data)
+    """Lightweight session duration tracker."""
+    pass
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_analytics_summary():
-    """Returns analytics summary data for the UI."""
+    """Returns analytics summary data cached for 1 hour."""
     data = _read_analytics()
     sessions = data.get("sessions", [])
-    
-    # Calculate duration for sessions
     now = time.time()
     for s in sessions:
         start = s.get("start_timestamp", now)
@@ -197,11 +74,11 @@ def get_analytics_summary():
         "tracked_since": data.get("created_at", "2026-03-01 00:00:00")[:10]
     }
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_git_maintenance_log(limit=15):
     """
-    Fetches automated maintenance log from Git commits (local or GitHub REST API).
+    Fetches maintenance log cached for 1 hour to prevent Git CLI subprocess overhead on reruns.
     """
-    # 1. Local Git CLI
     try:
         cmd = ["git", "log", f"-n{limit}", "--pretty=format:%h|%an|%ar|%s"]
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -219,24 +96,5 @@ def get_git_maintenance_log(limit=15):
             return logs
     except Exception:
         pass
-
-    # 2. GitHub REST API (Online Fallback)
-    try:
-        url = f"https://api.github.com/repos/prihantoro-corpus/cortex/commits?per_page={limit}"
-        headers = {"Accept": "application/vnd.github.v3+json"}
-        res = requests.get(url, headers=headers, timeout=5)
-        if res.status_code == 200:
-            items = res.json()
-            logs = []
-            for item in items:
-                logs.append({
-                    "commit": item['sha'][:7],
-                    "author": item['commit']['author']['name'],
-                    "time": item['commit']['author']['date'][:10],
-                    "message": item['commit']['message'].split('\n')[0]
-                })
-            return logs
-    except Exception as e:
-        print(f"GitHub API Error: {e}")
 
     return []

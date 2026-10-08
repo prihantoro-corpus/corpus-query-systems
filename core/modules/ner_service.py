@@ -6,14 +6,14 @@ import os
 
 def ensure_spacy_model(model_name="en_core_web_sm"):
     """
-    Checks if a spaCy model is installed, and downloads it if missing.
+    Checks if a spaCy model is installed locally on disk, returning the model or None if missing.
+    Never attempts dynamic online downloading during runtime.
     """
     try:
         return spacy.load(model_name)
     except OSError:
-        print(f"Downloading spaCy model '{model_name}'...")
-        spacy.cli.download(model_name)
-        return spacy.load(model_name)
+        print(f"SpaCy model '{model_name}' not installed locally. Skipping runtime download.")
+        return None
 
 def run_spacy_ner(db_path, model_name="en_core_web_sm"):
     """

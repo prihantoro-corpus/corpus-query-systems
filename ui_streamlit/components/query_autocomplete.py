@@ -46,6 +46,16 @@ def _insert_tag_to_state(target_key, tag_str):
     st.session_state["_append_tag_any"] = tag_str
     st.rerun()
 
+def safe_columns(spec):
+    """
+    Safely creates columns, falling back to containers if nested column limit is exceeded.
+    """
+    try:
+        return st.columns(spec)
+    except Exception:
+        num = spec if isinstance(spec, int) else len(spec)
+        return [st.container() for _ in range(num)]
+
 def _render_reference_pos_tags(target_key, filter_text=""):
     """
     Renders reference PTB and UPOS tag buttons.
@@ -71,7 +81,7 @@ def _render_reference_pos_tags(target_key, filter_text=""):
         
         if matching_tags:
             st.caption(f"**{cat_name}**")
-            cols = st.columns(4)
+            cols = safe_columns(4)
             for idx, (tag, defn) in enumerate(matching_tags):
                 col_idx = idx % 4
                 tag_token = f"_{tag}"
@@ -131,7 +141,7 @@ def render_tag_quick_insert(target_key, corpus_path=None, label="🏷️ Insert 
                         matching_dynamic.append((tag, count, defn))
 
                 if matching_dynamic:
-                    cols = st.columns(4)
+                    cols = safe_columns(4)
                     for idx, (tag, count, defn) in enumerate(matching_dynamic):
                         col_idx = idx % 4
                         tag_token = f"_{tag}"
@@ -197,7 +207,7 @@ def render_tag_quick_insert(target_key, corpus_path=None, label="🏷️ Insert 
                         matching_deps.append((dep_tag, count, desc))
                 
                 if matching_deps:
-                    cols = st.columns(3)
+                    cols = safe_columns(3)
                     for idx, (dep_tag, count, desc) in enumerate(matching_deps):
                         col_idx = idx % 3
                         dep_token = f"dep:{dep_tag}"
@@ -258,7 +268,7 @@ def render_tag_quick_insert(target_key, corpus_path=None, label="🏷️ Insert 
                                             if st.button(f"Generic: {tag_generic}", key=f"btn_xml_gen_{attr}_{target_key}"):
                                                 _insert_tag_to_state(target_key, tag_generic)
                                         
-                                        cols = st.columns(2)
+                                        cols = safe_columns(2)
                                         for idx, val in enumerate(matching_vals):
                                             col_idx = idx % 2
                                             if '_' not in attr and attr.lower() in {'semantic', 'sentiment', 'topic', 'pos', 'lemma', 'ent_type'}:

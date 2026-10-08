@@ -1,6 +1,7 @@
 import os
 import warnings
 warnings.filterwarnings("ignore", message=".*Examining the path of torch.classes raised.*")
+warnings.filterwarnings("ignore", category=UserWarning)
 os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1000"
 import streamlit as st
 
@@ -18,49 +19,11 @@ import sys
 # Corpora sync has been disabled to prevent Streamlit WebSocket ping timeouts on Hugging Face Spaces.
 
 # Add project root to path so we can import from core/ui_streamlit
-# Add project root to path so we can import from core/ui_streamlit
 architecture_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if architecture_root not in sys.path:
     sys.path.insert(0, architecture_root)
 
-import importlib
-import core.config
-import core.preprocessing.corpus_loader
-importlib.reload(core.preprocessing.corpus_loader)
-import core.ai_service
-import core.modules.concordance
-import core.modules.collocation
-import core.modules.distribution
-import core.modules.statistical_testing
-import core.modules.ngram
-import core.modules.word_trend
 import ui_streamlit.state_manager
-import ui_streamlit.caching
-import ui_streamlit.components.sidebar
-import ui_streamlit.components.corpus_selection
-import ui_streamlit.views.overview_view
-import ui_streamlit.views.concordance_view
-
-# Debug Imports
-try:
-    from ui_streamlit.state_manager import init_session_state
-    from ui_streamlit.components.sidebar import render_sidebar
-    from ui_streamlit.views.overview_view import render_overview
-    from ui_streamlit.views.dictionary_view import render_dictionary_view
-    from ui_streamlit.views.concordance_view import render_concordance_view
-    from ui_streamlit.views.ngram_view import render_ngram_view
-    from ui_streamlit.views.collocation_view import render_collocation_view
-    from ui_streamlit.views.keyword_view import render_keyword_view
-    from ui_streamlit.views.distribution_view import render_distribution_view
-    from ui_streamlit.views.statistical_testing_view import render_statistical_testing_view
-    from ui_streamlit.views.word_profiler_view import render_word_profiler_view
-    from ui_streamlit.views.summarisation_view import render_summarisation_view
-    from ui_streamlit.views.quiz_creation_view import render_quiz_creation_view
-    from ui_streamlit.views.word_trend_view import render_word_trend_view
-except ImportError as e:
-    st.error(f"Import Error: {e}")
-    st.stop()
-
 from ui_streamlit.state_manager import init_session_state
 from core.visualiser.styles import POS_COLOR_MAP
 
@@ -199,9 +162,6 @@ from core.visualiser.styles import POS_COLOR_MAP
 # Main Layout
 def main():
     import ui_streamlit.components.sidebar
-    from core.utils.analytics_tracker import track_session_access, update_session_duration
-    track_session_access()
-    update_session_duration()
 
     st.markdown(
         """
@@ -236,33 +196,45 @@ def main():
     render_corpus_selection_main()
     
     # Render Sidebar and get current view
+    from ui_streamlit.components.sidebar import render_sidebar
     current_view = render_sidebar()
     
-    # Router
+    # Router (Lazy Loaded for Instant Startup)
     if current_view == "Overview":
+        from ui_streamlit.views.overview_view import render_overview
         render_overview()
     elif current_view == "Concordance":
+        from ui_streamlit.views.concordance_view import render_concordance_view
         render_concordance_view()
     elif current_view == "N-Gram":
+        from ui_streamlit.views.ngram_view import render_ngram_view
         render_ngram_view()
     elif current_view == "Collocation":
+        from ui_streamlit.views.collocation_view import render_collocation_view
         render_collocation_view()
     elif current_view == "Dictionary":
+        from ui_streamlit.views.dictionary_view import render_dictionary_view
         render_dictionary_view()
     elif current_view == "Word Trend":
         from ui_streamlit.views.word_trend_view import render_word_trend_view
         render_word_trend_view()
     elif current_view == "Word Profiler":
+        from ui_streamlit.views.word_profiler_view import render_word_profiler_view
         render_word_profiler_view()
     elif current_view == "Keyword":
+        from ui_streamlit.views.keyword_view import render_keyword_view
         render_keyword_view()
     elif current_view == "Distribution":
+        from ui_streamlit.views.distribution_view import render_distribution_view
         render_distribution_view()
     elif current_view == "Statistical Testing":
+        from ui_streamlit.views.statistical_testing_view import render_statistical_testing_view
         render_statistical_testing_view()
     elif current_view == "Summarisation":
+        from ui_streamlit.views.summarisation_view import render_summarisation_view
         render_summarisation_view()
     elif current_view == "Quiz Creation":
+        from ui_streamlit.views.quiz_creation_view import render_quiz_creation_view
         render_quiz_creation_view()
     else:
         st.write("Select a module from the sidebar.")

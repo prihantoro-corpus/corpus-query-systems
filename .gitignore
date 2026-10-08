@@ -24,6 +24,8 @@ corpora/**/*.duckdb.wal
 !corpora/english/EN-BPPT-tagged.duckdb
 !corpora/indonesian/ID-BPPT-tagged.duckdb
 !corpora/indonesian/KOSLAT-full.duckdb
+!corpora/indonesian/KOPER.duckdb
+!corpora/indonesian/KOPER.db
 !corpora/english/ICNALE_WE.zip
 !corpora/english/sm_icnale.zip
 !corpora/japanese/JP-DICO-JALF.xml

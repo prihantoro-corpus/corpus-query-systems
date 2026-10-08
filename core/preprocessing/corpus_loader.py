@@ -56,15 +56,13 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code=None, selecte
         os.makedirs(cache_dir, exist_ok=True)
         cached_db_path = os.path.join(cache_dir, f"corpus_cached_{cache_key}.db")
         
-        if os.path.exists(cached_db_path):
-            if progress_callback:
-                progress_callback(1.0, "⚡ Fast loading from cached database...")
-            try:
+        try:
+            if os.path.exists(cached_db_path):
+                if progress_callback:
+                    progress_callback(1.0, "⚡ Fast loading from cached database...")
                 with duckdb.connect(cached_db_path, read_only=True) as con:
                     total_tokens = con.execute("SELECT count(*) FROM corpus").fetchone()[0]
-                    token_freqs = con.execute("SELECT _token_low, count(*) FROM corpus GROUP BY _token_low").fetchall()
-                    token_counts = {row[0]: row[1] for row in token_freqs}
-                    corpus_stats = {'token_counts': token_counts, 'total_tokens': total_tokens}
+                    corpus_stats = {'token_counts': {}, 'total_tokens': total_tokens}
                     
                 from core.modules.overview import get_corpus_language, get_xml_structure
                 stored_lang = get_corpus_language(cached_db_path) or explicit_lang_code
@@ -79,8 +77,8 @@ def load_monolingual_corpus_files(file_sources, explicit_lang_code=None, selecte
                     'error': None,
                     'warning': None
                 }
-            except Exception as ce:
-                print(f"Cache check warning: {ce}")
+        except Exception as ce:
+            print(f"Cache check warning: {ce}")
     except Exception as e:
         print(f"Cache init warning: {e}")
 

@@ -397,10 +397,22 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
         if stats_df.empty: 
             return (pd.DataFrame(), freq, raw_target_input)
 
-        if xml_where_clause:
-            stats_df['Total_Freq'] = stats_df['Collocate_low'].map(region_freqs).fillna(0).astype(int)
+        if xml_where_clause or not corpus_stats or not corpus_stats.get('token_counts'):
+            unique_colls = stats_df['Collocate_low'].unique().tolist()
+            con.execute("CREATE TEMP TABLE IF NOT EXISTS coll_names(name VARCHAR)")
+            con.execute("DELETE FROM coll_names")
+            unique_colls_escaped = [n.replace("'", "''") for n in unique_colls]
+            values_parts = [f"('{n}')" for n in unique_colls_escaped]
+            if values_parts:
+                con.execute("INSERT INTO coll_names SELECT * FROM (VALUES " + ", ".join(values_parts) + ")")
+                freq_sql = f"SELECT _token_low, count(*) as f FROM corpus WHERE _token_low IN (SELECT name FROM coll_names) {'AND 1=1 ' + xml_where_clause if xml_where_clause else ''} GROUP BY 1"
+                collocate_freqs = dict(con.execute(freq_sql, xml_params if xml_where_clause else []).fetchall())
+                con.execute("DROP TABLE coll_names")
+                stats_df['Total_Freq'] = stats_df['Collocate_low'].map(collocate_freqs).fillna(0).astype(int)
+            else:
+                stats_df['Total_Freq'] = stats_df['Observed']
         else:
-            token_counts_unfiltered = corpus_stats.get('token_counts', {}) if corpus_stats else {}
+            token_counts_unfiltered = corpus_stats.get('token_counts', {})
             stats_df['Total_Freq'] = stats_df['Collocate_low'].map(token_counts_unfiltered).fillna(0).astype(int)
         
         stats_df['Total_Freq'] = np.maximum(stats_df['Total_Freq'], stats_df['Observed'])

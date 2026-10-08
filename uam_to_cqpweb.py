@@ -262,6 +262,7 @@ if __name__ == "__main__":
         parser = argparse.ArgumentParser(description="100% Offline Converter from UAM XML / ZIP Corpora to CQPweb Vertical XML (VRT) format")
         parser.add_argument("input_files", nargs="+", help="Paths to UAM XML files or .zip archive")
         parser.add_argument("-o", "--output", default="cqpweb_corpus.vrt", help="Output .vrt or .zip path (default: cqpweb_corpus.vrt)")
+        parser.add_argument("-p", "--pos", action="store_true", help="Include default POS and lemma columns in VRT")
         
         args = parser.parse_args()
-        process_uam_to_cqpweb(args.input_files, args.output)
+        process_uam_to_cqpweb(args.input_files, args.output, include_pos=args.pos)

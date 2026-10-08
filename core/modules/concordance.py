@@ -230,8 +230,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     query_where.append(f"regexp_matches({alias}._token_low, ?)")
                     query_params.append(regex_pat)
                 else:
-                    query_where.append(f"regexp_matches({alias}._token_low, ?)")
-                    query_params.append(r'(?i)(^|\s)' + re.escape(val) + r'($|\s)')
+                    query_where.append(f"{alias}._token_low = ?")
+                    query_params.append(val.lower())
             elif comp['type'] == 'lemma' and not is_raw_mode:
                 val = comp['val']
                 if '*' in val or '|' in val:
@@ -241,8 +241,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                     query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                     query_params.append(regex_pat)
                 else:
-                    query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
-                    query_params.append(r'(?i)(^|\s)' + re.escape(val) + r'($|\s)')
+                    query_where.append(f"lower({alias}.lemma) = ?")
+                    query_params.append(val.lower())
             elif comp['type'] == 'lemma_pos':
                  l_val = comp['lemma']
                  p_val = comp['pos']
@@ -254,8 +254,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                          query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
                          query_params.append(regex_pat)
                      else:
-                         query_where.append(f"regexp_matches(lower({alias}.lemma), ?)")
-                         query_params.append(r'(?i)(^|\s)' + re.escape(l_val) + r'($|\s)')
+                         query_where.append(f"lower({alias}.lemma) = ?")
+                         query_params.append(l_val.lower())
                  else:
                      if '*' in l_val or '|' in l_val:
                          parts = [p.strip() for p in l_val.split('|') if p.strip()]
@@ -264,8 +264,8 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
                          query_where.append(f"regexp_matches({alias}._token_low, ?)")
                          query_params.append(regex_pat)
                      else:
-                         query_where.append(f"regexp_matches({alias}._token_low, ?)")
-                         query_params.append(r'(?i)(^|\s)' + re.escape(l_val) + r'($|\s)')
+                         query_where.append(f"{alias}._token_low = ?")
+                         query_params.append(l_val.lower())
                  if not is_raw_mode:
                      if '|' in p_val:
                          pats = [p.strip() for p in p_val.split('|') if p.strip()]

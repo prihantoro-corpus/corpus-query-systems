@@ -13,9 +13,7 @@ import duckdb
 from core.modules.classification import (
     classify_sentiment_vader, 
     classify_topics_keyword_weighted, 
-    classify_topics_bertopic,
-    apply_classification_by_sentence,
-    BERTOPIC_AVAILABLE
+    apply_classification_by_sentence
 )
 import core.modules.readability as rd
 import core.modules.lexical_complexity as lc
@@ -1020,6 +1018,7 @@ def _render_classification_tab(db_path, key_suffix):
                 if do_topic:
                     if use_bertopic:
                         st.write("Computing Topics with BERTopic (this may take a while)...")
+                        from core.modules.classification import classify_topics_bertopic, BERTOPIC_AVAILABLE
                         
                         if not BERTOPIC_AVAILABLE:
                             st.error("BERTopic is not installed. Please run: `pip install bertopic sentence-transformers`")
