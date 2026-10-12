@@ -119,6 +119,7 @@ def render_divergence_view():
                 return
         else:
             import duckdb
+            con = None
             try:
                 con = duckdb.connect(corpus_path, read_only=True)
                 cols_info = con.execute("PRAGMA table_info(corpus)").fetchall()
@@ -151,6 +152,10 @@ def render_divergence_view():
             except Exception as e:
                 st.error(f"Error fetching auto-discover words: {e}")
                 return
+            finally:
+                if con is not None:
+                    try: con.close()
+                    except Exception: pass
             
         corpora_details = []
         for details in corpora_details_inputs:

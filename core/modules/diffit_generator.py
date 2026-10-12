@@ -600,6 +600,7 @@ def generate_grammar_exercises(
     word_to_pos = {} # token_low -> POS
     
     if db_path and os.path.exists(db_path):
+        con = None
         try:
             con = duckdb.connect(db_path, read_only=True)
             # Fetch distinct tokens and their POS tags
@@ -623,6 +624,10 @@ def generate_grammar_exercises(
                 pos_map[pos_clean].append(token_clean)
         except Exception as e:
             print(f"[ERROR] Database POS retrieval failed: {e}")
+        finally:
+            if con is not None:
+                try: con.close()
+                except Exception: pass
 
     # Fallback POS map in case DB has no POS or is missing
     if not pos_map:
@@ -1039,6 +1044,7 @@ def generate_reading_comprehension(
 
     # Database Schema Check/Migration:
     if db_path and os.path.exists(db_path):
+        con_rw = None
         try:
             con_rw = duckdb.connect(db_path, read_only=False)
             columns = con_rw.execute("PRAGMA table_info(corpus)").fetchall()
@@ -1048,6 +1054,10 @@ def generate_reading_comprehension(
             con_rw.close()
         except Exception as e:
             print(f"[WARNING] Could not execute DB migration: {e}")
+        finally:
+            if con_rw is not None:
+                try: con_rw.close()
+                except Exception: pass
 
     pos_map = {}
     word_to_pos = {}
@@ -1474,6 +1484,7 @@ def generate_reading_comprehension(
                 
                 # 3. Database POS fallback query
                 if len(distractors) < 4 and db_path and os.path.exists(db_path):
+                    con = None
                     try:
                         con = duckdb.connect(db_path, read_only=True)
                         if q_word in ["Who", "Where"] or label == "ORG":
@@ -1506,6 +1517,10 @@ def generate_reading_comprehension(
                         con.close()
                     except:
                         pass
+                    finally:
+                        if con is not None:
+                            try: con.close()
+                            except Exception: pass
                 
                 # 4. Fallback lists
                 fallback_lists = {

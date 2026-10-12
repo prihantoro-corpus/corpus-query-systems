@@ -226,6 +226,7 @@ def render_tag_quick_insert(target_key, corpus_path=None, label="🏷️ Insert 
             if not corpus_path:
                 st.info("ℹ️ Load a corpus to see available XML structural and Overview annotation tags.")
             else:
+                con = None
                 try:
                     con = duckdb.connect(corpus_path, read_only=True)
                     attr_cols = get_xml_attribute_columns(con)
@@ -287,3 +288,7 @@ def render_tag_quick_insert(target_key, corpus_path=None, label="🏷️ Insert 
                     con.close()
                 except Exception as e:
                     st.error(f"Error reading corpus metadata: {e}")
+                finally:
+                    if con is not None:
+                        try: con.close()
+                        except Exception: pass

@@ -65,6 +65,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
     Generalized function to run collocation analysis using DuckDB.
     Returns: (stats_df_sorted, freq, primary_target_mwu)
     """
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         import math
@@ -322,7 +323,6 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
             N = total_tokens
         
         if freq == 0:
-            con.close()
             return (pd.DataFrame(), 0, raw_target_input)
 
         collocation_query = f"""
@@ -371,7 +371,6 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
 
         try: con.execute("DROP TABLE search_matches")
         except: pass
-        con.close()
         
         if df_coll_counts.empty:
             return (pd.DataFrame(), freq, raw_target_input)
@@ -484,3 +483,7 @@ def generate_collocation_results(corpus_db_path, raw_target_input, coll_window, 
         import traceback
         st.code(traceback.format_exc())
         return (pd.DataFrame(), 0, raw_target_input)
+    finally:
+        if con is not None:
+            try: con.close()
+            except: pass

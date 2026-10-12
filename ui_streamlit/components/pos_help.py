@@ -199,6 +199,7 @@ def get_pos_tag_examples(db_path, tag):
         
     # 3. Cache it in the database
     if examples_str:
+        con_write = None
         try:
             con_write = duckdb.connect(db_path, read_only=False)
             try:
@@ -209,6 +210,10 @@ def get_pos_tag_examples(db_path, tag):
                 con_write.close()
         except Exception:
             pass
+        finally:
+            if con_write is not None:
+                try: con_write.close()
+                except Exception: pass
             
     return examples_str
 

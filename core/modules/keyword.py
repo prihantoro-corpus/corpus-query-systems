@@ -20,6 +20,7 @@ def generate_keyword_list(target_db_path, ref_db_path=None, target_xml_where="",
     if not target_db_path or (not ref_db_path and ref_freq_df is None):
         return pd.DataFrame()
 
+    con_t = None
     try:
         # 1. Get Target Counts
         con_t = duckdb.connect(target_db_path, read_only=True)
@@ -132,6 +133,10 @@ def generate_keyword_list(target_db_path, ref_db_path=None, target_xml_where="",
     except Exception as e:
         print(f"Keyword calc error: {e}")
         return pd.DataFrame()
+    finally:
+        if con_t is not None:
+            try: con_t.close()
+            except Exception: pass
 
 def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None, target_xml_where="", target_xml_params=[], ref_xml_where="", ref_xml_params=[], min_freq=3, ref_freq_df=None, ref_total_tokens=0):
     """
@@ -143,6 +148,7 @@ def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None
 
     results = {}
     
+    con_t = None
     try:
         con_t = duckdb.connect(target_db_path, read_only=True)
         
@@ -284,3 +290,7 @@ def generate_grouped_keyword_list(target_db_path, group_by_col, ref_db_path=None
     except Exception as e:
         print(f"Grouped Keyword Gen Error: {e}")
         return {}
+    finally:
+        if con_t is not None:
+            try: con_t.close()
+            except Exception: pass

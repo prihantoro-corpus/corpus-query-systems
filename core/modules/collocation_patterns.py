@@ -486,6 +486,7 @@ def group_collocates_by_patterns(
         return {}
     
     # 1. Fetch a significant sample of the node's concordance
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         concordance_data = _fetch_node_concordance_sample(
@@ -496,6 +497,10 @@ def group_collocates_by_patterns(
     except Exception as e:
         print(f"Error fetching node concordance: {e}")
         return {}
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
         
     if not concordance_data:
         return {}

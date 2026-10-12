@@ -14,6 +14,7 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
     if not corpus_db_path or n_size < 1:
         return pd.DataFrame()
 
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         if xml_where_clause:
@@ -293,3 +294,7 @@ def generate_n_grams_v2(corpus_db_path, n_size, n_gram_filters, is_raw_mode, cor
     except Exception as e:
         print(f"N-Gram Error: {e}")
         return pd.DataFrame()
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass

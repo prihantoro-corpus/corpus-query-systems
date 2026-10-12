@@ -8,6 +8,7 @@ def export_db_to_vertical_xml(db_path):
     Dynamically discovers and includes all pre-existing and CORTEX-generated annotations 
     (POS, Lemma, Sentiment, Topic, NER, Dependencies, Readability, XML attributes, etc.).
     """
+    con = None
     try:
         con = duckdb.connect(db_path, read_only=True)
         # Get column names
@@ -201,3 +202,7 @@ def export_db_to_vertical_xml(db_path):
         return "\n".join(lines)
     except Exception as e:
         return f"Error generating XML: {e}"
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass

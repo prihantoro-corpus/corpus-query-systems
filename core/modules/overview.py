@@ -60,6 +60,7 @@ def calculate_corpus_statistics(corpus_stats, db_path=None):
     
     # Self-healing: if we have a DB but types/tokens are suspiciously low, re-calculate
     if db_path and (total_tokens == 0 or type_count == 0):
+        con = None
         try:
             con = duckdb.connect(db_path, read_only=True)
             try:
@@ -71,6 +72,10 @@ def calculate_corpus_statistics(corpus_stats, db_path=None):
                 con.close()
         except:
             pass
+        finally:
+            if con is not None:
+                try: con.close()
+                except Exception: pass
 
     ttr = (type_count / total_tokens) if total_tokens > 0 else 0
     

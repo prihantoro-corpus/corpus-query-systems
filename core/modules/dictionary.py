@@ -14,6 +14,7 @@ def get_detailed_contextual_ngrams(corpus_db_path, query_word, xml_where_clause=
     if not corpus_db_path or not query_word:
         return None
     
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         q = query_word.lower()
@@ -61,6 +62,10 @@ def get_detailed_contextual_ngrams(corpus_db_path, query_word, xml_where_clause=
     except Exception as e:
         print(f"Error in get_detailed_contextual_ngrams: {e}")
         return None
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
 
 def get_all_lemma_forms_details(corpus_db_path, target_word, xml_where_clause="", xml_params=[]):
     """
@@ -70,6 +75,7 @@ def get_all_lemma_forms_details(corpus_db_path, target_word, xml_where_clause=""
     if not corpus_db_path: return pd.DataFrame(), [], []
     term = target_word.lower()
     
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         lemma_list = [r[0] for r in con.execute("SELECT DISTINCT lower(lemma) FROM corpus WHERE _token_low = ? AND lemma NOT LIKE '##%'", [term]).fetchall()]
@@ -95,10 +101,15 @@ def get_all_lemma_forms_details(corpus_db_path, target_word, xml_where_clause=""
         
     except Exception:
         return pd.DataFrame(), [], []
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
 
 def get_related_forms_by_regex(corpus_db_path, target_word):
     if not corpus_db_path: return []
     pat = f".*{re.escape(target_word)}.*"
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         res = con.execute("SELECT DISTINCT token FROM corpus WHERE regexp_matches(_token_low, ?) LIMIT 50", [pat]).fetchall()
@@ -106,9 +117,14 @@ def get_related_forms_by_regex(corpus_db_path, target_word):
         return sorted([r[0] for r in res])
     except Exception:
         return []
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
 
 def get_dictionary_examples(corpus_db_path, target_word, xml_where_clause="", xml_params=[]):
     if not corpus_db_path: return []
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         
@@ -166,9 +182,14 @@ def get_dictionary_examples(corpus_db_path, target_word, xml_where_clause="", xm
         return examples
     except Exception:
         return []
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
 
 def get_random_examples_v2(corpus_db_path, target_word, limit=5, xml_where_clause="", xml_params=[]):
     if not corpus_db_path: return []
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         hits = con.execute(f"SELECT DISTINCT sent_id FROM corpus WHERE _token_low = ? {xml_where_clause} ORDER BY random() LIMIT ?", [target_word.lower()] + xml_params + [limit]).fetchall()
@@ -187,3 +208,7 @@ def get_random_examples_v2(corpus_db_path, target_word, limit=5, xml_where_claus
         return examples
     except Exception:
         return []
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass

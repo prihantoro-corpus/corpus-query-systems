@@ -38,6 +38,7 @@ def get_corpus_sentences(db_path, xml_where_clause="", xml_params=[]):
     Supports filtering by XML attributes / difficulty levels.
     Returns a list of dicts: [{'sent_id': int, 'filename': str, 'tokens': [str], 'pos': [str], 'lemmas': [str]}]
     """
+    con = None
     try:
         con = duckdb.connect(db_path, read_only=True)
         # Check if table is empty
@@ -75,6 +76,10 @@ def get_corpus_sentences(db_path, xml_where_clause="", xml_params=[]):
     except Exception as e:
         print(f"Error fetching corpus tokens: {e}")
         return []
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
     
     sentences = []
     current_sent = None
@@ -744,6 +749,7 @@ def generate_section_c(sentences, used_texts, num_questions=5):
 
 def extract_collocations(db_path, xml_where_clause="", xml_params=[]):
     """Runs high-performance POS-based collocation query on DuckDB database with optional filters."""
+    con = None
     try:
         con = duckdb.connect(db_path, read_only=True)
         # Verify POS tags in database to check if they are verticalised empty placeholders or filled
@@ -812,6 +818,10 @@ def extract_collocations(db_path, xml_where_clause="", xml_params=[]):
     except Exception as e:
         print(f"Error extracting collocations: {e}")
         return pd.DataFrame()
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
 
 def is_capitalized(word):
     if not word:

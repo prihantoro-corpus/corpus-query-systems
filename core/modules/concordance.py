@@ -17,6 +17,7 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
     except:
         st = None
 
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         
@@ -814,6 +815,10 @@ def generate_kwic(corpus_db_path, raw_target_input, kwic_left, kwic_right, corpu
         import traceback
         st.code(traceback.format_exc())
         return ([], 0, raw_target_input, 0, [], pd.DataFrame())
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
 
 def persist_annotations_to_db(db_path: str, annotations: dict):
     """

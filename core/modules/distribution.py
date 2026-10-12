@@ -10,6 +10,7 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
     if not corpus_db_path:
         return pd.DataFrame(), {}
 
+    con = None
     try:
         con = duckdb.connect(corpus_db_path, read_only=True)
         
@@ -332,3 +333,7 @@ def calculate_distribution(corpus_db_path, raw_target_input, xml_where_clause=""
         import traceback
         traceback.print_exc()
         return pd.DataFrame(), {}
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
