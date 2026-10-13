@@ -10,8 +10,9 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
     if not db_path:
         return None
         
-    con = duckdb.connect(db_path, read_only=True)
+    con = None
     try:
+        con = duckdb.connect(db_path, read_only=True)
         attr_cols = get_xml_attribute_columns(con)
         
         # Show count in label
@@ -96,4 +97,5 @@ def render_xml_restriction_filters(db_path, view_name, corpus_name=None):
                 
             return selected_filters
     finally:
-        con.close()
+        if con is not None:
+            con.close()
