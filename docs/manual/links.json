@@ -1,0 +1,17 @@
+{
+  "_comment": "Edit 'url' to point to each published Google Doc, then run: python docs/build_manual_links.py",
+  "fallback": "https://drive.google.com/drive/folders/15AedwrmeG1IX0JsyGrZoxVGNQ5cYt4Ju?usp=sharing",
+  "chapters": [
+    {"slug": "ai-connection",      "title": "00 — AI Connection",            "url": ""},
+    {"slug": "corpus-preparation", "title": "01 — Corpus Preparation",       "url": ""},
+    {"slug": "custom-tagger",      "title": "02 — Custom Tagger (Advanced)", "url": ""},
+    {"slug": "overview",           "title": "03 — Overview",                 "url": ""},
+    {"slug": "concordance",        "title": "04 — Concordance",              "url": ""},
+    {"slug": "n-gram",             "title": "05 — N-gram",                   "url": ""},
+    {"slug": "collocation",        "title": "06 — Collocation",              "url": ""},
+    {"slug": "word-trend",         "title": "07 — Word Trend",               "url": ""},
+    {"slug": "keywords",           "title": "08 — Keywords",                 "url": ""},
+    {"slug": "word-profiler",      "title": "09 — Word Profiler",            "url": ""},
+    {"slug": "design",             "title": "Design",                        "url": ""}
+  ]
+}

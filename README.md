@@ -15,6 +15,10 @@ pinned: false
 [![Docs License: CC BY-NC 4.0](https://img.shields.io/badge/Docs%20License-CC%20BY--NC%204.0-lightgrey.svg)](LICENSE-DOCS)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18253546.svg)](https://doi.org/10.5281/zenodo.18253546)
 
+## Documentation
+
+📖 **User manual:** https://prihantoro-corpus.github.io/cortex/manual/
+
 ## License
 
 CORTEX is dual-licensed:
