@@ -1,17 +1,61 @@
-{
-  "_comment": "Edit 'url' to point to each published Google Doc, then run: python docs/build_manual_links.py",
-  "fallback": "https://drive.google.com/drive/folders/15AedwrmeG1IX0JsyGrZoxVGNQ5cYt4Ju?usp=sharing",
-  "chapters": [
-    {"slug": "ai-connection",      "title": "00 — AI Connection",            "url": ""},
-    {"slug": "corpus-preparation", "title": "01 — Corpus Preparation",       "url": ""},
-    {"slug": "custom-tagger",      "title": "02 — Custom Tagger (Advanced)", "url": ""},
-    {"slug": "overview",           "title": "03 — Overview",                 "url": ""},
-    {"slug": "concordance",        "title": "04 — Concordance",              "url": ""},
-    {"slug": "n-gram",             "title": "05 — N-gram",                   "url": ""},
-    {"slug": "collocation",        "title": "06 — Collocation",              "url": ""},
-    {"slug": "word-trend",         "title": "07 — Word Trend",               "url": ""},
-    {"slug": "keywords",           "title": "08 — Keywords",                 "url": ""},
-    {"slug": "word-profiler",      "title": "09 — Word Profiler",            "url": ""},
-    {"slug": "design",             "title": "Design",                        "url": ""}
-  ]
+﻿{
+    "_comment":  "Edit \u0027url\u0027 to point to each published Google Doc, then run: python docs/build_manual_links.py",
+    "fallback":  "https://drive.google.com/drive/folders/15AedwrmeG1IX0JsyGrZoxVGNQ5cYt4Ju?usp=sharing",
+    "chapters":  [
+                     {
+                         "slug":  "access",
+                         "title":  "00 — Access",
+                         "url":  "https://docs.google.com/document/d/1GvxYEyyrhbYf5-sARpJMiSjXLTevN7JzEsp13-6mFYI/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "corpus-preparation",
+                         "title":  "01 â€” Corpus Preparation",
+                         "url":  "https://docs.google.com/document/d/14yGH7tOfi1itEiaTK6Y5LoP_dSwMrUzj/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "custom-tagger",
+                         "title":  "02 â€” Custom Tagger (Advanced)",
+                         "url":  "https://docs.google.com/document/d/1o7B8hRRm10wDkoZcQXqJ1BtFskb_W6kB/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "overview",
+                         "title":  "03 â€” Overview",
+                         "url":  "https://docs.google.com/document/d/1ksYfSNY8VKqWPtpu_cslW-5zrZiBwJlv/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "concordance",
+                         "title":  "04 â€” Concordance",
+                         "url":  "https://docs.google.com/document/d/1hDYhzZOz1R1J9s5T4L4QeP6T2ude5Eq7/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "n-gram",
+                         "title":  "05 â€” N-gram",
+                         "url":  "https://docs.google.com/document/d/1AiZTqcyGDZfTUTZmWUlI6Nvzh5CiApBi/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "collocation",
+                         "title":  "06 â€” Collocation",
+                         "url":  "https://docs.google.com/document/d/1hU-UT6zKoqbIkobX0OQKzbtirLMg-LCd/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "word-trend",
+                         "title":  "07 â€” Word Trend",
+                         "url":  "https://docs.google.com/document/d/19SOfRJzGTYZBwHAnhr6e0dxtpbgvo9I5/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "keywords",
+                         "title":  "08 â€” Keywords",
+                         "url":  "https://docs.google.com/document/d/1dKubFLc60am53FAvlwJE4epRBb5jjpJi/edit?usp=sharing"
+                     },
+                     {
+                         "slug":  "word-profiler",
+                         "title":  "09 â€” Word Profiler",
+                         "url":  ""
+                     },
+                     {
+                         "slug":  "design",
+                         "title":  "Design",
+                         "url":  ""
+                     }
+                 ]
 }
