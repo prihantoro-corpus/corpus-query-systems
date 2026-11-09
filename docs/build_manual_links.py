@@ -50,7 +50,7 @@ Source code: <a href="https://github.com/prihantoro-corpus/cortex">GitHub</a> (A
 
 
 def main() -> None:
-    cfg = json.loads((MANUAL / "links.json").read_text(encoding="utf-8"))
+    cfg = json.loads((MANUAL / "links.json").read_text(encoding="utf-8-sig"))
     fallback = cfg["fallback"]
     items = []
     for ch in cfg["chapters"]:
